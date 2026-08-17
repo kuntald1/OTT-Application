@@ -3,6 +3,7 @@ import { ChevronRight, Play, Plus, Check, X, Volume2, VolumeX, Star } from "luci
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
+import { useAnimatedModal } from "../shared/useAnimatedModal";
 
 import archive1 from "./assets/posters/archive-1.jpg";
 import archive2 from "./assets/posters/archive-2.jpg";
@@ -19,14 +20,25 @@ import archive6 from "./assets/posters/archive-6.jpg";
 // uploads.
 // ---------------------------------------------------------------------------
 
+// Archive-only palette — deliberately NOT the shared burgundy COLORS.black
+// used everywhere else on the site. This section is "old, vintage footage",
+// so it gets a warm, aged sepia-bronze tone instead, like old film stock or
+// an antique photograph, rather than the theatre-curtain red used elsewhere.
+const ARCHIVE_BG = "#4A2A0A";
+const ARCHIVE_SURFACE = "#6B4419";
+// A repeating diagonal sheen — the exact amber/bronze tones from the
+// reference photo, running through the page like light catching brushed
+// metal, tiled so it reads consistently no matter how tall the page gets.
+const ARCHIVE_TEXTURE = `linear-gradient(180deg, ${ARCHIVE_BG} 0%, ${ARCHIVE_BG} 10%, #6B4419 22%, #B8792E 38%, #D4A244 46%, #B8792E 54%, #6B4419 68%, ${ARCHIVE_BG} 82%, ${ARCHIVE_BG} 100%)`;
+
 const T = {
-  pageBg: COLORS.black,
+  pageBg: ARCHIVE_BG,
   border: "rgba(255,255,255,0.08)",
   text: "#FFFFFF",
   textMuted: "rgba(255,255,255,0.7)",
   textFaint: "rgba(255,255,255,0.5)",
   textFainter: "rgba(255,255,255,0.4)",
-  modalSurface: COLORS.blackSoft,
+  modalSurface: ARCHIVE_SURFACE,
   modalOverlay: "rgba(0,0,0,0.7)",
 };
 
@@ -79,7 +91,7 @@ function buildArchiveCard(category, i) {
 }
 
 export default function ArchiveBrowsePage({ onNavigate, onOpenPerson }) {
-  const [activeCard, setActiveCard] = useState(null);
+  const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
   const handleSelectCard = (card) => {
@@ -87,11 +99,20 @@ export default function ArchiveBrowsePage({ onNavigate, onOpenPerson }) {
       requestLogin();
       return;
     }
-    setActiveCard(card);
+    modal.open(card);
   };
 
   return (
-    <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
+    <div
+      style={{
+        backgroundColor: ARCHIVE_BG,
+        backgroundImage: ARCHIVE_TEXTURE,
+        backgroundSize: "100% 700px",
+        backgroundRepeat: "repeat-y",
+        fontFamily: "'Geist', -apple-system, sans-serif",
+        minHeight: "100vh",
+      }}
+    >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
         {CATEGORIES.map((category) => {
           const cards = Array.from({ length: 6 }, (_, i) => buildArchiveCard(category, i));
@@ -107,7 +128,7 @@ export default function ArchiveBrowsePage({ onNavigate, onOpenPerson }) {
         </p>
       </footer>
 
-      {activeCard && <DetailModal card={activeCard} onClose={() => setActiveCard(null)} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
+      {modal.item && <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
     </div>
   );
 }
@@ -176,8 +197,8 @@ function GenreRow({ category, cards, onSelect }) {
       style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(28px)" }}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="group flex cursor-default items-center gap-1.5 text-xl font-semibold" style={{ color: T.text }}>
-          <span className="h-4 w-1 rounded-full" style={{ background: `linear-gradient(180deg, ${COLORS.gold}, ${COLORS.burgundyLight}, ${COLORS.burgundyDark})` }} />
+        <h2 className="group flex cursor-default items-center gap-1.5 text-2xl font-semibold" style={{ color: T.text }}>
+          <span className="h-4 w-1 rounded-full" style={{ background: `linear-gradient(180deg, ${COLORS.gold}, #B8792E, #6B4419)` }} />
           {category}
           <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" style={{ color: T.textFaint }} />
         </h2>
@@ -212,7 +233,7 @@ function GenreRow({ category, cards, onSelect }) {
               style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start" }}
             >
               <div
-                className="relative aspect-video overflow-hidden rounded-xl transition-shadow duration-300"
+                className="relative aspect-video overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
                 style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
               >
                 <img
@@ -235,10 +256,17 @@ function GenreRow({ category, cards, onSelect }) {
   );
 }
 
-function DetailModal({ card, onClose, onOpenPerson, onNavigate }) {
+function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
   const [muted, setMuted] = useState(true);
+  const [entered, setEntered] = useState(false);
   const { isLoggedIn, isSubscribed, requestLogin, isInList, toggleListItem } = useApp();
   const saved = isInList(card.id);
+
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const shown = entered && !closing;
 
   const requireSubscription = (fn) => (...args) => {
     if (!isLoggedIn) {
@@ -271,14 +299,23 @@ function DetailModal({ card, onClose, onOpenPerson, onNavigate }) {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: T.modalOverlay }} onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: T.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
+      onClick={onClose}
+    >
       <style>{`
         .archive-modal-scroll::-webkit-scrollbar { display: none; }
         .archive-modal-scroll { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div
         className="archive-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{ background: T.modalSurface, maxHeight: "90vh", overflowY: "auto" }}
+        style={{
+          background: T.modalSurface, maxHeight: "90vh", overflowY: "auto",
+          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative aspect-video w-full">

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { COLORS, HERO_HEIGHT_CLASS } from "../theme";
 
+// Archive-only background tone — same aged sepia-bronze used in
+// ArchiveBrowsePage.jsx, deliberately not the shared burgundy background.
+// Accent colors (gold text, burgundy edge-glow) are left as COLORS.* since
+// only the background itself was asked to change.
+const ARCHIVE_BG = "#4A2A0A";
+
 // ---------------------------------------------------------------------------
 // Archive hero — same structure as Video Streaming's MovixHero (full-bleed
 // video/poster background, bottom-anchored headline), but deliberately
@@ -77,17 +83,17 @@ export default function ArchiveHero() {
           distinct from the crisper scrim on the main Video Streaming hero */}
       <div
         className="absolute inset-0"
-        style={{ background: "linear-gradient(180deg, rgba(61,0,13,0.45) 0%, rgba(61,0,13,0.15) 30%, rgba(61,0,13,0.7) 100%)" }}
+        style={{ background: "linear-gradient(180deg, rgba(74,42,10,0.45) 0%, rgba(74,42,10,0.15) 30%, rgba(74,42,10,0.7) 100%)" }}
       />
-      {/* Red edge glow — echoes the curtain lighting seen on the Browse
-          cards below, so the hero doesn't read as cold/disconnected */}
+      {/* Amber/bronze sheen — the same warm metallic glow used across the
+          Archive browse feed below, so hero and browse read as one surface */}
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at 15% 100%, ${COLORS.burgundy}55 0%, transparent 45%), radial-gradient(ellipse at 100% 0%, ${COLORS.burgundy}40 0%, transparent 40%)` }}
+        style={{ background: `radial-gradient(ellipse at 15% 100%, #B8792E70 0%, transparent 50%), radial-gradient(ellipse at 100% 0%, #D4A24460 0%, transparent 45%)` }}
       />
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: `radial-gradient(circle, transparent 40%, ${COLORS.black} 100%)` }}
+        style={{ background: `radial-gradient(circle, transparent 40%, ${ARCHIVE_BG} 100%)` }}
       />
 
       <div className="relative z-10 flex h-full w-full flex-col">

@@ -3,6 +3,7 @@ import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } 
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
+import { useAnimatedModal } from "../shared/useAnimatedModal";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -99,7 +100,7 @@ function buildVideoCard(category, i) {
 }
 
 export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
-  const [activeCard, setActiveCard] = useState(null);
+  const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
   const handleSelectCard = (card) => {
@@ -107,7 +108,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
       requestLogin();
       return;
     }
-    setActiveCard(card);
+    modal.open(card);
   };
 
   return (
@@ -136,7 +137,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
         </p>
       </footer>
 
-      {activeCard && <DetailModal card={activeCard} onClose={() => setActiveCard(null)} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
+      {modal.item && <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
     </div>
   );
 }
@@ -205,7 +206,7 @@ function GenreRow({ category, cards, onSelect }) {
       style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(28px)" }}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="group flex cursor-default items-center gap-1.5 text-xl font-semibold" style={{ color: T.text }}>
+        <h2 className="group flex cursor-default items-center gap-1.5 text-2xl font-semibold" style={{ color: T.text }}>
           <span className="h-4 w-1 rounded-full" style={{ background: `linear-gradient(180deg, ${COLORS.gold}, ${COLORS.burgundyLight}, ${COLORS.burgundyDark})` }} />
           {category}
           <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" style={{ color: T.textFaint }} />
@@ -237,11 +238,11 @@ function GenreRow({ category, cards, onSelect }) {
               type="button"
               key={i}
               onClick={() => onCardClick(card)}
-              className="group relative w-64 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-72"
+              className="group relative w-56 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-64 lg:w-72"
               style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start" }}
             >
               <div
-                className="relative aspect-video overflow-hidden rounded-xl transition-shadow duration-300"
+                className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
                 style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
               >
                 <img
@@ -252,10 +253,6 @@ function GenreRow({ category, cards, onSelect }) {
                 />
                 <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               </div>
-              <p className="mt-2.5 truncate text-sm font-medium transition-colors duration-200" style={{ color: T.text }}>{card.title}</p>
-              <p className="text-xs" style={{ color: T.textFaint }}>
-                {card.year} · {card.duration}
-              </p>
             </button>
           ))}
         </div>
@@ -264,10 +261,17 @@ function GenreRow({ category, cards, onSelect }) {
   );
 }
 
-function DetailModal({ card, onClose, onOpenPerson, onNavigate }) {
+function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
   const [muted, setMuted] = useState(true);
+  const [entered, setEntered] = useState(false);
   const { isLoggedIn, isSubscribed, requestLogin, isInList, toggleListItem } = useApp();
   const saved = isInList(card.id);
+
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const shown = entered && !closing;
 
   // Shared gate — every interactive action inside this popup (Play, +,
   // thumbs-up, Cast/Crew) requires login, then an active subscription.
@@ -308,14 +312,23 @@ function DetailModal({ card, onClose, onOpenPerson, onNavigate }) {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: T.modalOverlay }} onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: T.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
+      onClick={onClose}
+    >
       <style>{`
         .movix-video-modal-scroll::-webkit-scrollbar { display: none; }
         .movix-video-modal-scroll { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div
         className="movix-video-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{ background: T.modalSurface, maxHeight: "90vh", overflowY: "auto" }}
+        style={{
+          background: T.modalSurface, maxHeight: "90vh", overflowY: "auto",
+          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative aspect-video w-full">

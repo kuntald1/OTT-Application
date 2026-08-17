@@ -352,7 +352,7 @@ export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
               {/* readability gradient over the art */}
               <div
                 className="absolute inset-0"
-                style={{ background: `linear-gradient(180deg, ${genre.tint}22 0%, transparent 42%, ${ARCHIVE_BG}55 75%, ${ARCHIVE_BG}B0 100%)` }}
+                style={{ background: `linear-gradient(180deg, ${genre.tint}66 0%, ${ARCHIVE_BG}DD 65%, ${ARCHIVE_BG} 100%)` }}
               />
 
               <span className="relative z-10 text-xs text-white/30">{genre.number}</span>

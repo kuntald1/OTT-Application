@@ -4,6 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { CATEGORIES } from "../shared/categories";
 import { SHOWS } from "../Theater/showsData";
 import { useApp } from "../context/AppContext";
+import { useAnimatedModal } from "../shared/useAnimatedModal";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -93,7 +94,7 @@ function toggleInSet(set, value) {
 
 export default function CategoryPage({ initialCategory, onNavigate }) {
   const [categoryFilter, setCategoryFilter] = useState(new Set(initialCategory ? [initialCategory] : []));
-  const [activeCard, setActiveCard] = useState(null);
+  const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
   const filtered = useMemo(() => {
@@ -103,14 +104,14 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
 
   const handleCardClick = (card) => {
     if (card.section === "Theater") {
-      setActiveCard(card);
+      modal.open(card);
       return;
     }
     if (!isLoggedIn) {
       requestLogin();
       return;
     }
-    setActiveCard(card);
+    modal.open(card);
   };
 
   return (
@@ -142,7 +143,7 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
               {filtered.map((card) => (
                 <button type="button" key={card.id} onClick={() => handleCardClick(card)} className="group relative text-left">
-                  <div className="relative aspect-[2/3] overflow-hidden rounded-xl" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}>
+                  <div className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}>
                     <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-110" />
                     <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                       <Star className="h-2.5 w-2.5" style={{ fill: COLORS.gold, color: COLORS.gold }} /> {card.rating}
@@ -160,15 +161,22 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
         </div>
       </main>
 
-      {activeCard && <CategoryModal card={activeCard} onClose={() => setActiveCard(null)} onNavigate={onNavigate} />}
+      {modal.item && <CategoryModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} />}
     </div>
   );
 }
 
-function CategoryModal({ card, onClose, onNavigate }) {
+function CategoryModal({ card, closing, onClose, onNavigate }) {
   const { isLoggedIn, isSubscribed, requestLogin, isInList, toggleListItem } = useApp();
   const saved = isInList(card.id);
   const isTicketed = card.section === "Theater";
+  const [entered, setEntered] = useState(false);
+
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const shown = entered && !closing;
 
   const handleAddToList = () => {
     if (!isLoggedIn) {
@@ -192,10 +200,19 @@ function CategoryModal({ card, onClose, onNavigate }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.7)", opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{ background: COLORS.blackSoft, maxHeight: "90vh", overflowY: "auto" }}
+        style={{
+          background: COLORS.blackSoft, maxHeight: "90vh", overflowY: "auto",
+          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative aspect-video w-full">

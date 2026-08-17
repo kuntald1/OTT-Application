@@ -65,6 +65,10 @@ export function AppProvider({ children }) {
   const [tickets, setTickets] = useState([]); // [{ id, subject, description, status, date }]
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [activePlan, setActivePlan] = useState(null);
+  const [activeDuration, setActiveDuration] = useState(null); // e.g. "1 Month", "6 Months", "1 Year"
+  const [activeScreens, setActiveScreens] = useState(null);
+  const [activePrice, setActivePrice] = useState(null);
+  const [rewardPoints, setRewardPoints] = useState(250); // demo starting balance, 1 point = ₹1
   const [rooms, setRooms] = useState(SEED_ROOMS);
   const [donations, setDonations] = useState([]); // [{ id, organiserId, organiserName, amount, date }]
 
@@ -82,11 +86,24 @@ export function AppProvider({ children }) {
     setProfile({ name: "", email: "", photo: null, role: "User" });
     setIsSubscribed(false);
     setActivePlan(null);
+    setActiveDuration(null);
+    setActiveScreens(null);
+    setActivePrice(null);
   }, []);
 
-  const subscribe = useCallback((planName) => {
+  const subscribe = useCallback((planName, durationLabel, screens, price) => {
     setIsSubscribed(true);
     setActivePlan(planName);
+    setActiveDuration(durationLabel);
+    setActiveScreens(screens);
+    setActivePrice(price);
+  }, []);
+
+  // Rewards — 1 point = ₹1. Redeeming deducts the used points from the
+  // balance; the caller is responsible for computing how many points to use
+  // (typically min(balance, order total) so it never goes negative).
+  const redeemRewardPoints = useCallback((amount) => {
+    setRewardPoints((p) => Math.max(0, p - amount));
   }, []);
 
   const changePhoto = useCallback((file) => {
@@ -188,7 +205,8 @@ export function AppProvider({ children }) {
     requestLogin, closeLoginModal, login, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
-    isSubscribed, activePlan, subscribe,
+    isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe,
+    rewardPoints, redeemRewardPoints,
     rooms, createRoom, addPostToRoom, toggleLikePost, addReplyToPost,
     donations, addDonation,
   };

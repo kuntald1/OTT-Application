@@ -50,7 +50,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
 
   const {
-    isLoggedIn, profile, showLoginModal,
+    isLoggedIn, isSubscribed, profile, showLoginModal,
     requestLogin, closeLoginModal, login, logout, changePhoto,
   } = useApp();
 
@@ -113,7 +113,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
               <button
                 key={link.label}
                 onClick={() => handleNavLinkClick(link)}
-                className="rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors hover:bg-white/10"
+                className="rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
                 style={{
                   color: isActive ? COLORS.gold : "rgba(245,235,221,0.82)",
                   background: isActive ? "rgba(212,175,55,0.14)" : "transparent",
@@ -131,7 +131,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
             onMouseLeave={() => setCategoryMenuOpen(false)}
           >
             <button
-              className="flex items-center gap-1 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors hover:bg-white/10"
+              className="flex items-center gap-1 rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
               style={{
                 color: activeView === "category" ? COLORS.gold : "rgba(245,235,221,0.82)",
                 background: activeView === "category" ? "rgba(212,175,55,0.14)" : "transparent",
@@ -162,7 +162,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
           {/* Ticketing — now sits after Category, per request */}
           <button
             onClick={() => handleNavLinkClick(TICKETING_LINK)}
-            className="rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors hover:bg-white/10"
+            className="rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
             style={{
               color: activeView === TICKETING_LINK.view ? COLORS.gold : "rgba(245,235,221,0.82)",
               background: activeView === TICKETING_LINK.view ? "rgba(212,175,55,0.14)" : "transparent",
@@ -194,6 +194,17 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
               <Search className="h-3.5 w-3.5" />
             </button>
           </div>
+
+          {isLoggedIn && !isSubscribed && (
+            <button
+              type="button"
+              onClick={() => onNavigate?.("subscription")}
+              className="hidden flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-opacity hover:opacity-90 sm:block"
+              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+            >
+              Subscribe
+            </button>
+          )}
 
           {isLoggedIn ? (
             <div className="relative hidden sm:block">

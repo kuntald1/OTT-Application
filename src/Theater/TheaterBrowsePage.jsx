@@ -3,6 +3,7 @@ import { Ticket, Info, Plus, Check, X, Star, MapPin, Calendar, SlidersHorizontal
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { SHOWS, CATEGORIES, VENUES } from "./showsData";
 import { useApp } from "../context/AppContext";
+import { useAnimatedModal } from "../shared/useAnimatedModal";
 
 // ---------------------------------------------------------------------------
 // Theater Browse — exactly the 8 real shows from showsData.js (same ones
@@ -51,7 +52,7 @@ function toggleInSet(set, value) {
 }
 
 export default function TheaterBrowsePage() {
-  const [activeShow, setActiveShow] = useState(null);
+  const modal = useAnimatedModal();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState(new Set());
   const [venueFilter, setVenueFilter] = useState(new Set());
@@ -169,11 +170,11 @@ export default function TheaterBrowsePage() {
                   <button
                     type="button"
                     key={show.id}
-                    onClick={() => setActiveShow(show)}
+                    onClick={() => modal.open(show)}
                     className="group relative text-left"
                   >
                     <div
-                      className="relative aspect-[2/3] overflow-hidden rounded-xl transition-shadow duration-300"
+                      className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
                       style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
                     >
                       <img
@@ -208,7 +209,7 @@ export default function TheaterBrowsePage() {
         </p>
       </footer>
 
-      {activeShow && <ShowModal show={activeShow} onClose={() => setActiveShow(null)} />}
+      {modal.item && <ShowModal show={modal.item} closing={modal.closing} onClose={modal.close} />}
     </div>
   );
 }
@@ -222,9 +223,16 @@ function FilterSection({ title, children, last }) {
   );
 }
 
-function ShowModal({ show, onClose }) {
+function ShowModal({ show, closing, onClose }) {
   const { isLoggedIn, requestLogin, isInList, toggleListItem } = useApp();
   const saved = isInList(show.id);
+  const [entered, setEntered] = useState(false);
+
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const shown = entered && !closing;
 
   const handleAddToList = () => {
     if (!isLoggedIn) {
@@ -241,14 +249,23 @@ function ShowModal({ show, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: T.modalOverlay }} onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: T.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
+      onClick={onClose}
+    >
       <style>{`
         .theater-modal-scroll::-webkit-scrollbar { display: none; }
         .theater-modal-scroll { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div
         className="theater-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{ background: T.modalSurface, maxHeight: "90vh", overflowY: "auto" }}
+        style={{
+          background: T.modalSurface, maxHeight: "90vh", overflowY: "auto",
+          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative aspect-video w-full">
