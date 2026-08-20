@@ -62,6 +62,20 @@ export function fetchCurrentUser() {
   return request("/auth/me", { auth: true });
 }
 
+export function requestPasswordReset({ email }) {
+  return request("/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function resetPassword({ token, newPassword }) {
+  return request("/auth/reset-password", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
 // Full-page redirects — these aren't fetch calls, the browser needs to
 // actually navigate so Google/Facebook's login screen can load.
 export function redirectToGoogleLogin() {

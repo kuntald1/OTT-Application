@@ -21,14 +21,32 @@ import BlogDetailPage from './Community/BlogDetailPage'
 import CommunityRoomsPage from './Community/CommunityRoomsPage'
 import CommunityRoomPage from './Community/CommunityRoomPage'
 import DonationPage from './Community/DonationPage'
+import ResetPasswordPage from './Auth/ResetPasswordPage'
 
 // Route state is { view, params }. navigate(view, params) pushes the
 // CURRENT route onto a history stack before switching, so goBack() can pop
 // back to wherever the person actually came from — not a hardcoded
 // destination. Subscription / Help Center / Manage Profile / Actor / Blog /
 // Community Room pages all use goBack for their Back button.
+//
+// resetPassword is a special case: it's the only view reached via a REAL
+// browser URL (the link in the "reset your password" email points to
+// https://theomy.com/reset-password?token=...), not via in-app navigate().
+// We detect that URL once on initial load and start the route there
+// instead of the normal default.
+function getInitialRoute() {
+  if (window.location.pathname === '/reset-password') {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (token) {
+      return { view: 'resetPassword', params: { token } }
+    }
+  }
+  return { view: 'hero', params: {} }
+}
+
 export default function App() {
-  const [route, setRoute] = useState({ view: 'hero', params: {} })
+  const [route, setRoute] = useState(getInitialRoute)
   const [history, setHistory] = useState([])
 
   const navigate = (view, params = {}) => {
@@ -49,6 +67,23 @@ export default function App() {
   }
 
   const openPerson = (personId) => navigate('actor', { personId })
+
+  // Reset-password is rendered standalone, outside AppProvider's normal
+  // "force login modal open" behavior — someone arriving from the email
+  // link isn't logged in yet, and shouldn't be blocked by the login modal
+  // covering this page. After they finish, they land on the normal app
+  // (still logged out) and can log in with their new password normally.
+  if (route.view === 'resetPassword') {
+    return (
+      <ResetPasswordPage
+        token={route.params.token}
+        onDone={() => {
+          window.history.replaceState({}, '', '/')
+          setRoute({ view: 'hero', params: {} })
+        }}
+      />
+    )
+  }
 
   return (
     <AppProvider>

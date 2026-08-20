@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin } from "../api";
+import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset } from "../api";
 import { CATEGORIES } from "../shared/categories";
 
 // ---------------------------------------------------------------------------
@@ -437,7 +437,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
 // bcrypt+JWT), plus working Google/Facebook OAuth redirects.
 function LoginModal({ onClose }) {
   const { login, register, authError } = useApp();
-  const [mode, setMode] = useState("login"); // "login" | "register"
+  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -445,10 +445,13 @@ function LoginModal({ onClose }) {
   const [role, setRole] = useState("User");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
 
   const canSubmit =
     mode === "login"
       ? email.trim() && password
+      : mode === "forgot"
+      ? email.trim()
       : name.trim() && email.trim() && password.length >= 8;
 
   const ROLES = ["User", "Content Creator", "Plays Organiser"];
@@ -460,6 +463,9 @@ function LoginModal({ onClose }) {
     try {
       if (mode === "login") {
         await login(email.trim(), password);
+      } else if (mode === "forgot") {
+        await requestPasswordReset({ email: email.trim() });
+        setForgotSent(true);
       } else {
         await register({
           name: name.trim(),
@@ -500,40 +506,60 @@ function LoginModal({ onClose }) {
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          {mode === "login" ? "Log in to theomy" : "Create your account"}
+          {mode === "login" ? "Log in to theomy" : mode === "forgot" ? "Reset your password" : "Create your account"}
         </h2>
         <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
           {mode === "login"
             ? "Log in to continue browsing theomy."
+            : mode === "forgot"
+            ? "Enter your email and we'll send you a reset link."
             : "Login is required to browse theomy."}
         </p>
 
-        {/* Social login */}
-        <div className="mb-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={redirectToGoogleLogin}
-            className="flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium hover:bg-white/5"
-            style={{ borderColor: "rgba(245,235,221,0.2)", color: COLORS.cream }}
-          >
-            <GoogleMark className="h-4 w-4" /> Continue with Google
-          </button>
-          <button
-            type="button"
-            onClick={redirectToFacebookLogin}
-            className="flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium hover:bg-white/5"
-            style={{ borderColor: "rgba(245,235,221,0.2)", color: COLORS.cream }}
-          >
-            <FacebookMark className="h-4 w-4" /> Continue with Facebook
-          </button>
-        </div>
+        {mode !== "forgot" && (
+          <>
+            {/* Social login */}
+            <div className="mb-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={redirectToGoogleLogin}
+                className="flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium hover:bg-white/5"
+                style={{ borderColor: "rgba(245,235,221,0.2)", color: COLORS.cream }}
+              >
+                <GoogleMark className="h-4 w-4" /> Continue with Google
+              </button>
+              <button
+                type="button"
+                onClick={redirectToFacebookLogin}
+                className="flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium hover:bg-white/5"
+                style={{ borderColor: "rgba(245,235,221,0.2)", color: COLORS.cream }}
+              >
+                <FacebookMark className="h-4 w-4" /> Continue with Facebook
+              </button>
+            </div>
 
-        <div className="mb-4 flex items-center gap-3">
-          <div className="h-px flex-1" style={{ background: "rgba(245,235,221,0.12)" }} />
-          <span className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>or</span>
-          <div className="h-px flex-1" style={{ background: "rgba(245,235,221,0.12)" }} />
-        </div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="h-px flex-1" style={{ background: "rgba(245,235,221,0.12)" }} />
+              <span className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>or</span>
+              <div className="h-px flex-1" style={{ background: "rgba(245,235,221,0.12)" }} />
+            </div>
+          </>
+        )}
 
+        {mode === "forgot" && forgotSent ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.75)" }}>
+              If an account exists for that email, a reset link has been sent. Check your inbox (and spam folder).
+            </p>
+            <button
+              onClick={() => { setMode("login"); setForgotSent(false); }}
+              className="mt-1 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+            >
+              Back to login
+            </button>
+          </div>
+        ) : (
         <div className="flex flex-col gap-3">
           {mode === "register" && (
             <input
@@ -553,14 +579,29 @@ function LoginModal({ onClose }) {
             className="rounded-lg border px-4 py-2.5 text-sm outline-none"
             style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
           />
-          <input
-            type="password"
-            placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-          />
+          {mode !== "forgot" && (
+            <input
+              type="password"
+              placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+          )}
+
+          {mode === "login" && (
+            <div className="-mt-1 flex justify-end">
+              <button
+                type="button"
+                onClick={() => { setFormError(""); setMode("forgot"); }}
+                className="text-xs font-medium hover:opacity-90"
+                style={{ color: "rgba(245,235,221,0.55)" }}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
 
           {mode === "register" && (
             <input
@@ -609,20 +650,31 @@ function LoginModal({ onClose }) {
             style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
           >
             {submitting
-              ? mode === "login" ? "Logging in…" : "Creating account…"
-              : mode === "login" ? "Log in" : "Create account"}
+              ? mode === "login" ? "Logging in…" : mode === "forgot" ? "Sending…" : "Creating account…"
+              : mode === "login" ? "Log in" : mode === "forgot" ? "Send reset link" : "Create account"}
           </button>
 
           <div className="mt-1 flex items-center justify-end">
-            <button
-              onClick={() => { setFormError(""); setMode((m) => (m === "login" ? "register" : "login")); }}
-              className="text-xs font-medium hover:opacity-90"
-              style={{ color: COLORS.gold }}
-            >
-              {mode === "login" ? "New Registration" : "Already have an account? Log in"}
-            </button>
+            {mode === "forgot" ? (
+              <button
+                onClick={() => { setFormError(""); setMode("login"); }}
+                className="text-xs font-medium hover:opacity-90"
+                style={{ color: COLORS.gold }}
+              >
+                Back to login
+              </button>
+            ) : (
+              <button
+                onClick={() => { setFormError(""); setMode((m) => (m === "login" ? "register" : "login")); }}
+                className="text-xs font-medium hover:opacity-90"
+                style={{ color: COLORS.gold }}
+              >
+                {mode === "login" ? "New Registration" : "Already have an account? Log in"}
+              </button>
+            )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
