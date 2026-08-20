@@ -12,3 +12,10 @@ services:
     network_mode: host
     env_file:
       - .env
+    volumes:
+      # Bind mount (not a named volume) so uploaded profile photos live in
+      # a real, browsable folder on the host and survive
+      # `docker compose up -d --build` — a named volume would work too, but
+      # a bind mount matches the pattern used across the other theomy/Vorpet
+      # products and makes the files directly inspectable via SSH.
+      - ./uploads:/app/uploads

@@ -1,7 +1,10 @@
 import secrets
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -101,6 +104,57 @@ def update_current_user(
     if payload.phone is not None:
         current_user.phone = payload.phone
 
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# Where uploaded photos live on disk. This path is bind-mounted from the
+# host in docker-compose.yml (./uploads:/app/uploads) so files survive
+# container rebuilds — without that mount, this would be wiped every time
+# `docker compose up -d --build` runs.
+UPLOAD_DIR = Path("uploads/profile_photos")
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/me/photo", response_model=UserOut)
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, WEBP, or GIF images are allowed.",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image must be smaller than 5MB.",
+        )
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = UPLOAD_DIR / filename
+
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    # Delete the old photo file, if one exists, so orphaned uploads don't
+    # pile up on disk every time someone changes their photo.
+    if current_user.profile_photo_url:
+        old_filename = current_user.profile_photo_url.rsplit("/", 1)[-1]
+        old_path = UPLOAD_DIR / old_filename
+        if old_path.exists() and old_path.is_file():
+            old_path.unlink(missing_ok=True)
+
+    current_user.profile_photo_url = f"/api/uploads/profile_photos/{filename}"
     db.commit()
     db.refresh(current_user)
     return current_user

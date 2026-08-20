@@ -33,6 +33,10 @@ class User(Base):
     # Null for users who only ever sign in via Google/Facebook
     hashed_password = Column(String(255), nullable=True)
 
+    # Relative URL to the uploaded profile photo, e.g. "/api/uploads/profile_photos/<uuid>.jpg"
+    # Null until the user uploads one.
+    profile_photo_url = Column(String(500), nullable=True)
+
     auth_provider = Column(
         Enum(AuthProvider), nullable=False, default=AuthProvider.local
     )

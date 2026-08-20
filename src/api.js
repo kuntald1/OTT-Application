@@ -70,6 +70,34 @@ export function updateCurrentUser({ name, email, phone }) {
   });
 }
 
+// File upload — deliberately NOT using the shared `request()` helper above,
+// since it always sets Content-Type: application/json. For multipart
+// uploads the browser must set its own Content-Type (with the boundary),
+// so we build this fetch call by hand.
+export async function uploadProfilePhoto(file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/auth/me/photo`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const message =
+      typeof data.detail === "string"
+        ? data.detail
+        : "Couldn't upload photo. Please try again.";
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 export function requestPasswordReset({ email }) {
   return request("/auth/forgot-password", {
     method: "POST",

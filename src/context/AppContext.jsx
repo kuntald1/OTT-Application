@@ -6,6 +6,7 @@ import {
   loginUser,
   fetchCurrentUser,
   updateCurrentUser,
+  uploadProfilePhoto,
   createTicket,
   fetchTickets,
   createSubscription,
@@ -19,9 +20,9 @@ import {
 //   - Subscription status — persisted to the backend (no payment gateway
 //     yet, activation is immediate)
 //
-// Auth, profile edits, tickets, and subscriptions are all backed by the
-// real theomy API (FastAPI + Postgres). My List, community rooms, and
-// donations remain demo-only/in-memory, unchanged from before.
+// Auth, profile edits (including photo), tickets, and subscriptions are all
+// backed by the real theomy API (FastAPI + Postgres). My List, community
+// rooms, and donations remain demo-only/in-memory, unchanged from before.
 // ---------------------------------------------------------------------------
 const AppContext = createContext(null);
 function makeId(prefix) {
@@ -55,14 +56,17 @@ const SEED_ROOMS = [
 ];
 
 // Maps a backend UserOut object to the shape the rest of the app expects
-// from `profile` (photo isn't part of the backend yet, so it stays local).
+// from `profile`. profile_photo_url from the backend (a real, persisted
+// URL like "/api/uploads/profile_photos/<uuid>.jpg") takes priority; falls
+// back to whatever was already in local state (e.g. a fresh upload we just
+// applied optimistically) if the backend hasn't got one yet.
 function toProfile(user, existingPhoto = null) {
   return {
     name: user.name,
     email: user.email,
     phone: user.phone || "",
     role: user.role,
-    photo: existingPhoto,
+    photo: user.profile_photo_url || existingPhoto,
   };
 }
 
@@ -234,11 +238,13 @@ export function AppProvider({ children }) {
     setRewardPoints((p) => Math.max(0, p - amount));
   }, []);
 
-  const changePhoto = useCallback((file) => {
+  // Uploads the photo to the backend and stores the real, persisted URL —
+  // survives refresh/logout/other devices, unlike the old local-only
+  // FileReader preview. Throws on failure so the caller can show an error.
+  const changePhoto = useCallback(async (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setProfile((p) => ({ ...p, photo: reader.result }));
-    reader.readAsDataURL(file);
+    const user = await uploadProfilePhoto(file);
+    setProfile((p) => toProfile(user, p.photo));
   }, []);
 
   // Manage Profile page uses this to save name/email/phone to the backend.

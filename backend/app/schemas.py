@@ -61,6 +61,7 @@ class UserOut(BaseModel):
     phone: Optional[str] = None
     role: UserRole
     auth_provider: str
+    profile_photo_url: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
