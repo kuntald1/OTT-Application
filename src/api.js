@@ -215,6 +215,10 @@ export function fetchOrganisers() {
   return request("/organisers");
 }
 
+export function fetchRevenueRate() {
+  return request("/revenue-rate");
+}
+
 export function createDonationOrder({ organiserUserId, amount }) {
   return request("/donations/razorpay/create-order", {
     method: "POST",

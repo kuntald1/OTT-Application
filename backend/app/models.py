@@ -326,3 +326,21 @@ class Donation(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class RevenueRateConfig(Base):
+    """Single-row table holding the current creator revenue-share rate.
+    Stored in PAISA per minute (integer) — never as a rupee decimal — so
+    there's no floating-point ambiguity about the unit. 7 paisa/min is
+    stored as 7; ₹1/min is stored as 100. Always divide by 100 to get
+    rupees when displaying.
+    """
+    __tablename__ = "revenue_rate_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    rate_paisa_per_minute = Column(Integer, nullable=False, default=7)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

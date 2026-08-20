@@ -392,6 +392,26 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
               >
                 Help Center
               </button>
+              {(profile.role === "Content Creator" || profile.role === "Plays Organiser") && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { onNavigate?.("myVideos"); setMenuOpen(false); }}
+                    className="rounded-full px-4 py-2.5 text-sm font-medium"
+                    style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                  >
+                    My Video List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { onNavigate?.("revenue"); setMenuOpen(false); }}
+                    className="rounded-full px-4 py-2.5 text-sm font-medium"
+                    style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                  >
+                    Revenue
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -723,6 +743,26 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout }) 
         >
           Help Center
         </button>
+        {(profile.role === "Content Creator" || profile.role === "Plays Organiser") && (
+          <>
+            <button
+              type="button"
+              onClick={() => { onNavigate?.("myVideos"); onClose(); }}
+              className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+              style={{ color: COLORS.gold }}
+            >
+              My Video List
+            </button>
+            <button
+              type="button"
+              onClick={() => { onNavigate?.("revenue"); onClose(); }}
+              className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+              style={{ color: COLORS.gold }}
+            >
+              Revenue
+            </button>
+          </>
+        )}
         <div className="border-t pt-3" style={{ borderColor: "rgba(245,235,221,0.12)" }}>
           <p className="text-sm font-medium" style={{ color: COLORS.cream }}>{profile.name || "—"}</p>
           <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{profile.email || "—"}</p>

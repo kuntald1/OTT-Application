@@ -22,6 +22,8 @@ import CommunityRoomsPage from './Community/CommunityRoomsPage'
 import CommunityRoomPage from './Community/CommunityRoomPage'
 import DonationPage from './Community/DonationPage'
 import ResetPasswordPage from './Auth/ResetPasswordPage'
+import MyVideoListPage from './Profile/MyVideoListPage'
+import RevenuePage from './Profile/RevenuePage'
 
 // Route state is { view, params }. navigate(view, params) pushes the
 // CURRENT route onto a history stack before switching, so goBack() can pop
@@ -120,6 +122,10 @@ export default function App() {
           <ActorProfilePage personId={route.params.personId} onBack={goBack} />
         ) : route.view === 'help' ? (
           <HelpCenterPage onBack={goBack} />
+        ) : route.view === 'myVideos' ? (
+          <MyVideoListPage onBack={goBack} />
+        ) : route.view === 'revenue' ? (
+          <RevenuePage onBack={goBack} />
         ) : route.view === 'manageProfile' ? (
           <ManageProfilePage onBack={goBack} />
         ) : route.view === 'blogList' ? (

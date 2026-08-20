@@ -302,3 +302,11 @@ class DonationOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RevenueRateOut(BaseModel):
+    rate_paisa_per_minute: int
+    rate_rupees_per_minute: Decimal
+    rate_display: str
+
+    model_config = {"from_attributes": True}

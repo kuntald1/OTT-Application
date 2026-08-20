@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost
+from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig
 from app.security import hash_password
 
 
@@ -237,6 +237,16 @@ def seed_community_rooms(db):
     print(f"Seeded {count} community rooms (skipping any that already existed).")
 
 
+def seed_revenue_rate(db):
+    existing = db.query(RevenueRateConfig).first()
+    if existing:
+        print(f"Revenue rate already exists ({existing.rate_paisa_per_minute} paisa/min), skipping.")
+        return
+    db.add(RevenueRateConfig(rate_paisa_per_minute=7))
+    db.commit()
+    print("Seeded revenue rate: 7 paisa/min.")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
@@ -245,5 +255,6 @@ if __name__ == "__main__":
         seed_tax_config(db)
         seed_blogs(db)
         seed_community_rooms(db)
+        seed_revenue_rate(db)
     finally:
         db.close()
