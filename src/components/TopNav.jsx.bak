@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin } from "../api";
 import { CATEGORIES } from "../shared/categories";
 
 // ---------------------------------------------------------------------------
@@ -427,54 +426,23 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
       </div>
 
       {showLoginModal && (
-        <LoginModal onClose={closeLoginModal} />
+        <LoginModal onClose={closeLoginModal} onLogin={login} />
       )}
     </>
   );
 }
 
-// Real auth — talks to the theomy backend (register/login with
-// bcrypt+JWT), plus working Google/Facebook OAuth redirects.
-function LoginModal({ onClose }) {
-  const { login, register, authError } = useApp();
+// Demo-only — no real auth backend or OAuth provider behind any of this;
+// selecting "Continue with Google/Facebook" just signs in with a
+// placeholder identity, same as filling the form manually.
+function LoginModal({ onClose, onLogin }) {
   const [mode, setMode] = useState("login"); // "login" | "register"
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [role, setRole] = useState("User");
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
 
-  const canSubmit =
-    mode === "login"
-      ? email.trim() && password
-      : name.trim() && email.trim() && password.length >= 8;
-
+  const canSubmit = name.trim() && email.trim();
   const ROLES = ["User", "Content Creator", "Plays Organiser"];
-
-  const handleSubmit = async () => {
-    if (!canSubmit || submitting) return;
-    setFormError("");
-    setSubmitting(true);
-    try {
-      if (mode === "login") {
-        await login(email.trim(), password);
-      } else {
-        await register({
-          name: name.trim(),
-          email: email.trim(),
-          password,
-          phone: phone.trim(),
-          role,
-        });
-      }
-    } catch (err) {
-      setFormError(err.message || "Something went wrong. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -500,19 +468,17 @@ function LoginModal({ onClose }) {
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          {mode === "login" ? "Log in to theomy" : "Create your account"}
+          {mode === "login" ? "Log in to Movix" : "Create your account"}
         </h2>
         <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-          {mode === "login"
-            ? "Log in to continue browsing theomy."
-            : "Login is required to browse theomy."}
+          Demo only — no real accounts are created. Login is required to browse Movix.
         </p>
 
         {/* Social login */}
         <div className="mb-4 flex flex-col gap-2">
           <button
             type="button"
-            onClick={redirectToGoogleLogin}
+            onClick={() => onLogin("Google User", "user@gmail.com", role)}
             className="flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium hover:bg-white/5"
             style={{ borderColor: "rgba(245,235,221,0.2)", color: COLORS.cream }}
           >
@@ -520,7 +486,7 @@ function LoginModal({ onClose }) {
           </button>
           <button
             type="button"
-            onClick={redirectToFacebookLogin}
+            onClick={() => onLogin("Facebook User", "user@facebook.com", role)}
             className="flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium hover:bg-white/5"
             style={{ borderColor: "rgba(245,235,221,0.2)", color: COLORS.cream }}
           >
@@ -535,16 +501,14 @@ function LoginModal({ onClose }) {
         </div>
 
         <div className="flex flex-col gap-3">
-          {mode === "register" && (
-            <input
-              type="text"
-              placeholder="Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
-          )}
+          <input
+            type="text"
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+          />
           <input
             type="email"
             placeholder="Email"
@@ -553,25 +517,6 @@ function LoginModal({ onClose }) {
             className="rounded-lg border px-4 py-2.5 text-sm outline-none"
             style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
           />
-          <input
-            type="password"
-            placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-          />
-
-          {mode === "register" && (
-            <input
-              type="tel"
-              placeholder="Phone number (optional)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
-          )}
 
           {mode === "register" && (
             <div>
@@ -596,26 +541,18 @@ function LoginModal({ onClose }) {
             </div>
           )}
 
-          {(formError || authError) && (
-            <p className="text-xs font-medium" style={{ color: "#f87171" }}>
-              {formError || authError}
-            </p>
-          )}
-
           <button
-            disabled={!canSubmit || submitting}
-            onClick={handleSubmit}
+            disabled={!canSubmit}
+            onClick={() => onLogin(name.trim(), email.trim(), role)}
             className="mt-1 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
           >
-            {submitting
-              ? mode === "login" ? "Logging in…" : "Creating account…"
-              : mode === "login" ? "Log in" : "Create account"}
+            {mode === "login" ? "Log in" : "Create account"}
           </button>
 
           <div className="mt-1 flex items-center justify-end">
             <button
-              onClick={() => { setFormError(""); setMode((m) => (m === "login" ? "register" : "login")); }}
+              onClick={() => setMode((m) => (m === "login" ? "register" : "login"))}
               className="text-xs font-medium hover:opacity-90"
               style={{ color: COLORS.gold }}
             >

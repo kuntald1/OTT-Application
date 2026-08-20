@@ -1,66 +1,112 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-
+import { getToken, setToken, registerUser, loginUser, fetchCurrentUser } from "../api";
 // ---------------------------------------------------------------------------
 // AppContext — the one place that owns:
 //   - auth state (isLoggedIn / profile) + the shared login modal trigger
 //   - My List (saved items) + add/remove/toggle
 //
-// Previously this lived only inside TopNav, which meant no other component
-// (a card's "+" button in Video Streaming, Movies, Theater, Archive) could
-// check "is the user logged in" or actually save an item anywhere. Lifting
-// it here makes both usable from any component via useApp().
+// Auth is now backed by the real theomy API (FastAPI + Postgres, bcrypt +
+// JWT). Everything else below this (My List, tickets, rewards, community,
+// donations) is still demo-only/in-memory, unchanged from before.
 // ---------------------------------------------------------------------------
-
 const AppContext = createContext(null);
-
 function makeTicketId() {
   const n = Math.floor(100000 + Math.random() * 900000);
   return `TCK-${n}`;
 }
-
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
-
 const SEED_ROOMS = [
   {
     id: "room-bengali-fans",
     title: "Bengali Theatre Fans",
-    createdBy: "Movix Team",
+    createdBy: "theomy Team",
     posts: [
-      { id: "post-1", author: "Movix Team", text: "Welcome! Share what you've been watching this week.", image: null, likes: 4, replies: [] },
+      { id: "post-1", author: "theomy Team", text: "Welcome! Share what you've been watching this week.", image: null, likes: 4, replies: [] },
     ],
   },
   {
     id: "room-backstage-stories",
     title: "Backstage Stories",
-    createdBy: "Movix Team",
+    createdBy: "theomy Team",
     posts: [
-      { id: "post-2", author: "Movix Team", text: "Post your best backstage moments — mishaps welcome.", image: null, likes: 7, replies: [] },
+      { id: "post-2", author: "theomy Team", text: "Post your best backstage moments — mishaps welcome.", image: null, likes: 7, replies: [] },
     ],
   },
   {
     id: "room-new-play-recs",
     title: "New Play Recommendations",
-    createdBy: "Movix Team",
+    createdBy: "theomy Team",
     posts: [
-      { id: "post-3", author: "Movix Team", text: "What should be added to the Ticketing section next?", image: null, likes: 2, replies: [] },
+      { id: "post-3", author: "theomy Team", text: "What should be added to the Ticketing section next?", image: null, likes: 2, replies: [] },
     ],
   },
 ];
+
+// Maps a backend UserOut object to the shape the rest of the app expects
+// from `profile` (photo isn't part of the backend yet, so it stays local).
+function toProfile(user, existingPhoto = null) {
+  return {
+    name: user.name,
+    email: user.email,
+    phone: user.phone || "",
+    role: user.role,
+    photo: existingPhoto,
+  };
+}
 
 export function AppProvider({ children }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profile, setProfile] = useState({ name: "", email: "", photo: null, role: "User" });
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true); // true while we check for an existing session
+  const [authError, setAuthError] = useState("");
+
+  // On first load: if there's a token in the URL (just arrived from a
+  // Google/Facebook redirect), save it and clean the URL. Then, whichever
+  // way we got a token (URL or a previous session in localStorage), verify
+  // it against /auth/me and restore the session.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token");
+    if (urlToken) {
+      setToken(urlToken);
+      params.delete("token");
+      const cleanUrl =
+        window.location.pathname +
+        (params.toString() ? `?${params.toString()}` : "") +
+        window.location.hash;
+      window.history.replaceState({}, "", cleanUrl);
+    }
+
+    const token = getToken();
+    if (!token) {
+      setAuthLoading(false);
+      return;
+    }
+
+    fetchCurrentUser()
+      .then((user) => {
+        setProfile((p) => toProfile(user, p.photo));
+        setIsLoggedIn(true);
+      })
+      .catch(() => {
+        // Token expired/invalid — clear it and let them log in again
+        setToken(null);
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
 
   // The whole site requires login. Whenever isLoggedIn is false — on first
-  // load, or right after logging out — force the login modal open. It's
-  // non-dismissable in this state (see LoginModal in TopNav.jsx), so there's
-  // no way to browse without logging in first.
+  // load (once we've finished checking for an existing session), or right
+  // after logging out — force the login modal open. It's non-dismissable in
+  // this state (see LoginModal in TopNav.jsx), so there's no way to browse
+  // without logging in first.
   useEffect(() => {
-    if (!isLoggedIn) setShowLoginModal(true);
-  }, [isLoggedIn]);
+    if (!authLoading && !isLoggedIn) setShowLoginModal(true);
+  }, [authLoading, isLoggedIn]);
+
   const [myList, setMyList] = useState([]); // [{ id, title, image, meta, section }]
   const [tickets, setTickets] = useState([]); // [{ id, subject, description, status, date }]
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -71,17 +117,33 @@ export function AppProvider({ children }) {
   const [rewardPoints, setRewardPoints] = useState(250); // demo starting balance, 1 point = ₹1
   const [rooms, setRooms] = useState(SEED_ROOMS);
   const [donations, setDonations] = useState([]); // [{ id, organiserId, organiserName, amount, date }]
-
   const requestLogin = useCallback(() => setShowLoginModal(true), []);
   const closeLoginModal = useCallback(() => setShowLoginModal(false), []);
 
-  const login = useCallback((name, email, role = "User") => {
-    setProfile((p) => ({ ...p, name, email, role }));
+  // Real email+password login against the backend. Throws on failure so
+  // the modal can show the error inline; caller is responsible for catching.
+  const login = useCallback(async (email, password) => {
+    setAuthError("");
+    const data = await loginUser({ email, password });
+    setToken(data.access_token);
+    setProfile((p) => toProfile(data.user, p.photo));
+    setIsLoggedIn(true);
+    setShowLoginModal(false);
+  }, []);
+
+  // Real registration against the backend. Phone is optional — pass "" or
+  // undefined if not provided, the API treats both as "not given".
+  const register = useCallback(async ({ name, email, password, phone, role }) => {
+    setAuthError("");
+    const data = await registerUser({ name, email, password, phone, role });
+    setToken(data.access_token);
+    setProfile((p) => toProfile(data.user, p.photo));
     setIsLoggedIn(true);
     setShowLoginModal(false);
   }, []);
 
   const logout = useCallback(() => {
+    setToken(null);
     setIsLoggedIn(false);
     setProfile({ name: "", email: "", photo: null, role: "User" });
     setIsSubscribed(false);
@@ -201,8 +263,8 @@ export function AppProvider({ children }) {
   }, []);
 
   const value = {
-    isLoggedIn, profile, showLoginModal,
-    requestLogin, closeLoginModal, login, logout, changePhoto, updateProfile,
+    isLoggedIn, profile, showLoginModal, authLoading, authError,
+    requestLogin, closeLoginModal, login, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
     isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe,
