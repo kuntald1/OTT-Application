@@ -310,3 +310,24 @@ class RevenueRateOut(BaseModel):
     rate_display: str
 
     model_config = {"from_attributes": True}
+
+
+class RevenueSummaryOut(BaseModel):
+    total_earned_rupees: Decimal
+    available_balance_rupees: Decimal
+    pending_withdrawals_rupees: Decimal
+
+
+class WithdrawalRequestCreate(BaseModel):
+    amount_rupees: Decimal = Field(gt=0)
+
+
+class WithdrawalRequestOut(BaseModel):
+    id: uuid.UUID
+    amount_rupees: Decimal
+    status: str
+    admin_note: Optional[str] = None
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}

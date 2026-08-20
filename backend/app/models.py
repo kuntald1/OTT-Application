@@ -344,3 +344,55 @@ class RevenueRateConfig(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class WithdrawalStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    paid = "paid"
+
+
+class CreatorEarnings(Base):
+    """One row per Content Creator / Plays Organiser — their running
+    balance. All amounts in PAISA (integer), same precision reasoning as
+    RevenueRateConfig. total_earned_paisa only ever grows (or is set by
+    whoever's tracking real earnings once that exists); available_balance
+    _paisa is what's left after withdrawal requests reserve/deduct funds.
+
+    There is no automated process writing to this table yet — theomy has
+    no real watch-time tracking. Rows here are seeded manually (SQL) for
+    testing, or later by the admin panel / a real earnings pipeline.
+    """
+    __tablename__ = "creator_earnings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    creator_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    total_earned_paisa = Column(Integer, nullable=False, default=0)
+    available_balance_paisa = Column(Integer, nullable=False, default=0)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class WithdrawalRequest(Base):
+    """A creator's request to cash out part of their available balance.
+    Starts "pending" and stays that way until an admin acts on it — no
+    admin panel exists yet, so for now that means updating this row's
+    status directly in the database. When approved/rejected, funds should
+    be adjusted in CreatorEarnings accordingly by whoever processes it
+    (the future admin panel will do this as part of its workflow).
+    """
+    __tablename__ = "withdrawal_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    creator_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    amount_paisa = Column(Integer, nullable=False)
+    status = Column(Enum(WithdrawalStatus), nullable=False, default=WithdrawalStatus.pending)
+    admin_note = Column(String(500), nullable=True)
+    requested_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    processed_at = Column(DateTime(timezone=True), nullable=True)

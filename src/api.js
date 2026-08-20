@@ -219,6 +219,22 @@ export function fetchRevenueRate() {
   return request("/revenue-rate");
 }
 
+export function fetchRevenueSummary() {
+  return request("/revenue/summary", { auth: true });
+}
+
+export function requestWithdrawal(amountRupees) {
+  return request("/revenue/withdrawals", {
+    method: "POST",
+    auth: true,
+    body: { amount_rupees: amountRupees },
+  });
+}
+
+export function fetchWithdrawalHistory() {
+  return request("/revenue/withdrawals", { auth: true });
+}
+
 export function createDonationOrder({ organiserUserId, amount }) {
   return request("/donations/razorpay/create-order", {
     method: "POST",
