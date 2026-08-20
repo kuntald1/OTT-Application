@@ -188,3 +188,117 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+
+
+class BlogListItemOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    excerpt: str
+    author_name: str
+    published_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BlogDetailOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    excerpt: str
+    body: str
+    author_name: str
+    published_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReplyOut(BaseModel):
+    id: uuid.UUID
+    author_name: str
+    text: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PostOut(BaseModel):
+    id: uuid.UUID
+    author_name: str
+    text: str
+    image_url: Optional[str] = None
+    likes_count: int
+    liked_by_me: bool
+    replies: List[ReplyOut]
+    created_at: datetime
+
+
+class RoomSummaryOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    created_by_name: str
+    post_count: int
+    created_at: datetime
+
+
+class RoomDetailOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    created_by_name: str
+    posts: List[PostOut]
+    created_at: datetime
+
+
+class RoomCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
+class PostCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ReplyCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class LikeToggleOut(BaseModel):
+    liked: bool
+    likes_count: int
+
+
+class OrganiserOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    profile_photo_url: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class DonationCreateOrderRequest(BaseModel):
+    organiser_user_id: uuid.UUID
+    amount: Decimal = Field(gt=0)
+
+
+class DonationCreateOrderResponse(BaseModel):
+    donation_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    organiser_name: str
+
+
+class DonationVerifyRequest(BaseModel):
+    donation_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class DonationOut(BaseModel):
+    id: uuid.UUID
+    organiser_name: str
+    amount: Decimal
+    gateway: PaymentGateway
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

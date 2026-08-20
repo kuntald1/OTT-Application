@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
 
 export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
-  const { rooms, createRoom, isLoggedIn, requestLogin, profile } = useApp();
+  const { rooms, createRoom, isLoggedIn, requestLogin } = useApp();
   const [showCreate, setShowCreate] = useState(false);
 
   const handleCreateClick = () => {
@@ -61,7 +61,7 @@ export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
                 <div>
                   <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{room.title}</p>
                   <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                    {room.posts.length} {room.posts.length === 1 ? "post" : "posts"} · Started by {room.createdBy}
+                    {room.postCount} {room.postCount === 1 ? "post" : "posts"} · Started by {room.createdBy}
                   </p>
                 </div>
               </div>
@@ -81,7 +81,10 @@ export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
       {showCreate && (
         <CreateRoomModal
           onClose={() => setShowCreate(false)}
-          onCreate={(title) => handleCreated(createRoom(title, profile.name))}
+          onCreate={async (title) => {
+            const roomId = await createRoom(title);
+            handleCreated(roomId);
+          }}
         />
       )}
     </div>
@@ -90,6 +93,19 @@ export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
 
 function CreateRoomModal({ onClose, onCreate }) {
   const [title, setTitle] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    setError("");
+    setSubmitting(true);
+    try {
+      await onCreate(title.trim());
+    } catch (err) {
+      setError(err.message || "Couldn't create room. Please try again.");
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
@@ -107,15 +123,18 @@ function CreateRoomModal({ onClose, onCreate }) {
           className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
           style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
         />
+        {error && (
+          <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+        )}
         <div className="mt-4 flex items-center justify-between">
-          <button onClick={onClose} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
+          <button onClick={onClose} disabled={submitting} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
           <button
-            disabled={!title.trim()}
-            onClick={() => onCreate(title.trim())}
+            disabled={!title.trim() || submitting}
+            onClick={handleSubmit}
             className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
           >
-            Create room
+            {submitting ? "Creating…" : "Create room"}
           </button>
         </div>
       </div>

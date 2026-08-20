@@ -1,14 +1,39 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, HandCoins, CheckCircle2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { ORGANISERS } from "./organisersData";
 import { useApp } from "../context/AppContext";
+import { fetchOrganisers, createDonationOrder, verifyDonationPayment } from "../api";
+
+// ---------------------------------------------------------------------------
+// Donation — the directory now lists real registered users whose account
+// role is "Plays Organiser" (via GET /api/organisers), not a fixed
+// fictional list. Donating opens a real Razorpay checkout (test mode),
+// same signature-verification pattern as subscription checkout.
+// ---------------------------------------------------------------------------
 
 export default function DonationPage({ onBack }) {
-  const { isLoggedIn, requestLogin, addDonation } = useApp();
+  const { isLoggedIn, requestLogin, profile } = useApp();
+  const [organisers, setOrganisers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
-  const [amount, setAmount] = useState("500");
   const [confirmed, setConfirmed] = useState(null);
+
+  useEffect(() => {
+    fetchOrganisers()
+      .then(setOrganisers)
+      .catch(() => setOrganisers([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Razorpay's checkout widget, loaded once lazily.
+  useEffect(() => {
+    if (document.getElementById("razorpay-checkout-js")) return;
+    const script = document.createElement("script");
+    script.id = "razorpay-checkout-js";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
 
   const handleSelect = (organiser) => {
     if (!isLoggedIn) {
@@ -17,14 +42,6 @@ export default function DonationPage({ onBack }) {
     }
     setSelected(organiser);
     setConfirmed(null);
-  };
-
-  const handleDonate = () => {
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return;
-    addDonation(selected.id, selected.name, amt);
-    setConfirmed(amt);
-    setSelected(null);
   };
 
   return (
@@ -41,74 +58,156 @@ export default function DonationPage({ onBack }) {
 
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Support a Plays Organiser</h1>
         <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
-          Donate directly to organisers running independent theatre programs and community initiatives.
+          Donate directly to registered organisers on theomy.
         </p>
 
         {confirmed && (
           <div className="mb-6 flex items-center gap-2 rounded-xl p-4" style={{ background: "rgba(111,207,151,0.1)", border: "1px solid rgba(111,207,151,0.35)" }}>
             <CheckCircle2 className="h-5 w-5" style={{ color: "#6FCF97" }} />
-            <p className="text-sm" style={{ color: "#6FCF97" }}>Thanks — your ₹{confirmed} donation was recorded.</p>
+            <p className="text-sm" style={{ color: "#6FCF97" }}>Thank you — your ₹{confirmed} donation was successful.</p>
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {ORGANISERS.map((org) => (
-            <div key={org.id} className="flex items-start gap-4 rounded-2xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}>
-              <img src={org.photo} alt="" className="h-14 w-14 flex-shrink-0 rounded-full object-cover object-top" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{org.name}</p>
-                <p className="text-xs" style={{ color: COLORS.gold }}>{org.org}</p>
-                <p className="mt-1.5 text-xs leading-relaxed" style={{ color: "rgba(245,235,221,0.6)" }}>{org.bio}</p>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(org)}
-                  className="mt-3 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
-                  style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+        {loading ? (
+          <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading organisers…</p>
+        ) : organisers.length === 0 ? (
+          <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No organisers have registered yet.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {organisers.map((org) => (
+              <div key={org.id} className="flex items-start gap-4 rounded-2xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}>
+                <div
+                  className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border text-base font-semibold"
+                  style={{ borderColor: "rgba(212,175,55,0.4)", color: COLORS.cream }}
                 >
-                  <HandCoins className="h-3.5 w-3.5" /> Donate
-                </button>
+                  {org.profile_photo_url ? (
+                    <img src={org.profile_photo_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    org.name[0]?.toUpperCase()
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{org.name}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: COLORS.gold }}>Plays Organiser</p>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(org)}
+                    className="mt-3 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
+                    style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+                  >
+                    <HandCoins className="h-3.5 w-3.5" /> Donate
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-8 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-          Demo directory — no real payments are processed and these are not real organisations.
-        </p>
+            ))}
+          </div>
+        )}
       </main>
 
       {selected && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setSelected(null)}>
-          <div
-            className="w-full max-w-sm rounded-2xl p-6"
-            style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>Donate to {selected.name}</h2>
-            <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{selected.org}</p>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Amount (₹)</label>
-            <input
-              type="number"
-              min="1"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
-            <div className="mt-4 flex items-center justify-between">
-              <button onClick={() => setSelected(null)} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
-              <button
-                onClick={handleDonate}
-                disabled={!Number(amount) || Number(amount) <= 0}
-                className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-              >
-                Donate ₹{amount || 0}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DonateModal
+          organiser={selected}
+          userEmail={profile.email}
+          userPhone={profile.phone}
+          onClose={() => setSelected(null)}
+          onSuccess={(amount) => {
+            setSelected(null);
+            setConfirmed(amount);
+          }}
+        />
       )}
+    </div>
+  );
+}
+
+function DonateModal({ organiser, userEmail, userPhone, onClose, onSuccess }) {
+  const [amount, setAmount] = useState("500");
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDonate = async () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return;
+
+    setError("");
+    setPaying(true);
+    try {
+      const order = await createDonationOrder({ organiserUserId: organiser.id, amount: amt });
+
+      if (!window.Razorpay) {
+        throw new Error("Payment widget failed to load. Please refresh and try again.");
+      }
+
+      const rzp = new window.Razorpay({
+        key: order.razorpay_key_id,
+        amount: Math.round(Number(order.amount) * 100),
+        currency: order.currency,
+        name: "theomy",
+        description: `Donation to ${order.organiser_name}`,
+        order_id: order.razorpay_order_id,
+        prefill: { email: userEmail, contact: userPhone || undefined },
+        theme: { color: "#D4AF37" },
+        handler: async (response) => {
+          try {
+            await verifyDonationPayment({
+              donationId: order.donation_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            onSuccess(Number(order.amount));
+          } catch (err) {
+            setError(err.message || "Payment verification failed. If money was deducted, contact support.");
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: { ondismiss: () => setPaying(false) },
+      });
+      rzp.on("payment.failed", () => {
+        setError("Payment failed. Please try again.");
+        setPaying(false);
+      });
+      rzp.open();
+    } catch (err) {
+      setError(err.message || "Couldn't start checkout. Please try again.");
+      setPaying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={paying ? undefined : onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl p-6"
+        style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>Donate to {organiser.name}</h2>
+        <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Plays Organiser</p>
+        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Amount (₹)</label>
+        <input
+          type="number"
+          min="1"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
+          style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+        />
+        {error && (
+          <p className="mt-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+        )}
+        <div className="mt-4 flex items-center justify-between">
+          <button onClick={onClose} disabled={paying} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
+          <button
+            onClick={handleDonate}
+            disabled={!Number(amount) || Number(amount) <= 0 || paying}
+            className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+          >
+            {paying ? "Processing…" : `Donate ₹${amount || 0}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -155,6 +155,87 @@ export function fetchTaxConfig() {
   return request("/tax-config");
 }
 
+export function fetchBlogs() {
+  return request("/blogs");
+}
+
+export function fetchBlogPost(id) {
+  return request(`/blogs/${id}`);
+}
+
+export function fetchCommunityRooms() {
+  return request("/community/rooms");
+}
+
+export function createCommunityRoom(title) {
+  return request("/community/rooms", {
+    method: "POST",
+    auth: true,
+    body: { title },
+  });
+}
+
+export function fetchCommunityRoom(roomId) {
+  return request(`/community/rooms/${roomId}`, { auth: true });
+}
+
+export async function createRoomPost(roomId, text) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("text", text);
+
+  const res = await fetch(`${BASE_URL}/community/rooms/${roomId}/posts`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't post. Please try again.");
+  }
+  return data;
+}
+
+export function createPostReply(roomId, postId, text) {
+  return request(`/community/rooms/${roomId}/posts/${postId}/replies`, {
+    method: "POST",
+    auth: true,
+    body: { text },
+  });
+}
+
+export function togglePostLike(roomId, postId) {
+  return request(`/community/rooms/${roomId}/posts/${postId}/like`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function fetchOrganisers() {
+  return request("/organisers");
+}
+
+export function createDonationOrder({ organiserUserId, amount }) {
+  return request("/donations/razorpay/create-order", {
+    method: "POST",
+    auth: true,
+    body: { organiser_user_id: organiserUserId, amount },
+  });
+}
+
+export function verifyDonationPayment({ donationId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
+  return request("/donations/razorpay/verify", {
+    method: "POST",
+    auth: true,
+    body: {
+      donation_id: donationId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
+}
+
 export function createRazorpayOrder({ planName, durationLabel, screens, rewardPointsRequested }) {
   return request("/payments/razorpay/create-order", {
     method: "POST",

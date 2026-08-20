@@ -1,29 +1,46 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, MessageSquare, Send } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
+import { fetchCommunityRoom, createRoomPost, createPostReply } from "../api";
 
 // ---------------------------------------------------------------------------
-// Individual Community Room — simplified to just posting text and replying.
-// Photo/Video attachment, Share, and Like/React have been removed per
-// request; the composer is text-only, and each post's only action is Reply.
+// Individual Community Room — text-only posting and replying (image/video
+// attachment, Share, and Like/React remain out of scope here, matching the
+// existing simplified UX). Posts and replies are now persisted to the
+// backend instead of living only in local browser state.
 // ---------------------------------------------------------------------------
 
 export default function CommunityRoomPage({ roomId, onBack, onNavigate }) {
-  const { rooms, isLoggedIn, isSubscribed, requestLogin, profile, addPostToRoom, addReplyToPost } = useApp();
-  const room = rooms.find((r) => r.id === roomId);
+  const { isLoggedIn, isSubscribed, requestLogin } = useApp();
+
+  const [room, setRoom] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   const [text, setText] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState("");
+
   const [openReplyFor, setOpenReplyFor] = useState(null);
   const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
 
-  if (!room) {
-    return (
-      <div style={{ background: COLORS.black, minHeight: "100vh" }} className="flex items-center justify-center px-6 pt-24">
-        <p style={{ color: "rgba(245,235,221,0.7)" }}>Room not found.</p>
-      </div>
-    );
-  }
+  const loadRoom = () => {
+    setLoading(true);
+    fetchCommunityRoom(roomId)
+      .then((data) => {
+        setRoom(data);
+        setNotFound(false);
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadRoom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
 
   const requireLogin = (fn) => (...args) => {
     if (!isLoggedIn) {
@@ -37,18 +54,51 @@ export default function CommunityRoomPage({ roomId, onBack, onNavigate }) {
     fn(...args);
   };
 
-  const handlePost = requireLogin(() => {
+  const handlePost = requireLogin(async () => {
     if (!text.trim()) return;
-    addPostToRoom(roomId, { text: text.trim(), author: profile.name });
-    setText("");
+    setPostError("");
+    setPosting(true);
+    try {
+      await createRoomPost(roomId, text.trim());
+      setText("");
+      loadRoom();
+    } catch (err) {
+      setPostError(err.message || "Couldn't post. Please try again.");
+    } finally {
+      setPosting(false);
+    }
   });
 
-  const handleReplySubmit = requireLogin((postId) => {
+  const handleReplySubmit = requireLogin(async (postId) => {
     if (!replyText.trim()) return;
-    addReplyToPost(roomId, postId, replyText.trim(), profile.name);
-    setReplyText("");
-    setOpenReplyFor(null);
+    setReplying(true);
+    try {
+      await createPostReply(roomId, postId, replyText.trim());
+      setReplyText("");
+      setOpenReplyFor(null);
+      loadRoom();
+    } catch (err) {
+      setPostError(err.message || "Couldn't reply. Please try again.");
+    } finally {
+      setReplying(false);
+    }
   });
+
+  if (loading) {
+    return (
+      <div style={{ background: COLORS.black, minHeight: "100vh" }} className="flex items-center justify-center px-6 pt-24">
+        <p style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (notFound || !room) {
+    return (
+      <div style={{ background: COLORS.black, minHeight: "100vh" }} className="flex items-center justify-center px-6 pt-24">
+        <p style={{ color: "rgba(245,235,221,0.7)" }}>Room not found.</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
@@ -63,7 +113,7 @@ export default function CommunityRoomPage({ roomId, onBack, onNavigate }) {
         </button>
 
         <h1 className="mb-1 text-2xl font-semibold" style={{ color: COLORS.cream }}>{room.title}</h1>
-        <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Started by {room.createdBy}</p>
+        <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Started by {room.created_by_name}</p>
 
         {/* Composer */}
         <div className="mb-8 rounded-2xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}>
@@ -75,24 +125,30 @@ export default function CommunityRoomPage({ roomId, onBack, onNavigate }) {
             className="w-full resize-none rounded-lg border px-4 py-2.5 text-sm outline-none"
             style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
           />
+          {postError && (
+            <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{postError}</p>
+          )}
           <div className="mt-3 flex items-center justify-end">
             <button
               type="button"
               onClick={handlePost}
-              disabled={!text.trim()}
+              disabled={!text.trim() || posting}
               className="flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >
-              <Send className="h-3.5 w-3.5" /> Post
+              <Send className="h-3.5 w-3.5" /> {posting ? "Posting…" : "Post"}
             </button>
           </div>
         </div>
 
         {/* Posts */}
         <div className="flex flex-col gap-4">
+          {room.posts.length === 0 && (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No posts yet — be the first to share something.</p>
+          )}
           {room.posts.map((post) => (
             <div key={post.id} className="rounded-2xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-              <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{post.author}</p>
+              <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{post.author_name}</p>
               {post.text && <p className="mt-1.5 text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.8)" }}>{post.text}</p>}
 
               <div className="mt-3 flex items-center gap-4 text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
@@ -105,7 +161,7 @@ export default function CommunityRoomPage({ roomId, onBack, onNavigate }) {
                 <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
                   {post.replies.map((r) => (
                     <p key={r.id} className="text-xs" style={{ color: "rgba(245,235,221,0.65)" }}>
-                      <span className="font-semibold" style={{ color: COLORS.gold }}>{r.author}: </span>{r.text}
+                      <span className="font-semibold" style={{ color: COLORS.gold }}>{r.author_name}: </span>{r.text}
                     </p>
                   ))}
                 </div>
@@ -124,11 +180,11 @@ export default function CommunityRoomPage({ roomId, onBack, onNavigate }) {
                   <button
                     type="button"
                     onClick={() => handleReplySubmit(post.id)}
-                    disabled={!replyText.trim()}
+                    disabled={!replyText.trim() || replying}
                     className="rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-40"
                     style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
                   >
-                    Reply
+                    {replying ? "…" : "Reply"}
                   </button>
                 </div>
               )}

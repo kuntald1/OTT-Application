@@ -11,49 +11,26 @@ import {
   fetchTickets,
   createSubscription,
   fetchMySubscription,
+  fetchCommunityRooms,
+  createCommunityRoom,
 } from "../api";
 // ---------------------------------------------------------------------------
 // AppContext — the one place that owns:
 //   - auth state (isLoggedIn / profile) + the shared login modal trigger
 //   - My List (saved items) + add/remove/toggle
 //   - Support tickets (Help Center) — persisted to the backend
-//   - Subscription status — persisted to the backend (no payment gateway
-//     yet, activation is immediate)
+//   - Subscription status — persisted to the backend
+//   - Community rooms (summary list only — post/reply/like details are
+//     fetched page-locally by CommunityRoomPage when a room is opened)
 //
-// Auth, profile edits (including photo), tickets, and subscriptions are all
-// backed by the real theomy API (FastAPI + Postgres). My List, community
-// rooms, and donations remain demo-only/in-memory, unchanged from before.
+// Auth, profile edits (including photo), tickets, subscriptions, and
+// community rooms are all backed by the real theomy API (FastAPI +
+// Postgres). My List and donations remain demo-only/in-memory.
 // ---------------------------------------------------------------------------
 const AppContext = createContext(null);
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
-const SEED_ROOMS = [
-  {
-    id: "room-bengali-fans",
-    title: "Bengali Theatre Fans",
-    createdBy: "theomy Team",
-    posts: [
-      { id: "post-1", author: "theomy Team", text: "Welcome! Share what you've been watching this week.", image: null, likes: 4, replies: [] },
-    ],
-  },
-  {
-    id: "room-backstage-stories",
-    title: "Backstage Stories",
-    createdBy: "theomy Team",
-    posts: [
-      { id: "post-2", author: "theomy Team", text: "Post your best backstage moments — mishaps welcome.", image: null, likes: 7, replies: [] },
-    ],
-  },
-  {
-    id: "room-new-play-recs",
-    title: "New Play Recommendations",
-    createdBy: "theomy Team",
-    posts: [
-      { id: "post-3", author: "theomy Team", text: "What should be added to the Ticketing section next?", image: null, likes: 2, replies: [] },
-    ],
-  },
-];
 
 // Maps a backend UserOut object to the shape the rest of the app expects
 // from `profile`. profile_photo_url from the backend (a real, persisted
@@ -105,8 +82,25 @@ export function AppProvider({ children }) {
   const [activeScreens, setActiveScreens] = useState(null);
   const [activePrice, setActivePrice] = useState(null);
   const [rewardPoints, setRewardPoints] = useState(250); // demo starting balance, 1 point = ₹1
-  const [rooms, setRooms] = useState(SEED_ROOMS);
+  const [rooms, setRooms] = useState([]); // summary list: {id, title, createdBy, postCount} — fetched from backend
   const [donations, setDonations] = useState([]); // [{ id, organiserId, organiserName, amount, date }]
+
+  // Community rooms are public (viewable without login), so fetch the
+  // summary list once on mount regardless of auth state.
+  useEffect(() => {
+    fetchCommunityRooms()
+      .then((data) =>
+        setRooms(
+          data.map((r) => ({
+            id: r.id,
+            title: r.title,
+            createdBy: r.created_by_name,
+            postCount: r.post_count,
+          }))
+        )
+      )
+      .catch(() => setRooms([]));
+  }, []);
 
   // Re-fetches just the current subscription and updates state — used both
   // by loadUserData (session restore) and directly after a successful
@@ -292,42 +286,18 @@ export function AppProvider({ children }) {
     return display;
   }, []);
 
-  // Community Rooms — demo-only, in-memory. createRoom returns the new
-  // room's id so the caller can navigate straight into it.
-  const createRoom = useCallback((title, creatorName) => {
-    const room = { id: makeId("room"), title, createdBy: creatorName || "You", posts: [] };
-    setRooms((list) => [room, ...list]);
+  // Community Rooms — persisted to the backend. createRoom returns the
+  // new room's id so the caller can navigate straight into it. Posting,
+  // replying, and liking within a room are handled page-locally by
+  // CommunityRoomPage (which fetches that one room's full detail),
+  // rather than living in this global list.
+  const createRoom = useCallback(async (title) => {
+    const room = await createCommunityRoom(title);
+    setRooms((list) => [
+      { id: room.id, title: room.title, createdBy: room.created_by_name, postCount: room.post_count },
+      ...list,
+    ]);
     return room.id;
-  }, []);
-
-  const addPostToRoom = useCallback((roomId, { text, image, video, author }) => {
-    setRooms((list) =>
-      list.map((r) =>
-        r.id === roomId
-          ? { ...r, posts: [{ id: makeId("post"), author: author || "You", text, image, video, likes: 0, replies: [] }, ...r.posts] }
-          : r
-      )
-    );
-  }, []);
-
-  const toggleLikePost = useCallback((roomId, postId) => {
-    setRooms((list) =>
-      list.map((r) =>
-        r.id !== roomId
-          ? r
-          : { ...r, posts: r.posts.map((p) => (p.id === postId ? { ...p, likes: p.likes + (p._liked ? -1 : 1), _liked: !p._liked } : p)) }
-      )
-    );
-  }, []);
-
-  const addReplyToPost = useCallback((roomId, postId, text, author) => {
-    setRooms((list) =>
-      list.map((r) =>
-        r.id !== roomId
-          ? r
-          : { ...r, posts: r.posts.map((p) => (p.id === postId ? { ...p, replies: [...p.replies, { id: makeId("reply"), author: author || "You", text }] } : p)) }
-      )
-    );
   }, []);
 
   // Donations — demo-only, no real payment processor behind this.
@@ -350,7 +320,7 @@ export function AppProvider({ children }) {
     tickets, addTicket,
     isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe, refreshSubscription,
     rewardPoints, redeemRewardPoints,
-    rooms, createRoom, addPostToRoom, toggleLikePost, addReplyToPost,
+    rooms, createRoom,
     donations, addDonation,
   };
 

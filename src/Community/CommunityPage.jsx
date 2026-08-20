@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { MessageCircle, Plus, HandCoins, Users } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, HERO_HEIGHT_CLASS, NAV_CLEARANCE_CLASS } from "../theme";
-import { BLOG_POSTS } from "./blogData";
+import { fetchBlogs } from "../api";
 import { useApp } from "../context/AppContext";
 
 import heroImage from "../Theater/assets/portraits/large/anna.jpg";
@@ -20,8 +20,15 @@ import heroImage from "../Theater/assets/portraits/large/anna.jpg";
 
 export default function CommunityPage({ onNavigate }) {
   const { rooms, isLoggedIn, isSubscribed, requestLogin } = useApp();
-  const previewPosts = BLOG_POSTS.slice(0, 3);
+  const [blogPosts, setBlogPosts] = useState([]);
+  useEffect(() => {
+    fetchBlogs().then(setBlogPosts).catch(() => setBlogPosts([]));
+  }, []);
+  const previewPosts = blogPosts.slice(0, 3);
   const previewRooms = rooms.slice(0, 3);
+
+  const formatDate = (iso) =>
+    new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
   const requireSubscription = (fn) => (...args) => {
     if (!isLoggedIn) {
@@ -88,7 +95,7 @@ export default function CommunityPage({ onNavigate }) {
                   className="rounded-2xl p-5 transition-transform duration-300 hover:-translate-y-1"
                   style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}
                 >
-                  <p className="text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>{post.date}</p>
+                  <p className="text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>{formatDate(post.published_at)}</p>
                   <h3 className="mt-1.5 text-base font-semibold leading-snug" style={{ color: COLORS.cream }}>{post.title}</h3>
                   <p className="mt-1.5 text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.65)" }}>{post.excerpt}</p>
                   <button
@@ -132,7 +139,7 @@ export default function CommunityPage({ onNavigate }) {
                     </div>
                     <div>
                       <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{room.title}</p>
-                      <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{room.posts.length} posts</p>
+                      <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{room.postCount} posts</p>
                     </div>
                   </div>
                   <button

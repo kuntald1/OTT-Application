@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, DateTime, Enum, Boolean, ForeignKey, Integer, Numeric, Text
+from sqlalchemy import Column, String, DateTime, Enum, Boolean, ForeignKey, Integer, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -226,4 +226,103 @@ class TaxConfig(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class Blog(Base):
+    """Blog posts — published by an admin (once the admin panel exists),
+    read by everyone. is_published lets a post be prepared as a draft
+    before going live.
+    """
+    __tablename__ = "blogs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    excerpt = Column(String(500), nullable=False)
+    body = Column(Text, nullable=False)
+    author_name = Column(String(100), nullable=False, default="theomy Team")
+
+    is_published = Column(Boolean, nullable=False, default=True)
+    published_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class CommunityRoom(Base):
+    __tablename__ = "community_rooms"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class RoomPost(Base):
+    __tablename__ = "room_posts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    room_id = Column(UUID(as_uuid=True), ForeignKey("community_rooms.id"), nullable=False, index=True)
+    author_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    # Relative URL, e.g. "/api/uploads/room_posts/<uuid>.jpg" — null if no
+    # image attached. Video attachments aren't supported yet.
+    image_url = Column(String(500), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PostReply(Base):
+    __tablename__ = "post_replies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id = Column(UUID(as_uuid=True), ForeignKey("room_posts.id"), nullable=False, index=True)
+    author_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PostLike(Base):
+    """One row per (post, user) — existence of a row means that user likes
+    that post. Toggling a like creates/deletes the row, which is how we
+    get an accurate per-user like state instead of the old local-only
+    _liked flag that any browser tab could fake.
+    """
+    __tablename__ = "post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_user_like"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id = Column(UUID(as_uuid=True), ForeignKey("room_posts.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Donation(Base):
+    """One-time donations to a Plays Organiser. Uses the same
+    created/paid/failed status flow and gateway as Payment, but is kept as
+    a separate table since a donation isn't tied to a subscription plan.
+    """
+    __tablename__ = "donations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    donor_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    organiser_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(3), nullable=False, default="INR")
+
+    gateway = Column(Enum(PaymentGateway), nullable=False)
+    gateway_order_id = Column(String(255), nullable=True)
+    gateway_payment_id = Column(String(255), nullable=True)
+
+    status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.created)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
