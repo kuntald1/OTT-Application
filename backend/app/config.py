@@ -1,4 +1,6 @@
 import os
+from urllib.parse import quote_plus
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +14,8 @@ class Settings:
     DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
     DATABASE_URL = (
-        f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        f"postgresql://{quote_plus(DB_USER)}:{quote_plus(DB_PASSWORD)}"
+        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
 
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "insecure-dev-key")
@@ -27,6 +30,15 @@ class Settings:
 
     FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID", "")
     FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET", "")
+
+    # SMTP (Gmail) — used to send password-reset emails
+    SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
+    SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD", "")
+
+    # How long a password-reset link stays valid
+    RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
 
 
 settings = Settings()

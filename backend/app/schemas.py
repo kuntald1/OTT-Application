@@ -28,6 +28,15 @@ class UserLogin(BaseModel):
     password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 # This is the ONLY shape a user is ever returned in. There is no
 # hashed_password field here at all, so it can never leak into a
 # response payload no matter which endpoint returns a User.
@@ -47,3 +56,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class MessageResponse(BaseModel):
+    message: str

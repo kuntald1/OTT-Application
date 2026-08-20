@@ -43,6 +43,12 @@ class User(Base):
 
     is_active = Column(Boolean, default=True, nullable=False)
 
+    # Password-reset flow: a random token is stored here (hashed values are
+    # overkill for a short-lived, single-use link, but we still invalidate
+    # it immediately after use and it expires on its own regardless).
+    reset_token = Column(String(255), nullable=True, index=True)
+    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
