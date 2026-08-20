@@ -3,7 +3,8 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, DateTime, Enum, Boolean, ForeignKey, Integer, Numeric, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -100,4 +101,68 @@ class Subscription(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class Menu(Base):
+    """Site navigation, admin-editable. Top-level items (Plays, Archive,
+    Category, Ticketing, ...) have parent_menu_id = NULL. Sub-menu items
+    (the Category dropdown's Bengali Theatre, Drama, ...) have
+    parent_menu_id pointing at the "Category" menu's id.
+
+    `view` and `category_param` map to the frontend's existing router
+    concepts (App.jsx's route.view, and CategoryPage's initialCategory) —
+    the frontend builds its own tree from this flat list using
+    parent_menu_id, it does not come pre-nested from the API.
+    """
+    __tablename__ = "menus"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    label = Column(String(100), nullable=False)
+
+    # Matches a route.view value in App.jsx (e.g. "hero", "accordion",
+    # "mylist", "community", "theater", "category"). Null for a menu item
+    # that's purely a dropdown trigger with no direct destination of its
+    # own (e.g. "Category").
+    view = Column(String(50), nullable=True)
+
+    # Only set on sub-menu items whose view is "category" — the specific
+    # category name to filter by (e.g. "Bengali Theatre").
+    category_param = Column(String(100), nullable=True)
+
+    parent_menu_id = Column(UUID(as_uuid=True), ForeignKey("menus.id"), nullable=True, index=True)
+
+    requires_auth = Column(Boolean, nullable=False, default=False)
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class SubscriptionPlan(Base):
+    """Master catalog of subscription plans (Play / Archive / Both today),
+    admin-editable. This is the plan DEFINITION — separate from the
+    `Subscription` table above, which records what a specific user actually
+    activated.
+    """
+    __tablename__ = "subscription_plans"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(50), nullable=False, unique=True)  # "Play" | "Archive" | "Both"
+    tagline = Column(String(255), nullable=True)
+
+    base_price = Column(Numeric(10, 2), nullable=False)
+    per_extra_screen = Column(Numeric(10, 2), nullable=False, default=0)
+
+    # List of feature bullet strings, e.g. ["Unlimited access to all Play content", ...]
+    features = Column(JSONB, nullable=False, default=list)
+
+    highlighted = Column(Boolean, nullable=False, default=False)  # shows "Best Value" badge
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 

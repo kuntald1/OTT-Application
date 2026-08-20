@@ -141,6 +141,18 @@ export function fetchMySubscription() {
   return request("/subscriptions/me", { auth: true });
 }
 
+// Public, no auth — used to build the nav (top-level items + Category
+// dropdown) from the database instead of a hardcoded array.
+export function fetchMenus() {
+  return request("/menus");
+}
+
+// Public, no auth — the plan catalog (Play/Archive/Both pricing, features)
+// from the database instead of a hardcoded array.
+export function fetchSubscriptionPlans() {
+  return request("/subscription-plans");
+}
+
 // Full-page redirects — these aren't fetch calls, the browser needs to
 // actually navigate so Google/Facebook's login screen can load.
 export function redirectToGoogleLogin() {

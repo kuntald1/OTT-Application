@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -109,6 +109,31 @@ class SubscriptionOut(BaseModel):
     is_active: bool
     started_at: datetime
     expires_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MenuOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    view: Optional[str] = None
+    category_param: Optional[str] = None
+    parent_menu_id: Optional[uuid.UUID] = None
+    requires_auth: bool
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class SubscriptionPlanOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    tagline: Optional[str] = None
+    base_price: Decimal
+    per_extra_screen: Decimal
+    features: List[str]
+    highlighted: bool
+    display_order: int
 
     model_config = {"from_attributes": True}
 

@@ -1,41 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
+import { fetchSubscriptionPlans } from "../api";
 
 // ---------------------------------------------------------------------------
-// Subscription — three plans, each priced for a single screen by default.
+// Subscription — plan catalog (name, pricing, features) now comes from
+// GET /api/subscription-plans (the `subscription_plans` database table,
+// editable from the future admin panel) instead of a hardcoded array.
 // A screens selector (1-5) scales the price; a duration selector (1/6/12
 // months) applies a discount for longer commitments, same as most real
 // streaming pricing pages.
 // ---------------------------------------------------------------------------
-
-const PLANS = [
-  {
-    name: "Play",
-    basePrice: 100,
-    perExtraScreen: 60,
-    tagline: "Unlimited Video Streaming",
-    features: ["Unlimited access to all Play content", "New titles added weekly"],
-    highlighted: false,
-  },
-  {
-    name: "Archive",
-    basePrice: 100,
-    perExtraScreen: 60,
-    tagline: "Unlimited Archive access",
-    features: ["Unlimited access to old & restored footage", "Vintage recordings added regularly"],
-    highlighted: false,
-  },
-  {
-    name: "Both",
-    basePrice: 150,
-    perExtraScreen: 90,
-    tagline: "Play + Archive, unlimited",
-    features: ["Everything in Play", "Everything in Archive", "Best value vs buying separately"],
-    highlighted: true,
-  },
-];
 
 const DURATIONS = [
   { id: "1m", label: "1 Month", months: 1, discount: 0 },
@@ -46,7 +22,9 @@ const DURATIONS = [
 const MAX_SCREENS = 5;
 
 export default function SubscriptionPage({ onBack }) {
-  const [screens, setScreens] = useState({ Play: 1, Archive: 1, Both: 1 });
+  const [plans, setPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [screens, setScreens] = useState({});
   const [durationId, setDurationId] = useState("1m");
   const [useRewards, setUseRewards] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
@@ -56,10 +34,31 @@ export default function SubscriptionPage({ onBack }) {
     subscribe, rewardPoints, redeemRewardPoints,
   } = useApp();
 
+  useEffect(() => {
+    fetchSubscriptionPlans()
+      .then((data) => {
+        // Map backend field names (base_price, per_extra_screen) to the
+        // names the rest of this component already uses, and default
+        // every plan's screen count to 1.
+        const mapped = data.map((p) => ({
+          name: p.name,
+          basePrice: Number(p.base_price),
+          perExtraScreen: Number(p.per_extra_screen),
+          tagline: p.tagline,
+          features: p.features,
+          highlighted: p.highlighted,
+        }));
+        setPlans(mapped);
+        setScreens(Object.fromEntries(mapped.map((p) => [p.name, 1])));
+      })
+      .catch(() => setPlans([]))
+      .finally(() => setPlansLoading(false));
+  }, []);
+
   const duration = DURATIONS.find((d) => d.id === durationId);
 
   const priceFor = (plan) => {
-    const count = screens[plan.name];
+    const count = screens[plan.name] || 1;
     const monthly = plan.basePrice + (count - 1) * plan.perExtraScreen;
     const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
     const pointsUsed = useRewards ? Math.min(rewardPoints, preRewards) : 0;
@@ -192,9 +191,18 @@ export default function SubscriptionPage({ onBack }) {
           </button>
         )}
 
+        {plansLoading ? (
+          <p className="mx-auto mt-10 max-w-4xl text-center text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Loading plans…
+          </p>
+        ) : plans.length === 0 ? (
+          <p className="mx-auto mt-10 max-w-4xl text-center text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+            No plans available right now. Please check back shortly.
+          </p>
+        ) : (
         <div className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-3">
-          {PLANS.map((plan) => {
-            const count = screens[plan.name];
+          {plans.map((plan) => {
+            const count = screens[plan.name] || 1;
             const { monthly, preRewards, pointsUsed, total } = priceFor(plan);
             const isCurrent = activePlan === plan.name && activeDuration === duration.label && activeScreens === count;
             return (
@@ -306,6 +314,7 @@ export default function SubscriptionPage({ onBack }) {
             );
           })}
         </div>
+        )}
 
         <p className="mx-auto mt-10 max-w-lg text-center text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
           Demo pricing shown for illustration — no real payment is processed here.

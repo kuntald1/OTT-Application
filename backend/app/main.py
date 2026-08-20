@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
-from app.routers import auth, oauth, tickets, subscriptions
+from app.routers import auth, oauth, tickets, subscriptions, menus, plans
 
 # Creates the `users` table on startup if it doesn't already exist.
 # For future schema changes, switch to Alembic migrations instead of
@@ -26,6 +26,8 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(oauth.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(subscriptions.router, prefix="/api")
+app.include_router(menus.router, prefix="/api")
+app.include_router(plans.router, prefix="/api")
 
 # Serves uploaded profile photos at /api/uploads/... — the "uploads" folder
 # on disk is bind-mounted from the host (see docker-compose.yml), so files

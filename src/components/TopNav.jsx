@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset } from "../api";
-import { CATEGORIES } from "../shared/categories";
+import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus } from "../api";
 
 // ---------------------------------------------------------------------------
 // Login backdrop video — its own dedicated folder, completely independent
@@ -26,22 +25,16 @@ const LOGIN_VIDEOS = Object.keys(loginVideoModules).sort().map((key) => loginVid
 //   - stays visible while scrolling into the Browse feed below
 //   - carries the always-visible search box
 //
-// "Archive" here intentionally routes to the same destination as the old
-// bottom-right pill's "Archive" (the Movies/genre-accordion section) — the
-// separate vintage-footage Archive concept no longer has a nav entry point,
-// per request.
+// Navigation is loaded from GET /api/menus (a flat list) rather than
+// hardcoded — a menu item with view === null (e.g. "Category") is treated
+// as a dropdown trigger, and its children are whichever other menu items
+// have parent_menu_id pointing at it. This is driven entirely by the
+// `menus` database table, editable from the future admin panel at
+// theomy.com/admin.
 //
 // onNavigate(view, params) — params lets links carry extra context, e.g.
-// { category: "Drama" } for the Category dropdown.
+// { category: "Drama" } for a Category dropdown item.
 // ---------------------------------------------------------------------------
-
-const NAV_LINKS = [
-  { label: "Plays", view: "hero" },
-  { label: "Archive", view: "accordion" },
-  { label: "My List", view: "mylist", requiresAuth: true },
-  { label: "Community", view: "community" },
-];
-const TICKETING_LINK = { label: "Ticketing", view: "theater" };
 
 export default function TopNav({ query, onQueryChange, onNavigate, activeView }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,29 +42,44 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
+  const [menuItems, setMenuItems] = useState([]);
 
   const {
     isLoggedIn, isSubscribed, profile, showLoginModal,
     requestLogin, closeLoginModal, login, logout, changePhoto,
   } = useApp();
 
-  const handleNavLinkClick = (link) => {
-    if (link.requiresAuth && !isLoggedIn) {
+  // Menus are public (no auth needed) and rarely change, so one fetch on
+  // mount is enough — no need to refetch on every login/logout.
+  useEffect(() => {
+    fetchMenus()
+      .then(setMenuItems)
+      .catch(() => setMenuItems([])); // nav just shows nothing extra if this fails
+  }, []);
+
+  const topMenus = [...menuItems]
+    .filter((m) => !m.parent_menu_id)
+    .sort((a, b) => a.display_order - b.display_order);
+
+  const childrenOf = (parentId) =>
+    menuItems
+      .filter((m) => m.parent_menu_id === parentId)
+      .sort((a, b) => a.display_order - b.display_order);
+
+  const handleMenuClick = (menu) => {
+    if (menu.requires_auth && !isLoggedIn) {
       requestLogin();
       setMenuOpen(false);
       return;
     }
-    if (link.view) {
-      onNavigate?.(link.view);
+    if (menu.view === "category" && menu.category_param) {
+      onNavigate?.("category", { category: menu.category_param });
+    } else if (menu.view) {
+      onNavigate?.(menu.view);
     }
-    setMenuOpen(false);
-  };
-
-  const handleCategoryClick = (category) => {
-    onNavigate?.("category", { category });
     setCategoryMenuOpen(false);
-    setMenuOpen(false);
     setMobileCategoryOpen(false);
+    setMenuOpen(false);
   };
 
   useEffect(() => {
@@ -108,69 +116,62 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
           className="hidden items-center gap-0.5 rounded-full px-1.5 py-1.5 lg:flex"
           style={{ background: "rgba(245,235,221,0.06)" }}
         >
-          {NAV_LINKS.map((link) => {
-            const isActive = link.view === activeView;
+          {topMenus.map((menu) => {
+            // A menu with no `view` of its own (e.g. "Category") is a
+            // dropdown trigger — its destinations live in its children.
+            if (!menu.view) {
+              const children = childrenOf(menu.id);
+              return (
+                <div
+                  key={menu.id}
+                  className="relative"
+                  onMouseEnter={() => setCategoryMenuOpen(true)}
+                  onMouseLeave={() => setCategoryMenuOpen(false)}
+                >
+                  <button
+                    className="flex items-center gap-1 rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
+                    style={{
+                      color: activeView === "category" ? COLORS.gold : "rgba(245,235,221,0.82)",
+                      background: activeView === "category" ? "rgba(212,175,55,0.14)" : "transparent",
+                    }}
+                  >
+                    {menu.label} <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                  {categoryMenuOpen && children.length > 0 && (
+                    <div className="absolute left-0 top-full w-56 overflow-hidden rounded-xl pt-1">
+                      <div style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)`, borderRadius: 12 }}>
+                        {children.map((child) => (
+                          <button
+                            key={child.id}
+                            onClick={() => handleMenuClick(child)}
+                            className="block w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-white/10"
+                            style={{ color: "rgba(245,235,221,0.85)" }}
+                          >
+                            {child.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            const isActive = menu.view === activeView;
             return (
               <button
-                key={link.label}
-                onClick={() => handleNavLinkClick(link)}
+                key={menu.id}
+                onClick={() => handleMenuClick(menu)}
                 className="rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
                 style={{
                   color: isActive ? COLORS.gold : "rgba(245,235,221,0.82)",
                   background: isActive ? "rgba(212,175,55,0.14)" : "transparent",
                 }}
               >
-                {link.label}
+                {menu.label}
               </button>
             );
           })}
-
-          {/* Category — hover dropdown */}
-          <div
-            className="relative"
-            onMouseEnter={() => setCategoryMenuOpen(true)}
-            onMouseLeave={() => setCategoryMenuOpen(false)}
-          >
-            <button
-              className="flex items-center gap-1 rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
-              style={{
-                color: activeView === "category" ? COLORS.gold : "rgba(245,235,221,0.82)",
-                background: activeView === "category" ? "rgba(212,175,55,0.14)" : "transparent",
-              }}
-            >
-              Category <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {categoryMenuOpen && (
-              <div
-                className="absolute left-0 top-full w-56 overflow-hidden rounded-xl pt-1"
-              >
-                <div style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)`, borderRadius: 12 }}>
-                  {CATEGORIES.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => handleCategoryClick(c)}
-                      className="block w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-white/10"
-                      style={{ color: "rgba(245,235,221,0.85)" }}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Ticketing — now sits after Category, per request */}
-          <button
-            onClick={() => handleNavLinkClick(TICKETING_LINK)}
-            className="rounded-full px-3.5 py-1.5 text-base font-medium transition-colors hover:bg-white/10"
-            style={{
-              color: activeView === TICKETING_LINK.view ? COLORS.gold : "rgba(245,235,221,0.82)",
-              background: activeView === TICKETING_LINK.view ? "rgba(212,175,55,0.14)" : "transparent",
-            }}
-          >
-            {TICKETING_LINK.label}
-          </button>
         </div>
 
         {/* Search (always visible) + auth */}
@@ -281,12 +282,49 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
         }}
       >
         <div className="flex flex-col gap-2 px-6 pt-24">
-          {NAV_LINKS.map((link, i) => {
-            const isActive = link.view === activeView;
+          {topMenus.map((menu, i) => {
+            if (!menu.view) {
+              const children = childrenOf(menu.id);
+              return (
+                <div key={menu.id}>
+                  <button
+                    onClick={() => setMobileCategoryOpen((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium transition-colors hover:bg-white/10"
+                    style={{
+                      color: "rgba(245,235,221,0.85)",
+                      opacity: menuOpen ? 1 : 0,
+                      transform: menuOpen ? "translateX(0)" : "translateX(24px)",
+                      transitionProperty: "opacity, transform, background-color, color",
+                      transitionDuration: "300ms",
+                      transitionDelay: `${(i + 1) * 60}ms`,
+                    }}
+                  >
+                    {menu.label}
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${mobileCategoryOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {mobileCategoryOpen && children.length > 0 && (
+                    <div className="ml-3 flex flex-col gap-1 border-l pl-3" style={{ borderColor: "rgba(212,175,55,0.25)" }}>
+                      {children.map((child) => (
+                        <button
+                          key={child.id}
+                          onClick={() => handleMenuClick(child)}
+                          className="rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+                          style={{ color: "rgba(245,235,221,0.75)" }}
+                        >
+                          {child.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            const isActive = menu.view === activeView;
             return (
               <button
-                key={link.label}
-                onClick={() => handleNavLinkClick(link)}
+                key={menu.id}
+                onClick={() => handleMenuClick(menu)}
                 className="flex items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium transition-colors hover:bg-white/10"
                 style={{
                   color: isActive ? COLORS.gold : "rgba(245,235,221,0.85)",
@@ -298,58 +336,10 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
                   transitionDelay: `${(i + 1) * 60}ms`,
                 }}
               >
-                {link.label}
+                {menu.label}
               </button>
             );
           })}
-
-          {/* Category — tap to expand on mobile (hover doesn't apply) */}
-          <button
-            onClick={() => setMobileCategoryOpen((v) => !v)}
-            className="flex items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium transition-colors hover:bg-white/10"
-            style={{
-              color: "rgba(245,235,221,0.85)",
-              opacity: menuOpen ? 1 : 0,
-              transform: menuOpen ? "translateX(0)" : "translateX(24px)",
-              transitionProperty: "opacity, transform, background-color, color",
-              transitionDuration: "300ms",
-              transitionDelay: `${(NAV_LINKS.length + 1) * 60}ms`,
-            }}
-          >
-            Category
-            <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${mobileCategoryOpen ? "rotate-180" : ""}`} />
-          </button>
-          {mobileCategoryOpen && (
-            <div className="ml-3 flex flex-col gap-1 border-l pl-3" style={{ borderColor: "rgba(212,175,55,0.25)" }}>
-              {CATEGORIES.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => handleCategoryClick(c)}
-                  className="rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
-                  style={{ color: "rgba(245,235,221,0.75)" }}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Ticketing — now sits after Category, per request */}
-          <button
-            onClick={() => handleNavLinkClick(TICKETING_LINK)}
-            className="flex items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium transition-colors hover:bg-white/10"
-            style={{
-              color: activeView === TICKETING_LINK.view ? COLORS.gold : "rgba(245,235,221,0.85)",
-              background: activeView === TICKETING_LINK.view ? "rgba(212,175,55,0.12)" : "transparent",
-              opacity: menuOpen ? 1 : 0,
-              transform: menuOpen ? "translateX(0)" : "translateX(24px)",
-              transitionProperty: "opacity, transform, background-color, color",
-              transitionDuration: "300ms",
-              transitionDelay: `${(NAV_LINKS.length + 2) * 60}ms`,
-            }}
-          >
-            {TICKETING_LINK.label}
-          </button>
         </div>
 
         <div

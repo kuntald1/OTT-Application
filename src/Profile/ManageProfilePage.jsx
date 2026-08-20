@@ -71,8 +71,8 @@ export default function ManageProfilePage({ onBack }) {
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Manage Profile</h1>
-        <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Update your photo, name, email, and phone.</p>
 
+        <div className="mb-8" />
         <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
           <div className="mb-2 flex items-center gap-4">
             <div
@@ -121,7 +121,6 @@ export default function ManageProfilePage({ onBack }) {
               className="cursor-not-allowed"
               style={{ ...inputStyle, opacity: 0.6 }}
             />
-            <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Email address cannot be changed.</p>
           </div>
           <div className="mb-6">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Phone (optional)</label>
