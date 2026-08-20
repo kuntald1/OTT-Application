@@ -17,6 +17,7 @@ from app.schemas import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     MessageResponse,
+    UserUpdate,
 )
 from app.security import hash_password, verify_password, create_access_token
 
@@ -72,6 +73,36 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.put("/me", response_model=UserOut)
+def update_current_user(
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.name is not None:
+        current_user.name = payload.name
+
+    if payload.email is not None and payload.email != current_user.email:
+        existing = (
+            db.query(User)
+            .filter(User.email == payload.email, User.id != current_user.id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="That email is already in use by another account",
+            )
+        current_user.email = payload.email
+
+    if payload.phone is not None:
+        current_user.phone = payload.phone
+
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 

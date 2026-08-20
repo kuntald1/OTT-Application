@@ -49,6 +49,8 @@ export default function SubscriptionPage({ onBack }) {
   const [screens, setScreens] = useState({ Play: 1, Archive: 1, Both: 1 });
   const [durationId, setDurationId] = useState("1m");
   const [useRewards, setUseRewards] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [error, setError] = useState("");
   const {
     isLoggedIn, requestLogin, isSubscribed, activePlan, activeDuration, activeScreens, activePrice,
     subscribe, rewardPoints, redeemRewardPoints,
@@ -65,14 +67,22 @@ export default function SubscriptionPage({ onBack }) {
     return { monthly, preRewards, pointsUsed, total };
   };
 
-  const handleSubscribe = (plan) => {
+  const handleSubscribe = async (plan) => {
     if (!isLoggedIn) {
       requestLogin();
       return;
     }
-    const { total, pointsUsed } = priceFor(plan);
-    if (pointsUsed > 0) redeemRewardPoints(pointsUsed);
-    subscribe(plan.name, duration.label, screens[plan.name], total);
+    setError("");
+    setSubscribing(true);
+    try {
+      const { total, pointsUsed } = priceFor(plan);
+      await subscribe(plan.name, duration.label, screens[plan.name], total);
+      if (pointsUsed > 0) redeemRewardPoints(pointsUsed);
+    } catch (err) {
+      setError(err.message || "Couldn't activate this plan. Please try again.");
+    } finally {
+      setSubscribing(false);
+    }
   };
 
   const setScreenCount = (planName, delta) => {
@@ -105,6 +115,12 @@ export default function SubscriptionPage({ onBack }) {
               You're currently on the <b>{activePlan}</b> plan — {activeDuration}, {activeScreens} screen{activeScreens > 1 ? "s" : ""}, ₹{activePrice} total.
             </p>
           </div>
+        )}
+
+        {error && (
+          <p className="mx-auto mb-6 max-w-4xl text-center text-sm font-medium" style={{ color: "#f87171" }}>
+            {error}
+          </p>
         )}
 
         <div className="mx-auto max-w-4xl text-center">
@@ -274,15 +290,16 @@ export default function SubscriptionPage({ onBack }) {
                 ) : (
                   <button
                     type="button"
+                    disabled={subscribing}
                     onClick={() => handleSubscribe(plan)}
-                    className="mt-6 w-full rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                    className="mt-6 w-full rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     style={
                       plan.highlighted
                         ? { background: CTA_GRADIENT, color: CTA_TEXT_COLOR }
                         : { border: `1px solid ${COLORS.gold}`, color: COLORS.gold }
                     }
                   >
-                    {isSubscribed ? "Switch to this plan" : `Subscribe — ₹${total}`}
+                    {subscribing ? "Activating…" : isSubscribed ? "Switch to this plan" : `Subscribe — ₹${total}`}
                   </button>
                 )}
               </div>

@@ -159,12 +159,22 @@ function ComplainTab() {
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [lastTicket, setLastTicket] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = () => {
-    const ticket = addTicket(subject.trim(), description.trim());
-    setLastTicket(ticket);
-    setSubject("");
-    setDescription("");
+  const handleSubmit = async () => {
+    setError("");
+    setSubmitting(true);
+    try {
+      const ticket = await addTicket(subject.trim(), description.trim());
+      setLastTicket(ticket);
+      setSubject("");
+      setDescription("");
+    } catch (err) {
+      setError(err.message || "Couldn't submit your complaint. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -182,14 +192,17 @@ function ComplainTab() {
         <Field label="Details">
           <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the issue" style={{ ...inputStyle, resize: "vertical" }} />
         </Field>
+        {error && (
+          <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+        )}
         <button
           type="button"
-          disabled={!subject.trim() || !description.trim()}
+          disabled={!subject.trim() || !description.trim() || submitting}
           onClick={handleSubmit}
           className="rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
         >
-          Submit complaint
+          {submitting ? "Submitting…" : "Submit complaint"}
         </button>
       </Card>
 

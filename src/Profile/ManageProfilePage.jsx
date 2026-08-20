@@ -4,20 +4,32 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
 
 // ---------------------------------------------------------------------------
-// Manage Profile — reached from the profile menu. Edits photo, name, email
-// via AppContext's updateProfile()/changePhoto().
+// Manage Profile — reached from the profile menu. Edits photo (local-only
+// for now), name, email, and phone — name/email/phone are saved to the
+// real backend via AppContext's updateProfile().
 // ---------------------------------------------------------------------------
 
 export default function ManageProfilePage({ onBack }) {
   const { profile, changePhoto, updateProfile } = useApp();
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
+  const [phone, setPhone] = useState(profile.phone || "");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSave = () => {
-    updateProfile({ name: name.trim(), email: email.trim() });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      await updateProfile({ name: name.trim(), email: email.trim(), phone: phone.trim() });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err.message || "Couldn't save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const inputStyle = {
@@ -43,7 +55,7 @@ export default function ManageProfilePage({ onBack }) {
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Manage Profile</h1>
-        <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Update your photo, name, and email.</p>
+        <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Update your photo, name, email, and phone.</p>
 
         <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
           <div className="mb-6 flex items-center gap-4">
@@ -70,20 +82,28 @@ export default function ManageProfilePage({ onBack }) {
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
           </div>
-          <div className="mb-6">
+          <div className="mb-4">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
           </div>
+          <div className="mb-6">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Phone (optional)</label>
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Add a phone number" style={inputStyle} />
+          </div>
+
+          {error && (
+            <p className="mb-4 text-sm font-medium" style={{ color: "#f87171" }}>{error}</p>
+          )}
 
           <div className="flex items-center gap-4">
             <button
               type="button"
-              disabled={!name.trim() || !email.trim()}
+              disabled={!name.trim() || !email.trim() || saving}
               onClick={handleSave}
               className="rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >
-              Save changes
+              {saving ? "Saving…" : "Save changes"}
             </button>
             {saved && (
               <span className="flex items-center gap-1.5 text-sm" style={{ color: "#6FCF97" }}>

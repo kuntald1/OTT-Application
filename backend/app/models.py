@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, DateTime, Enum, Boolean
+from sqlalchemy import Column, String, DateTime, Enum, Boolean, ForeignKey, Integer, Numeric, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
@@ -52,3 +52,48 @@ class User(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class TicketStatus(str, enum.Enum):
+    open = "Open"
+    in_progress = "In Progress"
+    resolved = "Resolved"
+    closed = "Closed"
+
+
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+
+    # Human-friendly ticket number shown to the user, e.g. "TCK-482913" —
+    # separate from the internal UUID primary key.
+    ticket_number = Column(String(20), unique=True, nullable=False, index=True)
+
+    subject = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(Enum(TicketStatus), nullable=False, default=TicketStatus.open)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+
+    plan_name = Column(String(50), nullable=False)  # "Play" | "Archive" | "Both"
+    duration_label = Column(String(50), nullable=False)  # "1 Month" | "6 Months" | "1 Year"
+    screens = Column(Integer, nullable=False, default=1)
+    price = Column(Numeric(10, 2), nullable=False)
+
+    is_active = Column(Boolean, nullable=False, default=True)
+    started_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+

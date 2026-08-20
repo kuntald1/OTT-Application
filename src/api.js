@@ -62,6 +62,14 @@ export function fetchCurrentUser() {
   return request("/auth/me", { auth: true });
 }
 
+export function updateCurrentUser({ name, email, phone }) {
+  return request("/auth/me", {
+    method: "PUT",
+    auth: true,
+    body: { name, email, phone },
+  });
+}
+
 export function requestPasswordReset({ email }) {
   return request("/auth/forgot-password", {
     method: "POST",
@@ -74,6 +82,35 @@ export function resetPassword({ token, newPassword }) {
     method: "POST",
     body: { token, new_password: newPassword },
   });
+}
+
+export function createTicket({ subject, description }) {
+  return request("/tickets", {
+    method: "POST",
+    auth: true,
+    body: { subject, description },
+  });
+}
+
+export function fetchTickets() {
+  return request("/tickets", { auth: true });
+}
+
+export function createSubscription({ planName, durationLabel, screens, price }) {
+  return request("/subscriptions", {
+    method: "POST",
+    auth: true,
+    body: {
+      plan_name: planName,
+      duration_label: durationLabel,
+      screens,
+      price,
+    },
+  });
+}
+
+export function fetchMySubscription() {
+  return request("/subscriptions/me", { auth: true });
 }
 
 // Full-page redirects — these aren't fetch calls, the browser needs to
