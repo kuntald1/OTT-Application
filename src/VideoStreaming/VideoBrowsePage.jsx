@@ -93,7 +93,7 @@ function buildVideoCard(category, i) {
     rating: (7 + ((h % 28) / 10)).toFixed(1),
     cert: CERTS[h % CERTS.length],
     genres: [category, CATEGORIES[(h >>> 3) % CATEGORIES.length]].filter((g, idx, arr) => arr.indexOf(g) === idx),
-    description: "Uploaded to Movix. Original poster art — no real footage behind this demo card.",
+    description: "Uploaded to theomy. Original poster art — no real footage behind this demo card.",
     cast: pickCast(seed, 3),
     crew: pickCrew(seed),
   };
@@ -126,14 +126,14 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
           <div className="flex items-center gap-2" style={{ color: T.text }}>
             <MovixMark className="h-5 w-5" style={{ fill: COLORS.gold }} />
             <div>
-              <p className="text-sm font-semibold">Movix</p>
+              <p className="text-sm font-semibold">theomy</p>
               <p className="text-xs" style={{ color: T.textFaint }}>Stream stories, beautifully.</p>
             </div>
           </div>
           <p className="text-xs" style={{ color: T.textFainter }}>English</p>
         </div>
         <p className="mt-4 text-xs" style={{ color: T.textFainter }}>
-          Movix is a demo streaming concept. Titles and descriptions are fictional; thumbnail art is originally generated, not licensed photography.
+          theomy is a demo streaming concept. Titles and descriptions are fictional; thumbnail art is originally generated, not licensed photography.
         </p>
       </footer>
 

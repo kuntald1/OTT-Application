@@ -205,7 +205,7 @@ export default function TheaterBrowsePage() {
         <p className="text-sm font-semibold" style={{ color: T.text }}>Theater</p>
         <p className="mt-1 text-xs" style={{ color: T.textFaint }}>Celebrating Kolkata's stages, one production at a time.</p>
         <p className="mt-4 text-xs" style={{ color: T.textFainter }}>
-          Theater is a demo concept within Movix. Productions and cast listings are fictional; poster art is originally generated, not photography of real people or events.
+          Theater is a demo concept within theomy. Productions and cast listings are fictional; poster art is originally generated, not photography of real people or events.
         </p>
       </footer>
 

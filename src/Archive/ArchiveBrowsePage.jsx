@@ -84,7 +84,7 @@ function buildArchiveCard(category, i) {
     rating: (7 + ((h % 28) / 10)).toFixed(1),
     cert: CERTS[h % CERTS.length],
     genres: [category, CATEGORIES[(h >>> 3) % CATEGORIES.length]].filter((g, idx, arr) => arr.indexOf(g) === idx),
-    description: "Digitized from Movix's archive. Original footage restored for streaming — no new production behind this demo card.",
+    description: "Digitized from theomy's archive. Original footage restored for streaming — no new production behind this demo card.",
     cast: pickCast(seed, 3),
     crew: pickCrew(seed),
   };
@@ -121,10 +121,10 @@ export default function ArchiveBrowsePage({ onNavigate, onOpenPerson }) {
       </main>
 
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${T.border}` }}>
-        <p className="text-sm font-semibold" style={{ color: T.text }}>Movix Archive</p>
+        <p className="text-sm font-semibold" style={{ color: T.text }}>theomy Archive</p>
         <p className="mt-1 text-xs" style={{ color: T.textFaint }}>Old stages, kept alive.</p>
         <p className="mt-4 text-xs" style={{ color: T.textFainter }}>
-          Archive is a demo concept within Movix. Titles and years are fictional; poster art is originally generated, not licensed photography or real archival footage.
+          Archive is a demo concept within theomy. Titles and years are fictional; poster art is originally generated, not licensed photography or real archival footage.
         </p>
       </footer>
 

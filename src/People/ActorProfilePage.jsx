@@ -78,7 +78,7 @@ export default function ActorProfilePage({ personId, onBack }) {
           </div>
         ))}
         <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-          This is a fictional profile created for the Movix demo — not a real person.
+          This is a fictional profile created for the theomy demo — not a real person.
         </p>
       </div>
     </div>

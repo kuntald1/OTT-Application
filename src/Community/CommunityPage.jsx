@@ -188,7 +188,7 @@ export default function CommunityPage({ onNavigate }) {
 
       {/* ---------------- Footer ---------------- */}
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: "1px solid rgba(212,175,55,0.12)" }}>
-        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>Movix Community</p>
+        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>theomy Community</p>
         <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
           Posts, photos, and discussions shown here are demo content — no real accounts or posts exist yet.
         </p>

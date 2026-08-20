@@ -100,7 +100,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
         {/* Logo */}
         <div className="flex flex-shrink-0 items-center gap-2" style={{ color: COLORS.cream }}>
           <MovixMark className="h-6 w-6" style={{ fill: COLORS.gold }} />
-          <span className="text-lg font-semibold tracking-wide">movix</span>
+          <span className="text-lg font-semibold tracking-wide">theomy</span>
         </div>
 
         {/* Desktop menu */}
@@ -576,6 +576,7 @@ function LoginModal({ onClose }) {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             className="rounded-lg border px-4 py-2.5 text-sm outline-none"
             style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
           />
@@ -585,6 +586,7 @@ function LoginModal({ onClose }) {
               placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               className="rounded-lg border px-4 py-2.5 text-sm outline-none"
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
             />

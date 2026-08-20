@@ -152,7 +152,7 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${t.border}` }}>
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {[
-            { heading: "Movix", links: ["About", "Jobs", "Press"] },
+            { heading: "theomy", links: ["About", "Jobs", "Press"] },
             { heading: "Support", links: ["Help Center", "Account", "Devices"] },
             { heading: "Watch", links: ["Films", "Series", "New & Popular"] },
             { heading: "Legal", links: ["Privacy", "Terms", "Cookie Preferences"] },
@@ -174,14 +174,14 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
           <div className="flex items-center gap-2" style={{ color: t.text }}>
             <MovixMark className="h-5 w-5" style={{ fill: t.text }} />
             <div>
-              <p className="text-sm font-semibold">Movix</p>
+              <p className="text-sm font-semibold">theomy</p>
               <p className="text-xs" style={{ color: t.textFaint }}>Stream films & series, beautifully.</p>
             </div>
           </div>
           <p className="text-xs" style={{ color: t.textFainter }}>English</p>
         </div>
         <p className="mt-4 text-xs" style={{ color: t.textFainter }}>
-          Movix is a demo streaming concept. Titles and synopses are fictional; poster art is originally generated, not licensed photography.
+          theomy is a demo streaming concept. Titles and synopses are fictional; poster art is originally generated, not licensed photography.
         </p>
       </footer>
 

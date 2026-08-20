@@ -114,7 +114,14 @@ export default function ManageProfilePage({ onBack }) {
           </div>
           <div className="mb-4">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+            <input
+              type="email"
+              value={email}
+              readOnly
+              className="cursor-not-allowed"
+              style={{ ...inputStyle, opacity: 0.6 }}
+            />
+            <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Email address cannot be changed.</p>
           </div>
           <div className="mb-6">
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Phone (optional)</label>
