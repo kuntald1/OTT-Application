@@ -1,0 +1,14 @@
+services:
+  theomy-backend:
+    build: .
+    container_name: theomy-backend
+    restart: always
+    # Host networking: the container shares the server's network stack
+    # directly. This means:
+    #   - DB_HOST=localhost in .env still works unchanged (Postgres is
+    #     native on this same server, not in a container)
+    #   - the app is reachable at 127.0.0.1:8010 on the host, so the
+    #     existing Nginx proxy_pass config needs NO changes at all
+    network_mode: host
+    env_file:
+      - .env
