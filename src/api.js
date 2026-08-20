@@ -141,6 +141,46 @@ export function fetchMySubscription() {
   return request("/subscriptions/me", { auth: true });
 }
 
+// Full history — active AND past subscriptions, most recent first.
+export function fetchSubscriptionHistory() {
+  return request("/subscriptions", { auth: true });
+}
+
+// Empty until Phase 2 (Razorpay/Stripe checkout) exists.
+export function fetchPaymentRecords() {
+  return request("/payments", { auth: true });
+}
+
+export function fetchTaxConfig() {
+  return request("/tax-config");
+}
+
+export function createRazorpayOrder({ planName, durationLabel, screens, rewardPointsRequested }) {
+  return request("/payments/razorpay/create-order", {
+    method: "POST",
+    auth: true,
+    body: {
+      plan_name: planName,
+      duration_label: durationLabel,
+      screens,
+      reward_points_requested: rewardPointsRequested,
+    },
+  });
+}
+
+export function verifyRazorpayPayment({ paymentId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
+  return request("/payments/razorpay/verify", {
+    method: "POST",
+    auth: true,
+    body: {
+      payment_id: paymentId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
+}
+
 // Public, no auth — used to build the nav (top-level items + Category
 // dropdown) from the database instead of a hardcoded array.
 export function fetchMenus() {

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift } from "lucide-react";
+import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, createRazorpayOrder, verifyRazorpayPayment } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -31,7 +31,7 @@ export default function SubscriptionPage({ onBack }) {
   const [error, setError] = useState("");
   const {
     isLoggedIn, requestLogin, isSubscribed, activePlan, activeDuration, activeScreens, activePrice,
-    subscribe, rewardPoints, redeemRewardPoints,
+    subscribe, refreshSubscription, rewardPoints, redeemRewardPoints, profile,
   } = useApp();
 
   useEffect(() => {
@@ -55,6 +55,54 @@ export default function SubscriptionPage({ onBack }) {
       .finally(() => setPlansLoading(false));
   }, []);
 
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [payments, setPayments] = useState([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
+
+  const loadHistoryAndPayments = () => {
+    setHistoryLoading(true);
+    fetchSubscriptionHistory()
+      .then(setHistory)
+      .catch(() => setHistory([]))
+      .finally(() => setHistoryLoading(false));
+
+    setPaymentsLoading(true);
+    fetchPaymentRecords()
+      .then(setPayments)
+      .catch(() => setPayments([]))
+      .finally(() => setPaymentsLoading(false));
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) loadHistoryAndPayments();
+  }, [isLoggedIn]);
+
+  // Checkout modal — opened by clicking Subscribe/Switch, replaces the old
+  // direct-activation flow. checkoutPlan holds the plan being purchased;
+  // null means the modal is closed.
+  const [checkoutPlan, setCheckoutPlan] = useState(null);
+  const [taxConfig, setTaxConfig] = useState(null);
+
+  useEffect(() => {
+    fetchTaxConfig().then(setTaxConfig).catch(() => setTaxConfig({ gst_percent: 18 }));
+  }, []);
+
+  // Razorpay's checkout widget is loaded from their CDN once, lazily —
+  // no need to block initial page load for a script only needed if/when
+  // someone actually opens the checkout modal.
+  useEffect(() => {
+    if (document.getElementById("razorpay-checkout-js")) return;
+    const script = document.createElement("script");
+    script.id = "razorpay-checkout-js";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  const formatDate = (iso) =>
+    new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
   const duration = DURATIONS.find((d) => d.id === durationId);
 
   const priceFor = (plan) => {
@@ -66,22 +114,13 @@ export default function SubscriptionPage({ onBack }) {
     return { monthly, preRewards, pointsUsed, total };
   };
 
-  const handleSubscribe = async (plan) => {
+  const handleSubscribe = (plan) => {
     if (!isLoggedIn) {
       requestLogin();
       return;
     }
     setError("");
-    setSubscribing(true);
-    try {
-      const { total, pointsUsed } = priceFor(plan);
-      await subscribe(plan.name, duration.label, screens[plan.name], total);
-      if (pointsUsed > 0) redeemRewardPoints(pointsUsed);
-    } catch (err) {
-      setError(err.message || "Couldn't activate this plan. Please try again.");
-    } finally {
-      setSubscribing(false);
-    }
+    setCheckoutPlan(plan);
   };
 
   const setScreenCount = (planName, delta) => {
@@ -113,6 +152,94 @@ export default function SubscriptionPage({ onBack }) {
             <p className="text-sm" style={{ color: "#6FCF97" }}>
               You're currently on the <b>{activePlan}</b> plan — {activeDuration}, {activeScreens} screen{activeScreens > 1 ? "s" : ""}, ₹{activePrice} total.
             </p>
+          </div>
+        )}
+
+        {/* Subscription details — current status, history, payment records */}
+        {isLoggedIn && (
+          <div className="mx-auto mb-10 max-w-4xl rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              <Calendar className="h-4 w-4" style={{ color: COLORS.gold }} /> Subscription details
+            </h2>
+
+            {historyLoading ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+            ) : history.length === 0 ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No subscriptions yet.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {history.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
+                        {sub.plan_name} — {sub.duration_label}, {sub.screens} screen{sub.screens > 1 ? "s" : ""}
+                      </p>
+                      <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                        Activated {formatDate(sub.started_at)} · Expires {formatDate(sub.expires_at)} · ₹{sub.price}
+                      </p>
+                    </div>
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={{
+                        background: sub.is_active ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
+                        color: sub.is_active ? "#6FCF97" : "rgba(245,235,221,0.5)",
+                      }}
+                    >
+                      {sub.is_active ? "Active" : "Expired"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h2 className="mb-4 mt-8 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              <Receipt className="h-4 w-4" style={{ color: COLORS.gold }} /> Payment records
+            </h2>
+
+            {paymentsLoading ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+            ) : payments.length === 0 ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No payment records yet.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {payments.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
+                        {p.plan_name} — ₹{p.total_amount} via {p.gateway}
+                      </p>
+                      <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                        {formatDate(p.created_at)} · Base ₹{p.base_amount} + Tax ₹{p.tax_amount}
+                        {p.reward_points_used > 0 && ` · ${p.reward_points_used} reward points used`}
+                      </p>
+                    </div>
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
+                      style={{
+                        background:
+                          p.status === "paid" ? "rgba(111,207,151,0.15)"
+                          : p.status === "failed" ? "rgba(248,113,113,0.15)"
+                          : "rgba(255,255,255,0.08)",
+                        color:
+                          p.status === "paid" ? "#6FCF97"
+                          : p.status === "failed" ? "#f87171"
+                          : "rgba(245,235,221,0.6)",
+                      }}
+                    >
+                      {p.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -320,6 +447,190 @@ export default function SubscriptionPage({ onBack }) {
           Demo pricing shown for illustration — no real payment is processed here.
         </p>
       </main>
+
+      {checkoutPlan && (
+        <CheckoutModal
+          plan={checkoutPlan}
+          duration={duration}
+          screens={screens[checkoutPlan.name] || 1}
+          taxConfig={taxConfig}
+          rewardPoints={rewardPoints}
+          userEmail={profile.email}
+          userPhone={profile.phone}
+          onClose={() => setCheckoutPlan(null)}
+          onSuccess={() => {
+            setCheckoutPlan(null);
+            refreshSubscription();
+            loadHistoryAndPayments();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CheckoutModal — the real payment flow. Opened by clicking
+// Subscribe/Switch on a plan card. Shows a fresh reward-redemption choice,
+// server-computed tax (GST, rate from /api/tax-config), and the final
+// total, then hands off to Razorpay's checkout widget. Stripe is shown as
+// a second option but disabled for now — Razorpay is the only gateway
+// actually wired up.
+// ---------------------------------------------------------------------------
+function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userEmail, userPhone, onClose, onSuccess }) {
+  const [useRewards, setUseRewards] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState("");
+
+  const monthly = plan.basePrice + (screens - 1) * plan.perExtraScreen;
+  const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
+  const pointsUsed = useRewards ? Math.min(rewardPoints, preRewards) : 0;
+  const taxableAmount = preRewards - pointsUsed;
+  const gstPercent = taxConfig ? Number(taxConfig.gst_percent) : 18;
+  const taxAmount = Math.round((taxableAmount * gstPercent) / 100);
+  const total = taxableAmount + taxAmount;
+
+  const handlePayWithRazorpay = async () => {
+    setError("");
+    setPaying(true);
+    try {
+      const order = await createRazorpayOrder({
+        planName: plan.name,
+        durationLabel: duration.label,
+        screens,
+        rewardPointsRequested: pointsUsed,
+      });
+
+      if (!window.Razorpay) {
+        throw new Error("Payment widget failed to load. Please refresh and try again.");
+      }
+
+      const rzp = new window.Razorpay({
+        key: order.razorpay_key_id,
+        amount: Math.round(Number(order.total_amount) * 100),
+        currency: order.currency,
+        name: "theomy",
+        description: `${order.plan_name} — ${order.duration_label}`,
+        order_id: order.razorpay_order_id,
+        prefill: { email: userEmail, contact: userPhone || undefined },
+        theme: { color: "#D4AF37" },
+        handler: async (response) => {
+          try {
+            await verifyRazorpayPayment({
+              paymentId: order.payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            onSuccess();
+          } catch (err) {
+            setError(err.message || "Payment verification failed. If money was deducted, contact support.");
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setPaying(false),
+        },
+      });
+      rzp.on("payment.failed", () => {
+        setError("Payment failed. Please try again.");
+        setPaying(false);
+      });
+      rzp.open();
+    } catch (err) {
+      setError(err.message || "Couldn't start checkout. Please try again.");
+      setPaying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(10,1,4,0.8)" }}>
+      <div
+        className="w-full max-w-sm rounded-2xl p-6"
+        style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
+      >
+        <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>Confirm your subscription</h2>
+        <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+          {plan.name} — {duration.label}, {screens} screen{screens > 1 ? "s" : ""}
+        </p>
+
+        {rewardPoints > 0 && (
+          <button
+            type="button"
+            onClick={() => setUseRewards((v) => !v)}
+            className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
+            style={{
+              background: useRewards ? "rgba(212,175,55,0.1)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${useRewards ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.08)"}`,
+            }}
+          >
+            <Gift className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
+            <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
+              Redeem {Math.min(rewardPoints, preRewards)} reward points (₹{Math.min(rewardPoints, preRewards)} off)
+            </span>
+            <div
+              className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
+              style={{ background: useRewards ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}
+            >
+              <div
+                className="h-4 w-4 rounded-full bg-white transition-transform"
+                style={{ transform: useRewards ? "translateX(16px)" : "translateX(0)" }}
+              />
+            </div>
+          </button>
+        )}
+
+        <div className="mb-4 flex flex-col gap-1.5 rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(255,255,255,0.03)" }}>
+          <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
+            <span>Plan price</span><span>₹{preRewards}</span>
+          </div>
+          {pointsUsed > 0 && (
+            <div className="flex justify-between" style={{ color: COLORS.gold }}>
+              <span>Reward points applied</span><span>− ₹{pointsUsed}</span>
+            </div>
+          )}
+          <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
+            <span>GST ({gstPercent}%)</span><span>₹{taxAmount}</span>
+          </div>
+          <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold" style={{ borderColor: "rgba(255,255,255,0.1)", color: COLORS.cream }}>
+            <span>Total</span><span>₹{total}</span>
+          </div>
+        </div>
+
+        {error && (
+          <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={paying}
+            onClick={handlePayWithRazorpay}
+            className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+          >
+            {paying ? "Processing…" : `Pay ₹${total} with Razorpay`}
+          </button>
+          <button
+            type="button"
+            disabled
+            className="rounded-full px-5 py-2.5 text-sm font-semibold opacity-40"
+            style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+          >
+            Pay with Stripe (coming soon)
+          </button>
+          <button
+            type="button"
+            disabled={paying}
+            onClick={onClose}
+            className="mt-1 text-xs font-medium hover:opacity-80"
+            style={{ color: "rgba(245,235,221,0.5)" }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

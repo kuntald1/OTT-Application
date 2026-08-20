@@ -108,17 +108,11 @@ export function AppProvider({ children }) {
   const [rooms, setRooms] = useState(SEED_ROOMS);
   const [donations, setDonations] = useState([]); // [{ id, organiserId, organiserName, amount, date }]
 
-  // Pulls tickets + current subscription from the backend — called once
-  // right after we know who's logged in (session restore, or right after
-  // login/register/OAuth completes).
-  const loadUserData = useCallback(async () => {
-    try {
-      const ticketList = await fetchTickets();
-      setTickets(ticketList.map(toTicketDisplay));
-    } catch {
-      // Non-fatal — Help Center just shows no tickets if this fails
-    }
-
+  // Re-fetches just the current subscription and updates state — used both
+  // by loadUserData (session restore) and directly after a successful
+  // Razorpay payment, so the "You're on plan X" banner and Subscription
+  // details update immediately without a full page reload.
+  const refreshSubscription = useCallback(async () => {
     try {
       const sub = await fetchMySubscription();
       if (sub) {
@@ -134,6 +128,20 @@ export function AppProvider({ children }) {
       // Non-fatal — Subscription page just shows no active plan if this fails
     }
   }, []);
+
+  // Pulls tickets + current subscription from the backend — called once
+  // right after we know who's logged in (session restore, or right after
+  // login/register/OAuth completes).
+  const loadUserData = useCallback(async () => {
+    try {
+      const ticketList = await fetchTickets();
+      setTickets(ticketList.map(toTicketDisplay));
+    } catch {
+      // Non-fatal — Help Center just shows no tickets if this fails
+    }
+
+    await refreshSubscription();
+  }, [refreshSubscription]);
 
   // On first load: if there's a token in the URL (just arrived from a
   // Google/Facebook redirect), save it and clean the URL. Then, whichever
@@ -340,7 +348,7 @@ export function AppProvider({ children }) {
     requestLogin, closeLoginModal, login, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
-    isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe,
+    isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe, refreshSubscription,
     rewardPoints, redeemRewardPoints,
     rooms, createRoom, addPostToRoom, toggleLikePost, addReplyToPost,
     donations, addDonation,

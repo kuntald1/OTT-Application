@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import UserRole, TicketStatus
+from app.models import UserRole, TicketStatus, PaymentStatus, PaymentGateway
 
 
 class UserRegister(BaseModel):
@@ -137,3 +137,54 @@ class SubscriptionPlanOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+
+class PaymentOut(BaseModel):
+    id: uuid.UUID
+    gateway: PaymentGateway
+    plan_name: str
+    duration_label: str
+    screens: int
+    base_amount: Decimal
+    tax_amount: Decimal
+    total_amount: Decimal
+    reward_points_used: int
+    currency: str
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaxConfigOut(BaseModel):
+    gst_percent: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class CreateOrderRequest(BaseModel):
+    plan_name: str = Field(min_length=1, max_length=50)
+    duration_label: str = Field(min_length=1, max_length=50)
+    screens: int = Field(default=1, ge=1, le=10)
+    reward_points_requested: int = Field(default=0, ge=0)
+
+
+class CreateOrderResponse(BaseModel):
+    payment_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    base_amount: Decimal
+    reward_points_used: int
+    tax_amount: Decimal
+    total_amount: Decimal
+    currency: str
+    plan_name: str
+    duration_label: str
+    screens: int
+
+
+class VerifyPaymentRequest(BaseModel):
+    payment_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str

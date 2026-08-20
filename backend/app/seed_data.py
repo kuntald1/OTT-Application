@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan
+from app.models import Menu, SubscriptionPlan, TaxConfig
 
 
 def seed_menus(db):
@@ -117,10 +117,21 @@ def seed_subscription_plans(db):
     print(f"Seeded {count} subscription plans (skipping any that already existed).")
 
 
+def seed_tax_config(db):
+    existing = db.query(TaxConfig).first()
+    if existing:
+        print(f"Tax config already exists (GST {existing.gst_percent}%), skipping.")
+        return
+    db.add(TaxConfig(gst_percent=18))
+    db.commit()
+    print("Seeded tax config: GST 18%.")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
         seed_menus(db)
         seed_subscription_plans(db)
+        seed_tax_config(db)
     finally:
         db.close()

@@ -40,5 +40,14 @@ class Settings:
     # How long a password-reset link stays valid
     RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
 
+    # Razorpay (test mode) — used for subscription checkout
+    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+    # Twilio — WhatsApp payment/subscription notifications
+    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
+
 
 settings = Settings()

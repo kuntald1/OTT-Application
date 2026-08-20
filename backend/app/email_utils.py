@@ -78,6 +78,28 @@ password won't be changed.
 """
 
 
+def _send_email(to_email: str, subject: str, text_body: str, html_body: str) -> None:
+    """Shared low-level sender via Gmail SMTP (App Password). Any module
+    that needs to send a themed email (password reset, payment
+    confirmation, etc.) builds its own subject/text/html and calls this.
+    """
+    msg = MIMEMultipart("alternative")
+    msg["From"] = f"theomy <{settings.SMTP_EMAIL}>"
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    # Plain text part must be attached FIRST, HTML second — clients pick
+    # the LAST part they support, so this order makes HTML the preferred
+    # rendering while text stays as the fallback.
+    msg.attach(MIMEText(text_body, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+        server.starttls()
+        server.login(settings.SMTP_EMAIL, settings.SMTP_APP_PASSWORD)
+        server.sendmail(settings.SMTP_EMAIL, to_email, msg.as_string())
+
+
 def send_password_reset_email(to_email: str, reset_link: str) -> None:
     """Sends the reset link via Gmail SMTP using an App Password.
 
@@ -85,18 +107,9 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
     email clients that support HTML show the styled version, everything
     else falls back to plain text automatically.
     """
-    msg = MIMEMultipart("alternative")
-    msg["From"] = f"theomy <{settings.SMTP_EMAIL}>"
-    msg["To"] = to_email
-    msg["Subject"] = "Reset your theomy password"
-
-    # Plain text part must be attached FIRST, HTML second — clients pick
-    # the LAST part they support, so this order makes HTML the preferred
-    # rendering while text stays as the fallback.
-    msg.attach(MIMEText(_build_text_body(reset_link), "plain"))
-    msg.attach(MIMEText(_build_html_body(reset_link), "html"))
-
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-        server.starttls()
-        server.login(settings.SMTP_EMAIL, settings.SMTP_APP_PASSWORD)
-        server.sendmail(settings.SMTP_EMAIL, to_email, msg.as_string())
+    _send_email(
+        to_email,
+        "Reset your theomy password",
+        _build_text_body(reset_link),
+        _build_html_body(reset_link),
+    )

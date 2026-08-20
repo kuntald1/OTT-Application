@@ -166,3 +166,64 @@ class SubscriptionPlan(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+
+
+class PaymentStatus(str, enum.Enum):
+    created = "created"
+    paid = "paid"
+    failed = "failed"
+
+
+class PaymentGateway(str, enum.Enum):
+    razorpay = "razorpay"
+    stripe = "stripe"
+
+
+class Payment(Base):
+    """One row per checkout attempt. Created in "created" status when the
+    checkout starts, updated to "paid" or "failed" once the gateway
+    confirms the outcome. Phase 2 (Razorpay/Stripe integration) will add
+    the endpoints that actually write to this table — for now it exists so
+    the Subscription details page has a real (empty) source to read from.
+    """
+    __tablename__ = "payments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id"), nullable=True)
+
+    gateway = Column(Enum(PaymentGateway), nullable=False)
+    gateway_order_id = Column(String(255), nullable=True)
+    gateway_payment_id = Column(String(255), nullable=True)
+
+    plan_name = Column(String(50), nullable=False)
+    duration_label = Column(String(50), nullable=False, default="1 Month")
+    screens = Column(Integer, nullable=False, default=1)
+    base_amount = Column(Numeric(10, 2), nullable=False)
+    tax_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    reward_points_used = Column(Integer, nullable=False, default=0)
+    currency = Column(String(3), nullable=False, default="INR")
+
+    status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.created)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class TaxConfig(Base):
+    """Single-row table holding the current GST rate. Admin-editable
+    (update the one row) — the checkout flow always reads the latest value,
+    so changing it here takes effect on the next checkout with no
+    redeploy needed.
+    """
+    __tablename__ = "tax_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    gst_percent = Column(Numeric(5, 2), nullable=False, default=18)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

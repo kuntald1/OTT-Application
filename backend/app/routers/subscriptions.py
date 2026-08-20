@@ -66,3 +66,21 @@ def get_my_subscription(
         .order_by(Subscription.started_at.desc())
         .first()
     )
+
+
+@router.get("", response_model=list[SubscriptionOut])
+def list_my_subscriptions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Full history — active AND past subscriptions, most recent first.
+    # "Previous subscriptions" on the Subscription details page is just
+    # this list with the current one (is_active=True) filtered out
+    # client-side, or shown at the top — no separate table needed since
+    # Subscription already carries is_active as the status flag.
+    return (
+        db.query(Subscription)
+        .filter(Subscription.user_id == current_user.id)
+        .order_by(Subscription.started_at.desc())
+        .all()
+    )
