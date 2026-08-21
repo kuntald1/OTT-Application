@@ -340,7 +340,9 @@ export default function SubscriptionPage({ onBack }) {
                 </div>
                 {count > 1 && (
                   <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>
-                    ₹{plan.basePrice} for 1 screen + ₹{plan.perExtraScreen} × {count - 1} extra, per month
+                    {isIndia
+                      ? `₹${plan.basePrice} for 1 screen + ₹${plan.perExtraScreen} × ${count - 1} extra, per month`
+                      : `$${plan.basePriceUsd} for 1 screen + $${plan.perExtraScreenUsd} × ${count - 1} extra, per month`}
                   </p>
                 )}
 
