@@ -39,6 +39,7 @@ function makeId(prefix) {
 // applied optimistically) if the backend hasn't got one yet.
 function toProfile(user, existingPhoto = null) {
   return {
+    id: user.id,
     name: user.name,
     email: user.email,
     phone: user.phone || "",
@@ -69,7 +70,7 @@ function toTicketDisplay(ticket) {
 
 export function AppProvider({ children }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [profile, setProfile] = useState({ name: "", email: "", photo: null, role: "User" });
+  const [profile, setProfile] = useState({ id: null, name: "", email: "", photo: null, role: "User" });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(true); // true while we check for an existing session
   const [authError, setAuthError] = useState("");
@@ -212,7 +213,7 @@ export function AppProvider({ children }) {
   const logout = useCallback(() => {
     setToken(null);
     setIsLoggedIn(false);
-    setProfile({ name: "", email: "", photo: null, role: "User" });
+    setProfile({ id: null, name: "", email: "", photo: null, role: "User" });
     setTickets([]);
     setIsSubscribed(false);
     setActivePlan(null);

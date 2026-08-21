@@ -61,7 +61,7 @@ export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
                 <div>
                   <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{room.title}</p>
                   <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                    {room.postCount} {room.postCount === 1 ? "post" : "posts"} · Started by {room.createdBy}
+                    Started by {room.createdBy}
                   </p>
                 </div>
               </div>

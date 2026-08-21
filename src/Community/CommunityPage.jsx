@@ -139,7 +139,7 @@ export default function CommunityPage({ onNavigate }) {
                     </div>
                     <div>
                       <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{room.title}</p>
-                      <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{room.postCount} posts</p>
+                      <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Started by {room.createdBy}</p>
                     </div>
                   </div>
                   <button

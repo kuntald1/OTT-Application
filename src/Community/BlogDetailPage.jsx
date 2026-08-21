@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MessageCircle, Facebook } from "lucide-react";
 import { COLORS } from "../theme";
 import { fetchBlogPost } from "../api";
 
@@ -55,6 +55,29 @@ export default function BlogDetailPage({ postId, onBack }) {
           {post.body.split("\n\n").map((para, i) => (
             <p key={i} className="text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.75)" }}>{para}</p>
           ))}
+        </div>
+
+        {/* Share */}
+        <div className="mt-10 flex items-center gap-3 border-t pt-6" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+          <span className="text-xs font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Share:</span>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(`${post.title} — ${window.location.href}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium hover:opacity-80"
+            style={{ background: "rgba(37,211,102,0.12)", color: "#25D366", border: "1px solid rgba(37,211,102,0.3)" }}
+          >
+            <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+          </a>
+          <a
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium hover:opacity-80"
+            style={{ background: "rgba(24,119,242,0.12)", color: "#1877F2", border: "1px solid rgba(24,119,242,0.3)" }}
+          >
+            <Facebook className="h-3.5 w-3.5" /> Facebook
+          </a>
         </div>
       </main>
     </div>

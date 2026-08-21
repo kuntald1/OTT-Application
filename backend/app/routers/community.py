@@ -39,6 +39,7 @@ def _post_to_out(post: RoomPost, db: Session, viewer: User | None) -> PostOut:
     reply_outs = [
         ReplyOut(
             id=r.id,
+            author_user_id=r.author_user_id,
             author_name=db.query(User).filter(User.id == r.author_user_id).first().name,
             text=r.text,
             created_at=r.created_at,
@@ -48,6 +49,7 @@ def _post_to_out(post: RoomPost, db: Session, viewer: User | None) -> PostOut:
     author = db.query(User).filter(User.id == post.author_user_id).first()
     return PostOut(
         id=post.id,
+        author_user_id=post.author_user_id,
         author_name=author.name if author else "Unknown",
         text=post.text,
         image_url=post.image_url,
@@ -178,7 +180,7 @@ def create_reply(
     db.commit()
     db.refresh(reply)
     return ReplyOut(
-        id=reply.id, author_name=current_user.name, text=reply.text, created_at=reply.created_at,
+        id=reply.id, author_user_id=current_user.id, author_name=current_user.name, text=reply.text, created_at=reply.created_at,
     )
 
 

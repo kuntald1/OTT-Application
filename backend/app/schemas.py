@@ -213,6 +213,7 @@ class BlogDetailOut(BaseModel):
 
 class ReplyOut(BaseModel):
     id: uuid.UUID
+    author_user_id: uuid.UUID
     author_name: str
     text: str
     created_at: datetime
@@ -222,6 +223,7 @@ class ReplyOut(BaseModel):
 
 class PostOut(BaseModel):
     id: uuid.UUID
+    author_user_id: uuid.UUID
     author_name: str
     text: str
     image_url: Optional[str] = None
