@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus } from "../api";
+import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp } from "../api";
+import { COUNTRIES } from "../shared/countries";
 
 // ---------------------------------------------------------------------------
 // Login backdrop video — its own dedicated folder, completely independent
@@ -453,30 +454,97 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
 
 // Real auth — talks to the theomy backend (register/login with
 // bcrypt+JWT), plus working Google/Facebook OAuth redirects.
+// Real auth — talks to the theomy backend (register/login with
+// bcrypt+JWT), plus working Google/Facebook OAuth redirects, a
+// forgot-password flow, and phone+WhatsApp-OTP flows: mandatory OTP
+// verification during registration when Country is India (phone stays
+// optional and unverified for every other country), and a separate
+// OTP-based login option for returning users who'd rather not type a
+// password.
 function LoginModal({ onClose }) {
-  const { login, register, authError } = useApp();
-  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
+  const { login, loginWithOtp, register, authError } = useApp();
+  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot" | "otpLogin"
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("India");
+  const [countryOpen, setCountryOpen] = useState(false);
   const [role, setRole] = useState("User");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
+
+  // Registration OTP step (India only) — otpSent gates the form from
+  // "fill details" to "enter the code we just sent"
+  const [regOtpSent, setRegOtpSent] = useState(false);
+  const [regOtpCode, setRegOtpCode] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
+
+  // OTP login (separate mode) — its own phone/code state, independent of
+  // the registration form above
+  const [otpLoginPhone, setOtpLoginPhone] = useState("");
+  const [otpLoginSent, setOtpLoginSent] = useState(false);
+  const [otpLoginCode, setOtpLoginCode] = useState("");
+
+  const isIndia = country === "India";
+  const ROLES = ["User", "Content Creator", "Plays Organiser"];
+
+  const resetRegOtp = () => { setRegOtpSent(false); setRegOtpCode(""); };
 
   const canSubmit =
     mode === "login"
       ? email.trim() && password
       : mode === "forgot"
       ? email.trim()
-      : name.trim() && email.trim() && password.length >= 8;
-
-  const ROLES = ["User", "Content Creator", "Plays Organiser"];
+      : mode === "otpLogin"
+      ? otpLoginSent ? otpLoginCode.trim() : otpLoginPhone.trim()
+      : // register
+        isIndia && regOtpSent
+        ? regOtpCode.trim()
+        : name.trim() && email.trim() && password.length >= 8 && (!isIndia || phone.trim());
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
     setFormError("");
+
+    if (mode === "otpLogin") {
+      if (!otpLoginSent) {
+        setSendingOtp(true);
+        try {
+          await sendOtp(otpLoginPhone.trim(), "login");
+          setOtpLoginSent(true);
+        } catch (err) {
+          setFormError(err.message || "Couldn't send code. Please try again.");
+        } finally {
+          setSendingOtp(false);
+        }
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await loginWithOtp(otpLoginPhone.trim(), otpLoginCode.trim());
+      } catch (err) {
+        setFormError(err.message || "Invalid code. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    if (mode === "register" && isIndia && !regOtpSent) {
+      setSendingOtp(true);
+      try {
+        await sendOtp(phone.trim(), "registration");
+        setRegOtpSent(true);
+      } catch (err) {
+        setFormError(err.message || "Couldn't send code. Please try again.");
+      } finally {
+        setSendingOtp(false);
+      }
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (mode === "login") {
@@ -490,6 +558,8 @@ function LoginModal({ onClose }) {
           email: email.trim(),
           password,
           phone: phone.trim(),
+          country,
+          otp: isIndia ? regOtpCode.trim() : null,
           role,
         });
       }
@@ -502,9 +572,6 @@ function LoginModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Curtain video backdrop — plays if a file exists in
-          assets/LoginVideo/, otherwise this layer is simply absent and the
-          plain dark background below shows instead */}
       {LOGIN_VIDEOS.length > 0 && (
         <video
           className="absolute inset-0 h-full w-full object-cover"
@@ -515,8 +582,6 @@ function LoginModal({ onClose }) {
           playsInline
         />
       )}
-      {/* Dark overlay — lighter than a flat solid so the video reads through
-          it, but still dark enough to keep the login card legible */}
       <div className="absolute inset-0" style={{ background: "rgba(10,1,4,0.72)" }} />
 
       <div
@@ -524,19 +589,20 @@ function LoginModal({ onClose }) {
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          {mode === "login" ? "Log in to theomy" : mode === "forgot" ? "Reset your password" : "Create your account"}
+          {mode === "login" ? "Log in to theomy"
+            : mode === "forgot" ? "Reset your password"
+            : mode === "otpLogin" ? "Log in with OTP"
+            : "Create your account"}
         </h2>
         <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-          {mode === "login"
-            ? "Log in to continue browsing theomy."
-            : mode === "forgot"
-            ? "Enter your email and we'll send you a reset link."
+          {mode === "login" ? "Log in to continue browsing theomy."
+            : mode === "forgot" ? "Enter your email and we'll send you a reset link."
+            : mode === "otpLogin" ? "We'll send a verification code to your WhatsApp."
             : "Login is required to browse theomy."}
         </p>
 
-        {mode !== "forgot" && (
+        {(mode === "login" || mode === "register") && (
           <>
-            {/* Social login */}
             <div className="mb-4 flex flex-col gap-2">
               <button
                 type="button"
@@ -564,7 +630,54 @@ function LoginModal({ onClose }) {
           </>
         )}
 
-        {mode === "forgot" && forgotSent ? (
+        {/* ---------------- OTP LOGIN MODE ---------------- */}
+        {mode === "otpLogin" ? (
+          <div className="flex flex-col gap-3">
+            <input
+              type="tel"
+              placeholder="Phone number"
+              value={otpLoginPhone}
+              disabled={otpLoginSent}
+              onChange={(e) => setOtpLoginPhone(e.target.value)}
+              className="rounded-lg border px-4 py-2.5 text-sm outline-none disabled:opacity-60"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+            {otpLoginSent && (
+              <input
+                type="text"
+                placeholder="Enter verification code"
+                value={otpLoginCode}
+                onChange={(e) => setOtpLoginCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+            )}
+
+            {(formError || authError) && (
+              <p className="text-xs font-medium" style={{ color: "#f87171" }}>{formError || authError}</p>
+            )}
+
+            <button
+              disabled={!canSubmit || submitting || sendingOtp}
+              onClick={handleSubmit}
+              className="mt-1 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+            >
+              {sendingOtp ? "Sending code…" : submitting ? "Verifying…" : otpLoginSent ? "Verify & log in" : "Send code"}
+            </button>
+
+            <div className="mt-1 flex items-center justify-end">
+              <button
+                onClick={() => { setFormError(""); setOtpLoginSent(false); setOtpLoginCode(""); setMode("login"); }}
+                className="text-xs font-medium hover:opacity-90"
+                style={{ color: COLORS.gold }}
+              >
+                Use email & password instead
+              </button>
+            </div>
+          </div>
+        ) : mode === "forgot" && forgotSent ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm" style={{ color: "rgba(245,235,221,0.75)" }}>
               If an account exists for that email, a reset link has been sent. Check your inbox (and spam folder).
@@ -578,8 +691,9 @@ function LoginModal({ onClose }) {
             </button>
           </div>
         ) : (
+        /* ---------------- LOGIN / REGISTER / FORGOT MODE ---------------- */
         <div className="flex flex-col gap-3">
-          {mode === "register" && (
+          {mode === "register" && !(isIndia && regOtpSent) && (
             <input
               type="text"
               placeholder="Name"
@@ -589,16 +703,20 @@ function LoginModal({ onClose }) {
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
             />
           )}
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-          />
-          {mode !== "forgot" && (
+
+          {!(mode === "register" && isIndia && regOtpSent) && (
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+          )}
+
+          {mode !== "forgot" && !(mode === "register" && isIndia && regOtpSent) && (
             <input
               type="password"
               placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
@@ -611,7 +729,15 @@ function LoginModal({ onClose }) {
           )}
 
           {mode === "login" && (
-            <div className="-mt-1 flex justify-end">
+            <div className="-mt-1 flex justify-between">
+              <button
+                type="button"
+                onClick={() => { setFormError(""); setOtpLoginPhone(""); setOtpLoginSent(false); setOtpLoginCode(""); setMode("otpLogin"); }}
+                className="text-xs font-medium hover:opacity-90"
+                style={{ color: "rgba(245,235,221,0.55)" }}
+              >
+                Log in with OTP instead
+              </button>
               <button
                 type="button"
                 onClick={() => { setFormError(""); setMode("forgot"); }}
@@ -623,18 +749,80 @@ function LoginModal({ onClose }) {
             </div>
           )}
 
-          {mode === "register" && (
-            <input
-              type="tel"
-              placeholder="Phone number (optional)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
+          {mode === "register" && !regOtpSent && (
+            <>
+              {/* Country — custom dropdown, native <select> options render
+                  with an unstyleable white background in most browsers */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setCountryOpen((v) => !v)}
+                  className="flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm"
+                  style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+                >
+                  {country}
+                  <ChevronDown className={`h-4 w-4 transition-transform ${countryOpen ? "rotate-180" : ""}`} />
+                </button>
+                {countryOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setCountryOpen(false)} />
+                    <div
+                      className="absolute left-0 top-full z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl"
+                      style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.25)` }}
+                    >
+                      {COUNTRIES.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => { setCountry(c); setCountryOpen(false); resetRegOtp(); }}
+                          className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                          style={{ color: country === c ? COLORS.gold : "rgba(245,235,221,0.85)" }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <input
+                type="tel"
+                placeholder={isIndia ? "Phone number (required)" : "Phone number (optional)"}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+            </>
           )}
 
-          {mode === "register" && (
+          {mode === "register" && isIndia && regOtpSent && (
+            <>
+              <p className="text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                We sent a code to {phone} via WhatsApp.
+              </p>
+              <input
+                type="text"
+                placeholder="Enter verification code"
+                value={regOtpCode}
+                onChange={(e) => setRegOtpCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+              <button
+                type="button"
+                onClick={() => resetRegOtp()}
+                className="self-start text-xs hover:opacity-80"
+                style={{ color: "rgba(245,235,221,0.5)" }}
+              >
+                Change phone number
+              </button>
+            </>
+          )}
+
+          {mode === "register" && !regOtpSent && (
             <div>
               <p className="mb-1.5 text-xs font-medium" style={{ color: "rgba(245,235,221,0.6)" }}>I am a...</p>
               <div className="flex flex-wrap gap-2">
@@ -658,20 +846,24 @@ function LoginModal({ onClose }) {
           )}
 
           {(formError || authError) && (
-            <p className="text-xs font-medium" style={{ color: "#f87171" }}>
-              {formError || authError}
-            </p>
+            <p className="text-xs font-medium" style={{ color: "#f87171" }}>{formError || authError}</p>
           )}
 
           <button
-            disabled={!canSubmit || submitting}
+            disabled={!canSubmit || submitting || sendingOtp}
             onClick={handleSubmit}
             className="mt-1 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
           >
-            {submitting
+            {sendingOtp
+              ? "Sending code…"
+              : submitting
               ? mode === "login" ? "Logging in…" : mode === "forgot" ? "Sending…" : "Creating account…"
-              : mode === "login" ? "Log in" : mode === "forgot" ? "Send reset link" : "Create account"}
+              : mode === "login" ? "Log in"
+              : mode === "forgot" ? "Send reset link"
+              : mode === "register" && isIndia && regOtpSent ? "Verify & Create account"
+              : mode === "register" && isIndia ? "Send verification code"
+              : "Create account"}
           </button>
 
           <div className="mt-1 flex items-center justify-end">
@@ -685,7 +877,7 @@ function LoginModal({ onClose }) {
               </button>
             ) : (
               <button
-                onClick={() => { setFormError(""); setMode((m) => (m === "login" ? "register" : "login")); }}
+                onClick={() => { setFormError(""); resetRegOtp(); setMode((m) => (m === "login" ? "register" : "login")); }}
                 className="text-xs font-medium hover:opacity-90"
                 style={{ color: COLORS.gold }}
               >
@@ -699,7 +891,6 @@ function LoginModal({ onClose }) {
     </div>
   );
 }
-
 function GoogleMark({ className }) {
   return (
     <svg className={className} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">

@@ -40,6 +40,9 @@ class Settings:
     # How long a password-reset link stays valid
     RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
 
+    # How long a WhatsApp OTP code stays valid
+    OTP_EXPIRE_MINUTES = int(os.getenv("OTP_EXPIRE_MINUTES", "10"))
+
     # Razorpay (test mode) — used for subscription checkout
     RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")

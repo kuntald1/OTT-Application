@@ -37,6 +37,7 @@ class User(Base):
     # Relative URL to the uploaded profile photo, e.g. "/api/uploads/profile_photos/<uuid>.jpg"
     # Null until the user uploads one.
     profile_photo_url = Column(String(500), nullable=True)
+    country = Column(String(100), nullable=False, default="India")
 
     auth_provider = Column(
         Enum(AuthProvider), nullable=False, default=AuthProvider.local
@@ -472,5 +473,36 @@ class EventEnquiryAttachment(Base):
     file_url = Column(String(500), nullable=False)
     original_filename = Column(String(255), nullable=False)
     uploaded_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class OtpPurpose(str, enum.Enum):
+    registration = "registration"
+    login = "login"
+
+
+class OtpVerification(Base):
+    """Short-lived WhatsApp OTP codes. India-only feature — phone-based
+    registration/login verification for other countries isn't required
+    (phone stays optional there), so this table is only ever written to
+    for phone numbers tied to an India-country registration or an OTP
+    login attempt.
+
+    A new /otp/send call for the same phone+purpose invalidates any
+    previous unconsumed code for that pair (is_verified stays False on
+    the old row, but only the newest row is ever checked against, since
+    lookups always take the most recent one).
+    """
+    __tablename__ = "otp_verifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    phone = Column(String(20), nullable=False, index=True)
+    otp_code = Column(String(6), nullable=False)
+    purpose = Column(Enum(OtpPurpose), nullable=False)
+    is_verified = Column(Boolean, nullable=False, default=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

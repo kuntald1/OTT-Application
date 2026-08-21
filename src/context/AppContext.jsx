@@ -4,6 +4,7 @@ import {
   setToken,
   registerUser,
   loginUser,
+  loginWithOtp as apiLoginWithOtp,
   fetchCurrentUser,
   updateCurrentUser,
   uploadProfilePhoto,
@@ -198,11 +199,26 @@ export function AppProvider({ children }) {
     loadUserData();
   }, [loadUserData]);
 
-  // Real registration against the backend. Phone is optional — pass "" or
-  // undefined if not provided, the API treats both as "not given".
-  const register = useCallback(async ({ name, email, password, phone, role }) => {
+  // Phone + WhatsApp OTP login (India) — no password involved. Throws on
+  // failure (invalid/expired code, or no account exists with that phone)
+  // so the modal can show the error inline.
+  const loginWithOtp = useCallback(async (phone, otp) => {
     setAuthError("");
-    const data = await registerUser({ name, email, password, phone, role });
+    const data = await apiLoginWithOtp(phone, otp);
+    setToken(data.access_token);
+    setProfile((p) => toProfile(data.user, p.photo));
+    setIsLoggedIn(true);
+    setShowLoginModal(false);
+    loadUserData();
+  }, [loadUserData]);
+
+  // Real registration against the backend. Phone is optional UNLESS
+  // country is India, in which case the caller must have already
+  // completed WhatsApp OTP verification and pass the code here — the
+  // backend re-validates it server-side regardless.
+  const register = useCallback(async ({ name, email, password, phone, country, otp, role }) => {
+    setAuthError("");
+    const data = await registerUser({ name, email, password, phone, country, otp, role });
     setToken(data.access_token);
     setProfile((p) => toProfile(data.user, p.photo));
     setIsLoggedIn(true);
@@ -316,7 +332,7 @@ export function AppProvider({ children }) {
 
   const value = {
     isLoggedIn, profile, showLoginModal, authLoading, authError,
-    requestLogin, closeLoginModal, login, register, logout, changePhoto, updateProfile,
+    requestLogin, closeLoginModal, login, loginWithOtp, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
     isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe, refreshSubscription,

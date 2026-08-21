@@ -44,10 +44,10 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   return data;
 }
 
-export function registerUser({ name, email, password, phone, role }) {
+export function registerUser({ name, email, password, phone, country, otp, role }) {
   return request("/auth/register", {
     method: "POST",
-    body: { name, email, password, phone: phone || null, role },
+    body: { name, email, password, phone: phone || null, country, otp: otp || null, role },
   });
 }
 
@@ -55,6 +55,20 @@ export function loginUser({ email, password }) {
   return request("/auth/login", {
     method: "POST",
     body: { email, password },
+  });
+}
+
+export function sendOtp(phone, purpose) {
+  return request("/auth/otp/send", {
+    method: "POST",
+    body: { phone, purpose },
+  });
+}
+
+export function loginWithOtp(phone, otp) {
+  return request("/auth/login-otp", {
+    method: "POST",
+    body: { phone, otp },
   });
 }
 

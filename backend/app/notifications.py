@@ -140,3 +140,34 @@ create the event listing and let you know.
         _send_email(to_email, subject, text_body, html_body)
     except Exception:
         pass
+
+
+def send_otp_whatsapp(phone: str, otp_code: str, expire_minutes: int) -> bool:
+    """Sends a WhatsApp OTP code. Unlike the other notification senders in
+    this module, this one is India-only by design (the OTP feature only
+    applies to India registrations/logins), so it's safe to always prepend
+    +91 rather than guessing a country code. Returns True/False so the
+    caller can tell the user "OTP sent" vs "couldn't send OTP" — unlike
+    the other notifications here, OTP delivery failure genuinely needs to
+    be surfaced, since without it the user has no way to complete
+    registration or login.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return False
+
+    to_number = phone if phone.startswith("+") else f"+91{phone}"
+
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"Your theomy verification code is {otp_code}. "
+        f"It expires in {expire_minutes} minutes. Don't share this code with anyone."
+    )
+    try:
+        client.messages.create(
+            from_=settings.TWILIO_FROM_NUMBER,
+            to=f"whatsapp:{to_number}",
+            body=body,
+        )
+        return True
+    except Exception:
+        return False

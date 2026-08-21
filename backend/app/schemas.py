@@ -13,6 +13,8 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     phone: Optional[str] = Field(default=None, max_length=20)
+    country: str = Field(default="India", max_length=100)
+    otp: Optional[str] = Field(default=None, max_length=6)
     role: UserRole = UserRole.user
 
     @field_validator("phone")
@@ -59,6 +61,7 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     phone: Optional[str] = None
+    country: str
     role: UserRole
     auth_provider: str
     profile_photo_url: Optional[str] = None
@@ -378,3 +381,13 @@ class EventEnquiryOut(BaseModel):
     ticket_tiers: List[TicketTierOut]
     attachments: List[EventEnquiryAttachmentOut]
     created_at: datetime
+
+
+class SendOtpRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+    purpose: str = Field(pattern="^(registration|login)$")
+
+
+class VerifyOtpLoginRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+    otp: str = Field(min_length=4, max_length=6)

@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.email_utils import send_password_reset_email
-from app.models import User, AuthProvider
+from app.models import User, AuthProvider, OtpVerification, OtpPurpose
 from app.schemas import (
     UserRegister,
     UserLogin,
@@ -21,6 +21,7 @@ from app.schemas import (
     ResetPasswordRequest,
     MessageResponse,
     UserUpdate,
+    VerifyOtpLoginRequest,
 )
 from app.security import hash_password, verify_password, create_access_token
 
@@ -36,10 +37,62 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
             detail="An account with this email already exists",
         )
 
+    # India requires a verified phone number via WhatsApp OTP. Other
+    # countries keep phone optional with no OTP step — this mirrors what
+    # the frontend enforces, but re-checked here since the frontend can't
+    # be trusted to enforce it on its own.
+    if payload.country == "India":
+        if not payload.phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number is required for India.",
+            )
+        if not payload.otp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OTP verification is required for India.",
+            )
+
+        otp_record = (
+            db.query(OtpVerification)
+            .filter(
+                OtpVerification.phone == payload.phone,
+                OtpVerification.purpose == OtpPurpose.registration,
+                OtpVerification.is_verified == False,  # noqa: E712
+            )
+            .order_by(OtpVerification.created_at.desc())
+            .first()
+        )
+        invalid_otp = HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code.",
+        )
+        if not otp_record:
+            raise invalid_otp
+
+        otp_record.attempts += 1
+        if otp_record.attempts > 5:
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Too many attempts. Please request a new code.",
+            )
+
+        expires_at = otp_record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc) or otp_record.otp_code != payload.otp:
+            db.commit()
+            raise invalid_otp
+
+        otp_record.is_verified = True
+        db.commit()
+
     user = User(
         name=payload.name,
         email=payload.email,
         phone=payload.phone,
+        country=payload.country,
         # Password is hashed here — the plaintext from the request body
         # is never written to the DB and never returned in any response.
         hashed_password=hash_password(payload.password),
@@ -74,7 +127,53 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     return Token(access_token=token, user=UserOut.model_validate(user))
 
 
-@router.get("/me", response_model=UserOut)
+@router.post("/login-otp", response_model=Token)
+def login_with_otp(payload: VerifyOtpLoginRequest, db: Session = Depends(get_db)):
+    otp_record = (
+        db.query(OtpVerification)
+        .filter(
+            OtpVerification.phone == payload.phone,
+            OtpVerification.purpose == OtpPurpose.login,
+            OtpVerification.is_verified == False,  # noqa: E712
+        )
+        .order_by(OtpVerification.created_at.desc())
+        .first()
+    )
+    invalid_otp = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired verification code.",
+    )
+    if not otp_record:
+        raise invalid_otp
+
+    otp_record.attempts += 1
+    if otp_record.attempts > 5:
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Too many attempts. Please request a new code.",
+        )
+
+    expires_at = otp_record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc) or otp_record.otp_code != payload.otp:
+        db.commit()
+        raise invalid_otp
+
+    otp_record.is_verified = True
+
+    user = db.query(User).filter(User.phone == payload.phone, User.is_active == True).first()  # noqa: E712
+    if not user:
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this phone number. Please register first.",
+        )
+
+    db.commit()
+    token = create_access_token(subject=str(user.id))
+    return Token(access_token=token, user=UserOut.model_validate(user))
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
 
