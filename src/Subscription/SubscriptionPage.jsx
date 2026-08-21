@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, createRazorpayOrder, verifyRazorpayPayment } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -30,9 +30,25 @@ export default function SubscriptionPage({ onBack }) {
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState("");
   const {
-    isLoggedIn, requestLogin, isSubscribed, activePlan, activeDuration, activeScreens, activePrice,
+    isLoggedIn, requestLogin, isSubscribed, activePlan, activeDuration, activeScreens, activePrice, activeCurrency,
     subscribe, refreshSubscription, rewardPoints, redeemRewardPoints, profile,
   } = useApp();
+
+  const isIndia = profile.country === "India";
+  const [exchangeRate, setExchangeRate] = useState(null);
+
+  useEffect(() => {
+    fetchExchangeRate().then(setExchangeRate).catch(() => setExchangeRate({ inr_per_usd: 83.5 }));
+  }, []);
+
+  // Converts an INR amount to its USD equivalent for display, rounded to
+  // 2 decimal places — only used when the logged-in account's country
+  // isn't India.
+  const toUsd = (inrAmount) => {
+    const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
+    return Math.round((inrAmount / rate) * 100) / 100;
+  };
+  const fmtPrice = (inrAmount) => (isIndia ? `₹${inrAmount}` : `$${toUsd(inrAmount)}`);
 
   useEffect(() => {
     fetchSubscriptionPlans()
@@ -150,96 +166,8 @@ export default function SubscriptionPage({ onBack }) {
           >
             <BadgeCheck className="h-5 w-5 flex-shrink-0" style={{ color: "#6FCF97" }} />
             <p className="text-sm" style={{ color: "#6FCF97" }}>
-              You're currently on the <b>{activePlan}</b> plan — {activeDuration}, {activeScreens} screen{activeScreens > 1 ? "s" : ""}, ₹{activePrice} total.
+              You're currently on the <b>{activePlan}</b> plan — {activeDuration}, {activeScreens} screen{activeScreens > 1 ? "s" : ""}, {activeCurrency === "USD" ? "$" : "₹"}{activePrice} total.
             </p>
-          </div>
-        )}
-
-        {/* Subscription details — current status, history, payment records */}
-        {isLoggedIn && (
-          <div className="mx-auto mb-10 max-w-4xl rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
-              <Calendar className="h-4 w-4" style={{ color: COLORS.gold }} /> Subscription details
-            </h2>
-
-            {historyLoading ? (
-              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
-            ) : history.length === 0 ? (
-              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No subscriptions yet.</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {history.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                  >
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                        {sub.plan_name} — {sub.duration_label}, {sub.screens} screen{sub.screens > 1 ? "s" : ""}
-                      </p>
-                      <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                        Activated {formatDate(sub.started_at)} · Expires {formatDate(sub.expires_at)} · ₹{sub.price}
-                      </p>
-                    </div>
-                    <span
-                      className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      style={{
-                        background: sub.is_active ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
-                        color: sub.is_active ? "#6FCF97" : "rgba(245,235,221,0.5)",
-                      }}
-                    >
-                      {sub.is_active ? "Active" : "Expired"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <h2 className="mb-4 mt-8 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
-              <Receipt className="h-4 w-4" style={{ color: COLORS.gold }} /> Payment records
-            </h2>
-
-            {paymentsLoading ? (
-              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
-            ) : payments.length === 0 ? (
-              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No payment records yet.</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {payments.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                  >
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                        {p.plan_name} — ₹{p.total_amount} via {p.gateway}
-                      </p>
-                      <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                        {formatDate(p.created_at)} · Base ₹{p.base_amount} + Tax ₹{p.tax_amount}
-                        {p.reward_points_used > 0 && ` · ${p.reward_points_used} reward points used`}
-                      </p>
-                    </div>
-                    <span
-                      className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
-                      style={{
-                        background:
-                          p.status === "paid" ? "rgba(111,207,151,0.15)"
-                          : p.status === "failed" ? "rgba(248,113,113,0.15)"
-                          : "rgba(255,255,255,0.08)",
-                        color:
-                          p.status === "paid" ? "#6FCF97"
-                          : p.status === "failed" ? "#f87171"
-                          : "rgba(245,235,221,0.6)",
-                      }}
-                    >
-                      {p.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -355,9 +283,9 @@ export default function SubscriptionPage({ onBack }) {
 
                 <div className="mt-5 flex items-baseline gap-2">
                   {pointsUsed > 0 && (
-                    <span className="text-base line-through" style={{ color: "rgba(245,235,221,0.35)" }}>₹{preRewards}</span>
+                    <span className="text-base line-through" style={{ color: "rgba(245,235,221,0.35)" }}>{fmtPrice(preRewards)}</span>
                   )}
-                  <span className="text-3xl font-semibold" style={{ color: COLORS.cream }}>₹{total}</span>
+                  <span className="text-3xl font-semibold" style={{ color: COLORS.cream }}>{fmtPrice(total)}</span>
                   <span className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
                     /{duration.months === 1 ? "month" : duration.label.toLowerCase()}
                   </span>
@@ -369,7 +297,7 @@ export default function SubscriptionPage({ onBack }) {
                 )}
                 {duration.months > 1 && (
                   <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>
-                    ≈ ₹{Math.round(preRewards / duration.months)}/month before rewards · save {Math.round(duration.discount * 100)}%
+                    ≈ {fmtPrice(Math.round(preRewards / duration.months))}/month before rewards · save {Math.round(duration.discount * 100)}%
                   </p>
                 )}
                 <p className="mt-1 text-xs" style={{ color: COLORS.gold }}>Unlimited</p>
@@ -434,7 +362,7 @@ export default function SubscriptionPage({ onBack }) {
                         : { border: `1px solid ${COLORS.gold}`, color: COLORS.gold }
                     }
                   >
-                    {subscribing ? "Activating…" : isSubscribed ? "Switch to this plan" : `Subscribe — ₹${total}`}
+                    {subscribing ? "Activating…" : isSubscribed ? "Switch to this plan" : `Subscribe — ${fmtPrice(total)}`}
                   </button>
                 )}
               </div>
@@ -446,6 +374,102 @@ export default function SubscriptionPage({ onBack }) {
         <p className="mx-auto mt-10 max-w-lg text-center text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
           Demo pricing shown for illustration — no real payment is processed here.
         </p>
+
+        {/* Your subscription — history + payment records, moved below the
+            pricing cards so plan selection is the first thing seen */}
+        {isLoggedIn && (
+          <div className="mx-auto mt-16 max-w-4xl">
+            <div className="mb-6 text-center">
+              <p className="text-sm font-medium tracking-wide" style={{ color: COLORS.gold }}>YOUR ACCOUNT</p>
+              <h2 className="mt-1 text-2xl font-semibold" style={{ color: COLORS.cream }}>Subscription &amp; payment history</h2>
+            </div>
+
+            <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+              <h3 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+                <Calendar className="h-4 w-4" style={{ color: COLORS.gold }} /> Subscription details
+              </h3>
+
+              {historyLoading ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+              ) : history.length === 0 ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No subscriptions yet.</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {history.map((sub) => (
+                    <div
+                      key={sub.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
+                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
+                          {sub.plan_name} — {sub.duration_label}, {sub.screens} screen{sub.screens > 1 ? "s" : ""}
+                        </p>
+                        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                          Activated {formatDate(sub.started_at)} · Expires {formatDate(sub.expires_at)} · {sub.currency === "USD" ? "$" : "₹"}{sub.price}
+                        </p>
+                      </div>
+                      <span
+                        className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                        style={{
+                          background: sub.is_active ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
+                          color: sub.is_active ? "#6FCF97" : "rgba(245,235,221,0.5)",
+                        }}
+                      >
+                        {sub.is_active ? "Active" : "Expired"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 className="mb-4 mt-8 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+                <Receipt className="h-4 w-4" style={{ color: COLORS.gold }} /> Payment records
+              </h3>
+
+              {paymentsLoading ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+              ) : payments.length === 0 ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No payment records yet.</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {payments.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
+                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
+                          {p.plan_name} — {p.currency === "USD" ? "$" : "₹"}{p.total_amount} via {p.gateway}
+                        </p>
+                        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                          {formatDate(p.created_at)} · Base {p.currency === "USD" ? "$" : "₹"}{p.base_amount}{Number(p.tax_amount) > 0 ? ` + Tax ${p.currency === "USD" ? "$" : "₹"}${p.tax_amount}` : ""}
+                          {p.reward_points_used > 0 && ` · ${p.reward_points_used} reward points used`}
+                        </p>
+                      </div>
+                      <span
+                        className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
+                        style={{
+                          background:
+                            p.status === "paid" ? "rgba(111,207,151,0.15)"
+                            : p.status === "failed" ? "rgba(248,113,113,0.15)"
+                            : "rgba(255,255,255,0.08)",
+                          color:
+                            p.status === "paid" ? "#6FCF97"
+                            : p.status === "failed" ? "#f87171"
+                            : "rgba(245,235,221,0.6)",
+                        }}
+                      >
+                        {p.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {checkoutPlan && (
@@ -457,6 +481,8 @@ export default function SubscriptionPage({ onBack }) {
           rewardPoints={rewardPoints}
           userEmail={profile.email}
           userPhone={profile.phone}
+          isIndia={isIndia}
+          exchangeRate={exchangeRate}
           onClose={() => setCheckoutPlan(null)}
           onSuccess={() => {
             setCheckoutPlan(null);
@@ -471,24 +497,36 @@ export default function SubscriptionPage({ onBack }) {
 
 // ---------------------------------------------------------------------------
 // CheckoutModal — the real payment flow. Opened by clicking
-// Subscribe/Switch on a plan card. Shows a fresh reward-redemption choice,
-// server-computed tax (GST, rate from /api/tax-config), and the final
-// total, then hands off to Razorpay's checkout widget. Stripe is shown as
-// a second option but disabled for now — Razorpay is the only gateway
-// actually wired up.
+// Subscribe/Switch on a plan card.
+//
+// India accounts: reward-redemption choice, server-computed GST (rate
+// from /api/tax-config), final total in ₹, hands off to Razorpay's
+// checkout widget.
+//
+// Every other country: reward-redemption still available (points are
+// always earned/spent in ₹ terms, converted to their USD-equivalent
+// discount), no GST line (GST doesn't apply outside India), total shown
+// in $ using the fixed exchange rate from /api/exchange-rate, hands off
+// to a real Stripe Checkout session (hosted redirect — the browser
+// navigates to Stripe's own payment page, then Stripe redirects back to
+// theomy.com/stripe/success on completion).
 // ---------------------------------------------------------------------------
-function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userEmail, userPhone, onClose, onSuccess }) {
+function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userEmail, userPhone, isIndia, exchangeRate, onClose, onSuccess }) {
   const [useRewards, setUseRewards] = useState(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
 
   const monthly = plan.basePrice + (screens - 1) * plan.perExtraScreen;
-  const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
-  const pointsUsed = useRewards ? Math.min(rewardPoints, preRewards) : 0;
-  const taxableAmount = preRewards - pointsUsed;
+  const preRewardsInr = Math.round(monthly * duration.months * (1 - duration.discount));
+  const pointsUsed = useRewards ? Math.min(rewardPoints, preRewardsInr) : 0;
+  const taxableInr = preRewardsInr - pointsUsed;
+
   const gstPercent = taxConfig ? Number(taxConfig.gst_percent) : 18;
-  const taxAmount = Math.round((taxableAmount * gstPercent) / 100);
-  const total = taxableAmount + taxAmount;
+  const taxAmountInr = isIndia ? Math.round((taxableInr * gstPercent) / 100) : 0;
+  const totalInr = taxableInr + taxAmountInr;
+
+  const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
+  const totalUsd = Math.round((taxableInr / rate) * 100) / 100;
 
   const handlePayWithRazorpay = async () => {
     setError("");
@@ -544,6 +582,26 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
     }
   };
 
+  const handlePayWithStripe = async () => {
+    setError("");
+    setPaying(true);
+    try {
+      const session = await createStripeCheckoutSession({
+        planName: plan.name,
+        durationLabel: duration.label,
+        screens,
+        rewardPointsRequested: pointsUsed,
+      });
+      // Hosted redirect — the browser leaves theomy.com entirely, pays on
+      // Stripe's own page, then Stripe sends it back to
+      // theomy.com/stripe/success?session_id=... on completion.
+      window.location.href = session.checkout_url;
+    } catch (err) {
+      setError(err.message || "Couldn't start checkout. Please try again.");
+      setPaying(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(10,1,4,0.8)" }}>
       <div
@@ -567,7 +625,7 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
           >
             <Gift className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
             <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
-              Redeem {Math.min(rewardPoints, preRewards)} reward points (₹{Math.min(rewardPoints, preRewards)} off)
+              Redeem {Math.min(rewardPoints, preRewardsInr)} reward points (₹{Math.min(rewardPoints, preRewardsInr)} off)
             </span>
             <div
               className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
@@ -582,20 +640,41 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
         )}
 
         <div className="mb-4 flex flex-col gap-1.5 rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(255,255,255,0.03)" }}>
-          <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
-            <span>Plan price</span><span>₹{preRewards}</span>
-          </div>
-          {pointsUsed > 0 && (
-            <div className="flex justify-between" style={{ color: COLORS.gold }}>
-              <span>Reward points applied</span><span>− ₹{pointsUsed}</span>
-            </div>
+          {isIndia ? (
+            <>
+              <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
+                <span>Plan price</span><span>₹{preRewardsInr}</span>
+              </div>
+              {pointsUsed > 0 && (
+                <div className="flex justify-between" style={{ color: COLORS.gold }}>
+                  <span>Reward points applied</span><span>− ₹{pointsUsed}</span>
+                </div>
+              )}
+              <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
+                <span>GST ({gstPercent}%)</span><span>₹{taxAmountInr}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold" style={{ borderColor: "rgba(255,255,255,0.1)", color: COLORS.cream }}>
+                <span>Total</span><span>₹{totalInr}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
+                <span>Plan price</span><span>${Math.round((preRewardsInr / rate) * 100) / 100}</span>
+              </div>
+              {pointsUsed > 0 && (
+                <div className="flex justify-between" style={{ color: COLORS.gold }}>
+                  <span>Reward points applied</span><span>− ${Math.round((pointsUsed / rate) * 100) / 100}</span>
+                </div>
+              )}
+              <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold" style={{ borderColor: "rgba(255,255,255,0.1)", color: COLORS.cream }}>
+                <span>Total</span><span>${totalUsd}</span>
+              </div>
+              <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                Converted at ₹{rate}/USD. No GST applies outside India.
+              </p>
+            </>
           )}
-          <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
-            <span>GST ({gstPercent}%)</span><span>₹{taxAmount}</span>
-          </div>
-          <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold" style={{ borderColor: "rgba(255,255,255,0.1)", color: COLORS.cream }}>
-            <span>Total</span><span>₹{total}</span>
-          </div>
         </div>
 
         {error && (
@@ -603,23 +682,31 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
         )}
 
         <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            disabled={paying}
-            onClick={handlePayWithRazorpay}
-            className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-          >
-            {paying ? "Processing…" : `Pay ₹${total} with Razorpay`}
-          </button>
-          <button
-            type="button"
-            disabled
-            className="rounded-full px-5 py-2.5 text-sm font-semibold opacity-40"
-            style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
-          >
-            Pay with Stripe (coming soon)
-          </button>
+          {isIndia ? (
+            <button
+              type="button"
+              disabled={paying}
+              onClick={handlePayWithRazorpay}
+              className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+            >
+              {paying ? "Processing…" : `Pay ₹${totalInr} with Razorpay`}
+            </button>
+          ) : (
+            <div>
+              <button
+                type="button"
+                disabled
+                className="w-full rounded-full px-5 py-2.5 text-sm font-semibold opacity-50"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              >
+                International payments coming soon
+              </button>
+              <p className="mt-2 text-center text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                We're setting up secure international checkout. Please check back shortly.
+              </p>
+            </div>
+          )}
           <button
             type="button"
             disabled={paying}

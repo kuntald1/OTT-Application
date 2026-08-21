@@ -169,6 +169,31 @@ export function fetchTaxConfig() {
   return request("/tax-config");
 }
 
+export function fetchExchangeRate() {
+  return request("/exchange-rate");
+}
+
+export function createStripeCheckoutSession({ planName, durationLabel, screens, rewardPointsRequested }) {
+  return request("/payments/stripe/create-checkout-session", {
+    method: "POST",
+    auth: true,
+    body: {
+      plan_name: planName,
+      duration_label: durationLabel,
+      screens,
+      reward_points_requested: rewardPointsRequested,
+    },
+  });
+}
+
+export function confirmStripePayment(sessionId) {
+  return request("/payments/stripe/confirm", {
+    method: "POST",
+    auth: true,
+    body: { session_id: sessionId },
+  });
+}
+
 export function fetchBlogs() {
   return request("/blogs");
 }

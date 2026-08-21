@@ -44,6 +44,7 @@ function toProfile(user, existingPhoto = null) {
     name: user.name,
     email: user.email,
     phone: user.phone || "",
+    country: user.country || "India",
     role: user.role,
     photo: user.profile_photo_url || existingPhoto,
   };
@@ -71,7 +72,7 @@ function toTicketDisplay(ticket) {
 
 export function AppProvider({ children }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [profile, setProfile] = useState({ id: null, name: "", email: "", photo: null, role: "User" });
+  const [profile, setProfile] = useState({ id: null, name: "", email: "", photo: null, role: "User", country: "India" });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(true); // true while we check for an existing session
   const [authError, setAuthError] = useState("");
@@ -83,6 +84,7 @@ export function AppProvider({ children }) {
   const [activeDuration, setActiveDuration] = useState(null); // e.g. "1 Month", "6 Months", "1 Year"
   const [activeScreens, setActiveScreens] = useState(null);
   const [activePrice, setActivePrice] = useState(null);
+  const [activeCurrency, setActiveCurrency] = useState("INR");
   const [rewardPoints, setRewardPoints] = useState(250); // demo starting balance, 1 point = ₹1
   const [rooms, setRooms] = useState([]); // summary list: {id, title, createdBy, postCount} — fetched from backend
   const [donations, setDonations] = useState([]); // [{ id, organiserId, organiserName, amount, date }]
@@ -117,6 +119,7 @@ export function AppProvider({ children }) {
         setActiveDuration(sub.duration_label);
         setActiveScreens(sub.screens);
         setActivePrice(Number(sub.price));
+        setActiveCurrency(sub.currency || "INR");
       } else {
         setIsSubscribed(false);
       }
@@ -229,13 +232,14 @@ export function AppProvider({ children }) {
   const logout = useCallback(() => {
     setToken(null);
     setIsLoggedIn(false);
-    setProfile({ id: null, name: "", email: "", photo: null, role: "User" });
+    setProfile({ id: null, name: "", email: "", photo: null, role: "User", country: "India" });
     setTickets([]);
     setIsSubscribed(false);
     setActivePlan(null);
     setActiveDuration(null);
     setActiveScreens(null);
     setActivePrice(null);
+    setActiveCurrency("INR");
   }, []);
 
   // Persists the plan choice to the backend (no payment gateway yet — this
@@ -335,7 +339,7 @@ export function AppProvider({ children }) {
     requestLogin, closeLoginModal, login, loginWithOtp, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
-    isSubscribed, activePlan, activeDuration, activeScreens, activePrice, subscribe, refreshSubscription,
+    isSubscribed, activePlan, activeDuration, activeScreens, activePrice, activeCurrency, subscribe, refreshSubscription,
     rewardPoints, redeemRewardPoints,
     rooms, createRoom,
     donations, addDonation,
