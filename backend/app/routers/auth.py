@@ -37,6 +37,14 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
             detail="An account with this email already exists",
         )
 
+    if payload.phone:
+        existing_phone = db.query(User).filter(User.phone == payload.phone).first()
+        if existing_phone:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this phone number already exists",
+            )
+
     # India requires a verified phone number via WhatsApp OTP. Other
     # countries keep phone optional with no OTP step — this mirrors what
     # the frontend enforces, but re-checked here since the frontend can't

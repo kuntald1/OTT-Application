@@ -28,8 +28,11 @@ class User(Base):
     name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
 
-    # Optional, as requested — not mandatory at registration
-    phone = Column(String(20), nullable=True)
+    # Optional (null allowed — required only for India registrations, see
+    # UserRegister). Unique when set: Postgres unique constraints allow
+    # any number of NULLs, they only reject duplicate non-null values, so
+    # this doesn't conflict with phone being optional for other countries.
+    phone = Column(String(20), unique=True, nullable=True, index=True)
 
     # Null for users who only ever sign in via Google/Facebook
     hashed_password = Column(String(255), nullable=True)
