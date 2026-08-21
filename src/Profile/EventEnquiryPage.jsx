@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle2, Upload, X, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Upload, X, Plus, Trash2, ChevronDown, Paperclip } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
 import { submitEventEnquiry, fetchMyEventEnquiries } from "../api";
@@ -55,6 +55,7 @@ export default function EventEnquiryPage({ onBack }) {
     remarks: "",
   });
   const [tiers, setTiers] = useState([makeEmptyTier()]);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -210,12 +211,42 @@ export default function EventEnquiryPage({ onBack }) {
               </div>
               <div>
                 <label style={labelStyle}>Category *</label>
-                <select value={form.event_category} onChange={update("event_category")} style={inputStyle}>
-                  <option value="">Select a category</option>
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryOpen((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm"
+                    style={{
+                      borderColor: "rgba(245,235,221,0.15)",
+                      background: "rgba(245,235,221,0.05)",
+                      color: form.event_category ? COLORS.cream : "rgba(245,235,221,0.4)",
+                    }}
+                  >
+                    {form.event_category || "Select a category"}
+                    <ChevronDown className={`h-4 w-4 transition-transform ${categoryOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {categoryOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setCategoryOpen(false)} />
+                      <div
+                        className="absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded-xl"
+                        style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.25)` }}
+                      >
+                        {CATEGORIES.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => { setForm((f) => ({ ...f, event_category: c })); setCategoryOpen(false); }}
+                            className="block w-full px-4 py-2.5 text-left text-sm hover:bg-white/10"
+                            style={{ color: form.event_category === c ? COLORS.gold : "rgba(245,235,221,0.85)" }}
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Description</label>
@@ -361,6 +392,22 @@ export default function EventEnquiryPage({ onBack }) {
                       <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
                         {h.ticket_tiers.map((t) => `${t.tier_name} ₹${t.price} × ${t.quantity}`).join(" · ")}
                       </p>
+                    )}
+                    {h.attachments.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {h.attachments.map((a) => (
+                          <a
+                            key={a.id}
+                            href={a.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs hover:opacity-80"
+                            style={{ background: "rgba(212,175,55,0.1)", color: COLORS.gold, border: "1px solid rgba(212,175,55,0.25)" }}
+                          >
+                            <Paperclip className="h-3 w-3" /> {a.original_filename}
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
                 );
