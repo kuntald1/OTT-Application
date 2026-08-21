@@ -47,6 +47,7 @@ function toProfile(user, existingPhoto = null) {
     country: user.country || "India",
     role: user.role,
     photo: user.profile_photo_url || existingPhoto,
+    rewardPoints: user.reward_points_balance ?? 0,
   };
 }
 
@@ -85,7 +86,6 @@ export function AppProvider({ children }) {
   const [activeScreens, setActiveScreens] = useState(null);
   const [activePrice, setActivePrice] = useState(null);
   const [activeCurrency, setActiveCurrency] = useState("INR");
-  const [rewardPoints, setRewardPoints] = useState(250); // demo starting balance, 1 point = ₹1
   const [rooms, setRooms] = useState([]); // summary list: {id, title, createdBy, postCount} — fetched from backend
   const [donations, setDonations] = useState([]); // [{ id, organiserId, organiserName, amount, date }]
 
@@ -253,12 +253,19 @@ export function AppProvider({ children }) {
     setActivePrice(Number(sub.price));
   }, []);
 
-  // Rewards — 1 point = ₹1. Redeeming deducts the used points from the
-  // balance; the caller is responsible for computing how many points to use
-  // (typically min(balance, order total) so it never goes negative).
-  // Still local-only — no rewards ledger on the backend yet.
-  const redeemRewardPoints = useCallback((amount) => {
-    setRewardPoints((p) => Math.max(0, p - amount));
+  // Reward points are now a real backend-tracked balance (1 point = ₹1),
+  // earned automatically on successful subscription payments and
+  // deducted automatically when redeemed at checkout — both happen
+  // server-side in the payment-verification endpoint, never here. After
+  // a successful payment, call this to pull the updated balance (and any
+  // other profile fields that might have changed) from the backend.
+  const refreshProfile = useCallback(async () => {
+    try {
+      const user = await fetchCurrentUser();
+      setProfile((p) => toProfile(user, p.photo));
+    } catch {
+      // Non-fatal — the page just keeps showing the last-known balance
+    }
   }, []);
 
   // Uploads the photo to the backend and stores the real, persisted URL —
@@ -340,7 +347,7 @@ export function AppProvider({ children }) {
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
     isSubscribed, activePlan, activeDuration, activeScreens, activePrice, activeCurrency, subscribe, refreshSubscription,
-    rewardPoints, redeemRewardPoints,
+    refreshProfile,
     rooms, createRoom,
     donations, addDonation,
   };

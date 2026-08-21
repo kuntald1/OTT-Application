@@ -31,7 +31,7 @@ export default function SubscriptionPage({ onBack }) {
   const [error, setError] = useState("");
   const {
     isLoggedIn, requestLogin, isSubscribed, activePlan, activeDuration, activeScreens, activePrice, activeCurrency,
-    subscribe, refreshSubscription, rewardPoints, redeemRewardPoints, profile,
+    subscribe, refreshSubscription, refreshProfile, profile,
   } = useApp();
 
   const isIndia = profile.country === "India";
@@ -120,7 +120,7 @@ export default function SubscriptionPage({ onBack }) {
     // INR — always computed from the plan's own INR base price
     const monthly = plan.basePrice + (count - 1) * plan.perExtraScreen;
     const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
-    const pointsUsed = useRewards ? Math.min(rewardPoints, preRewards) : 0;
+    const pointsUsed = useRewards ? Math.min(profile.rewardPoints, preRewards) : 0;
     const total = preRewards - pointsUsed;
 
     // USD — computed from the plan's own USD base price (set directly by
@@ -217,7 +217,7 @@ export default function SubscriptionPage({ onBack }) {
         </div>
 
         {/* Rewards redemption toggle */}
-        {rewardPoints > 0 && (
+        {profile.rewardPoints > 0 && (
           <button
             type="button"
             onClick={() => setUseRewards((v) => !v)}
@@ -235,7 +235,7 @@ export default function SubscriptionPage({ onBack }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                You have {rewardPoints} reward points (₹{rewardPoints})
+                You have {profile.rewardPoints} reward points (₹{profile.rewardPoints})
               </p>
               <p className="text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
                 {useRewards ? "Applying to your total below — tap to remove" : "Tap to redeem toward this subscription"}
@@ -299,7 +299,7 @@ export default function SubscriptionPage({ onBack }) {
                 </div>
                 {pointsUsed > 0 && (
                   <p className="mt-0.5 text-[11px] font-medium" style={{ color: COLORS.gold }}>
-                    − ₹{pointsUsed} reward points applied
+                    − {isIndia ? `₹${pointsUsed}` : `$${pointsUsedUsd}`} reward points applied
                   </p>
                 )}
                 {duration.months > 1 && (
@@ -487,7 +487,7 @@ export default function SubscriptionPage({ onBack }) {
           duration={duration}
           screens={screens[checkoutPlan.name] || 1}
           taxConfig={taxConfig}
-          rewardPoints={rewardPoints}
+          rewardPoints={profile.rewardPoints}
           userEmail={profile.email}
           userPhone={profile.phone}
           isIndia={isIndia}
@@ -496,6 +496,7 @@ export default function SubscriptionPage({ onBack }) {
           onSuccess={() => {
             setCheckoutPlan(null);
             refreshSubscription();
+            refreshProfile();
             loadHistoryAndPayments();
           }}
         />

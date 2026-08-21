@@ -43,6 +43,12 @@ class User(Base):
     profile_photo_url = Column(String(500), nullable=True)
     country = Column(String(100), nullable=False, default="India")
 
+    # Real per-user reward balance. 1 point = ₹1. Earned automatically on
+    # successful payments (see RewardConfig below for the earn rate),
+    # deducted automatically when redeemed at checkout. Starts at 0 for
+    # everyone — no demo starting balance anymore.
+    reward_points_balance = Column(Integer, nullable=False, default=0)
+
     auth_provider = Column(
         Enum(AuthProvider), nullable=False, default=AuthProvider.local
     )
@@ -530,6 +536,33 @@ class ExchangeRateConfig(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     inr_per_usd = Column(Numeric(10, 4), nullable=False, default=Decimal("83.5000"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class RewardConfig(Base):
+    """Single-row master table defining how many reward points get
+    earned, as a percentage of the amount paid. 1 point = ₹1.
+
+    subscription_reward_percent — applied on successful subscription
+    payments (wired up now, Razorpay/India path — the Stripe/non-India
+    path doesn't earn points yet since points are ₹-denominated and
+    Stripe checkout is currently paused).
+
+    ticket_reward_percent — intended for ticket booking purchases. NOT
+    wired to anything yet: theomy doesn't have a real ticket
+    booking/payment flow built currently (the Theater/Ticketing section
+    is demo content). This column exists so the rate is ready to use the
+    moment that feature gets built, without another schema change.
+    """
+    __tablename__ = "reward_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    subscription_reward_percent = Column(Numeric(5, 2), nullable=False, default=20)
+    ticket_reward_percent = Column(Numeric(5, 2), nullable=False, default=5)
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

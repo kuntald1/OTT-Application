@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig
+from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig
 from app.security import hash_password
 
 
@@ -263,6 +263,16 @@ def seed_exchange_rate(db):
     print("Seeded exchange rate: 83.50 INR/USD.")
 
 
+def seed_reward_config(db):
+    existing = db.query(RewardConfig).first()
+    if existing:
+        print(f"Reward config already exists (subscription={existing.subscription_reward_percent}%, ticket={existing.ticket_reward_percent}%), skipping.")
+        return
+    db.add(RewardConfig(subscription_reward_percent=20, ticket_reward_percent=5))
+    db.commit()
+    print("Seeded reward config: 20% on subscriptions, 5% on ticket bookings.")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
@@ -273,5 +283,6 @@ if __name__ == "__main__":
         seed_community_rooms(db)
         seed_revenue_rate(db)
         seed_exchange_rate(db)
+        seed_reward_config(db)
     finally:
         db.close()

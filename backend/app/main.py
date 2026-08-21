@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
-from app.routers import auth, oauth, tickets, subscriptions, menus, plans, payments, tax, blogs, community, organisers, donations, revenue, withdrawals, event_enquiries, otp
+from app.routers import auth, oauth, tickets, subscriptions, menus, plans, payments, tax, blogs, community, organisers, donations, revenue, withdrawals, event_enquiries, otp, exchange_rate, stripe_payments, reward_config
 
 # Creates the `users` table on startup if it doesn't already exist.
 # For future schema changes, switch to Alembic migrations instead of
@@ -38,6 +38,9 @@ app.include_router(revenue.router, prefix="/api")
 app.include_router(withdrawals.router, prefix="/api")
 app.include_router(event_enquiries.router, prefix="/api")
 app.include_router(otp.router, prefix="/api")
+app.include_router(exchange_rate.router, prefix="/api")
+app.include_router(stripe_payments.router, prefix="/api")
+app.include_router(reward_config.router, prefix="/api")
 
 # Serves uploaded profile photos at /api/uploads/... — the "uploads" folder
 # on disk is bind-mounted from the host (see docker-compose.yml), so files

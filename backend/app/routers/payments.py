@@ -12,7 +12,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, Payment, PaymentStatus, PaymentGateway,
-    SubscriptionPlan, Subscription, TaxConfig,
+    SubscriptionPlan, Subscription, TaxConfig, RewardConfig,
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
 from app.schemas import PaymentOut, CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest
@@ -69,6 +69,12 @@ def create_razorpay_order(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.country != "India":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay is only available for India accounts. Please use Stripe.",
+        )
+
     plan = db.query(SubscriptionPlan).filter(
         SubscriptionPlan.name == payload.plan_name, SubscriptionPlan.is_active == True  # noqa: E712
     ).first()
@@ -188,6 +194,19 @@ def verify_razorpay_payment(
     db.add(subscription)
     db.flush()
     payment.subscription_id = subscription.id
+
+    # Reward points — deduct what was redeemed for this purchase, then
+    # award new points earned from it (rate from the reward_config master
+    # table, defaults to 20% if no row exists yet). Both happen only here,
+    # on confirmed payment — never at order creation, so an
+    # abandoned/failed checkout never touches the balance.
+    reward_config = db.query(RewardConfig).first()
+    earn_percent = reward_config.subscription_reward_percent if reward_config else Decimal("20")
+    points_earned = int((payment.total_amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    current_user.reward_points_balance = max(
+        0, current_user.reward_points_balance - payment.reward_points_used
+    ) + points_earned
 
     db.commit()
     db.refresh(payment)

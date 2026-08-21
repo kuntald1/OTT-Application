@@ -65,6 +65,7 @@ class UserOut(BaseModel):
     role: UserRole
     auth_provider: str
     profile_photo_url: Optional[str] = None
+    reward_points_balance: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -418,3 +419,8 @@ class StripeCreateSessionResponse(BaseModel):
 
 class StripeConfirmRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=255)
+
+
+class RewardConfigOut(BaseModel):
+    subscription_reward_percent: Decimal
+    ticket_reward_percent: Decimal
