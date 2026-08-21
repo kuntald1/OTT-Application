@@ -109,6 +109,7 @@ class SubscriptionOut(BaseModel):
     duration_label: str
     screens: int
     price: Decimal
+    currency: str
     is_active: bool
     started_at: datetime
     expires_at: datetime
@@ -134,6 +135,8 @@ class SubscriptionPlanOut(BaseModel):
     tagline: Optional[str] = None
     base_price: Decimal
     per_extra_screen: Decimal
+    base_price_usd: Decimal
+    per_extra_screen_usd: Decimal
     features: List[str]
     highlighted: bool
     display_order: int
@@ -391,3 +394,27 @@ class SendOtpRequest(BaseModel):
 class VerifyOtpLoginRequest(BaseModel):
     phone: str = Field(min_length=6, max_length=20)
     otp: str = Field(min_length=4, max_length=6)
+
+
+class ExchangeRateOut(BaseModel):
+    inr_per_usd: Decimal
+
+
+class StripeCreateSessionRequest(BaseModel):
+    plan_name: str = Field(min_length=1, max_length=50)
+    duration_label: str = Field(min_length=1, max_length=50)
+    screens: int = Field(default=1, ge=1, le=10)
+    reward_points_requested: int = Field(default=0, ge=0)
+
+
+class StripeCreateSessionResponse(BaseModel):
+    payment_id: uuid.UUID
+    checkout_url: str
+    amount_usd: Decimal
+    plan_name: str
+    duration_label: str
+    screens: int
+
+
+class StripeConfirmRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=255)

@@ -41,15 +41,6 @@ export default function SubscriptionPage({ onBack }) {
     fetchExchangeRate().then(setExchangeRate).catch(() => setExchangeRate({ inr_per_usd: 83.5 }));
   }, []);
 
-  // Converts an INR amount to its USD equivalent for display, rounded to
-  // 2 decimal places — only used when the logged-in account's country
-  // isn't India.
-  const toUsd = (inrAmount) => {
-    const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
-    return Math.round((inrAmount / rate) * 100) / 100;
-  };
-  const fmtPrice = (inrAmount) => (isIndia ? `₹${inrAmount}` : `$${toUsd(inrAmount)}`);
-
   useEffect(() => {
     fetchSubscriptionPlans()
       .then((data) => {
@@ -60,6 +51,8 @@ export default function SubscriptionPage({ onBack }) {
           name: p.name,
           basePrice: Number(p.base_price),
           perExtraScreen: Number(p.per_extra_screen),
+          basePriceUsd: Number(p.base_price_usd),
+          perExtraScreenUsd: Number(p.per_extra_screen_usd),
           tagline: p.tagline,
           features: p.features,
           highlighted: p.highlighted,
@@ -123,11 +116,25 @@ export default function SubscriptionPage({ onBack }) {
 
   const priceFor = (plan) => {
     const count = screens[plan.name] || 1;
+
+    // INR — always computed from the plan's own INR base price
     const monthly = plan.basePrice + (count - 1) * plan.perExtraScreen;
     const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
     const pointsUsed = useRewards ? Math.min(rewardPoints, preRewards) : 0;
     const total = preRewards - pointsUsed;
-    return { monthly, preRewards, pointsUsed, total };
+
+    // USD — computed from the plan's own USD base price (set directly by
+    // the admin), NOT derived by converting the INR total. Reward points
+    // are still earned/valued in ₹ terms platform-wide, so their discount
+    // is converted to its USD-equivalent using the exchange rate — that's
+    // the one place a conversion rate is still used for USD pricing.
+    const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
+    const monthlyUsd = plan.basePriceUsd + (count - 1) * plan.perExtraScreenUsd;
+    const preRewardsUsd = Math.round(monthlyUsd * duration.months * (1 - duration.discount) * 100) / 100;
+    const pointsUsedUsd = pointsUsed > 0 ? Math.round((pointsUsed / rate) * 100) / 100 : 0;
+    const totalUsd = Math.max(0, Math.round((preRewardsUsd - pointsUsedUsd) * 100) / 100);
+
+    return { monthly, preRewards, pointsUsed, total, preRewardsUsd, pointsUsedUsd, totalUsd };
   };
 
   const handleSubscribe = (plan) => {
@@ -258,7 +265,7 @@ export default function SubscriptionPage({ onBack }) {
         <div className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-3">
           {plans.map((plan) => {
             const count = screens[plan.name] || 1;
-            const { monthly, preRewards, pointsUsed, total } = priceFor(plan);
+            const { monthly, preRewards, pointsUsed, total, preRewardsUsd, pointsUsedUsd, totalUsd } = priceFor(plan);
             const isCurrent = activePlan === plan.name && activeDuration === duration.label && activeScreens === count;
             return (
               <div
@@ -283,9 +290,9 @@ export default function SubscriptionPage({ onBack }) {
 
                 <div className="mt-5 flex items-baseline gap-2">
                   {pointsUsed > 0 && (
-                    <span className="text-base line-through" style={{ color: "rgba(245,235,221,0.35)" }}>{fmtPrice(preRewards)}</span>
+                    <span className="text-base line-through" style={{ color: "rgba(245,235,221,0.35)" }}>{isIndia ? `₹${preRewards}` : `$${preRewardsUsd}`}</span>
                   )}
-                  <span className="text-3xl font-semibold" style={{ color: COLORS.cream }}>{fmtPrice(total)}</span>
+                  <span className="text-3xl font-semibold" style={{ color: COLORS.cream }}>{isIndia ? `₹${total}` : `$${totalUsd}`}</span>
                   <span className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
                     /{duration.months === 1 ? "month" : duration.label.toLowerCase()}
                   </span>
@@ -297,7 +304,7 @@ export default function SubscriptionPage({ onBack }) {
                 )}
                 {duration.months > 1 && (
                   <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>
-                    ≈ {fmtPrice(Math.round(preRewards / duration.months))}/month before rewards · save {Math.round(duration.discount * 100)}%
+                    ≈ {isIndia ? `₹${Math.round(preRewards / duration.months)}` : `$${Math.round((preRewardsUsd / duration.months) * 100) / 100}`}/month before rewards · save {Math.round(duration.discount * 100)}%
                   </p>
                 )}
                 <p className="mt-1 text-xs" style={{ color: COLORS.gold }}>Unlimited</p>
@@ -362,7 +369,7 @@ export default function SubscriptionPage({ onBack }) {
                         : { border: `1px solid ${COLORS.gold}`, color: COLORS.gold }
                     }
                   >
-                    {subscribing ? "Activating…" : isSubscribed ? "Switch to this plan" : `Subscribe — ${fmtPrice(total)}`}
+                    {subscribing ? "Activating…" : isSubscribed ? "Switch to this plan" : `Subscribe — ${isIndia ? `₹${total}` : `$${totalUsd}`}`}
                   </button>
                 )}
               </div>
@@ -525,8 +532,16 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
   const taxAmountInr = isIndia ? Math.round((taxableInr * gstPercent) / 100) : 0;
   const totalInr = taxableInr + taxAmountInr;
 
+  // USD — from the plan's own USD price, not converted from the INR
+  // total. Reward points are still valued in ₹ (that's how they're
+  // earned platform-wide), so their discount is converted to its
+  // USD-equivalent using the exchange rate — the one place a conversion
+  // rate is still used on the USD side.
   const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
-  const totalUsd = Math.round((taxableInr / rate) * 100) / 100;
+  const monthlyUsd = plan.basePriceUsd + (screens - 1) * plan.perExtraScreenUsd;
+  const preRewardsUsd = Math.round(monthlyUsd * duration.months * (1 - duration.discount) * 100) / 100;
+  const pointsUsedUsd = pointsUsed > 0 ? Math.round((pointsUsed / rate) * 100) / 100 : 0;
+  const totalUsd = Math.max(0, Math.round((preRewardsUsd - pointsUsedUsd) * 100) / 100);
 
   const handlePayWithRazorpay = async () => {
     setError("");
@@ -660,18 +675,18 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
           ) : (
             <>
               <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
-                <span>Plan price</span><span>${Math.round((preRewardsInr / rate) * 100) / 100}</span>
+                <span>Plan price</span><span>${preRewardsUsd}</span>
               </div>
               {pointsUsed > 0 && (
                 <div className="flex justify-between" style={{ color: COLORS.gold }}>
-                  <span>Reward points applied</span><span>− ${Math.round((pointsUsed / rate) * 100) / 100}</span>
+                  <span>Reward points applied</span><span>− ${pointsUsedUsd}</span>
                 </div>
               )}
               <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold" style={{ borderColor: "rgba(255,255,255,0.1)", color: COLORS.cream }}>
                 <span>Total</span><span>${totalUsd}</span>
               </div>
               <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
-                Converted at ₹{rate}/USD. No GST applies outside India.
+                No GST applies outside India.
               </p>
             </>
           )}

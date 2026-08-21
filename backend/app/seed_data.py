@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig
+from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig
 from app.security import hash_password
 
 
@@ -83,6 +83,8 @@ def seed_subscription_plans(db):
             "tagline": "Unlimited Video Streaming",
             "base_price": 100,
             "per_extra_screen": 60,
+            "base_price_usd": 2.99,
+            "per_extra_screen_usd": 1.49,
             "features": ["Unlimited access to all Play content", "New titles added weekly"],
             "highlighted": False,
             "display_order": 0,
@@ -92,6 +94,8 @@ def seed_subscription_plans(db):
             "tagline": "Unlimited Archive access",
             "base_price": 100,
             "per_extra_screen": 60,
+            "base_price_usd": 2.99,
+            "per_extra_screen_usd": 1.49,
             "features": ["Unlimited access to old & restored footage", "Vintage recordings added regularly"],
             "highlighted": False,
             "display_order": 1,
@@ -101,6 +105,8 @@ def seed_subscription_plans(db):
             "tagline": "Play + Archive, unlimited",
             "base_price": 150,
             "per_extra_screen": 90,
+            "base_price_usd": 4.49,
+            "per_extra_screen_usd": 2.29,
             "features": ["Everything in Play", "Everything in Archive", "Best value vs buying separately"],
             "highlighted": True,
             "display_order": 2,
@@ -247,6 +253,16 @@ def seed_revenue_rate(db):
     print("Seeded revenue rate: 7 paisa/min.")
 
 
+def seed_exchange_rate(db):
+    existing = db.query(ExchangeRateConfig).first()
+    if existing:
+        print(f"Exchange rate already exists ({existing.inr_per_usd} INR/USD), skipping.")
+        return
+    db.add(ExchangeRateConfig(inr_per_usd=83.5))
+    db.commit()
+    print("Seeded exchange rate: 83.50 INR/USD.")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
@@ -256,5 +272,6 @@ if __name__ == "__main__":
         seed_blogs(db)
         seed_community_rooms(db)
         seed_revenue_rate(db)
+        seed_exchange_rate(db)
     finally:
         db.close()

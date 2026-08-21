@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import Column, String, DateTime, Enum, Boolean, ForeignKey, Integer, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -99,6 +100,7 @@ class Subscription(Base):
     duration_label = Column(String(50), nullable=False)  # "1 Month" | "6 Months" | "1 Year"
     screens = Column(Integer, nullable=False, default=1)
     price = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(3), nullable=False, default="INR")
 
     is_active = Column(Boolean, nullable=False, default=True)
     started_at = Column(
@@ -158,6 +160,13 @@ class SubscriptionPlan(Base):
 
     base_price = Column(Numeric(10, 2), nullable=False)
     per_extra_screen = Column(Numeric(10, 2), nullable=False, default=0)
+
+    # Explicit USD pricing — set directly by the admin, NOT computed from
+    # base_price via an exchange rate. This lets pricing outside India be
+    # deliberately chosen (e.g. rounded to a market-appropriate $ price)
+    # rather than always being a mechanical INR/rate conversion.
+    base_price_usd = Column(Numeric(10, 2), nullable=False, default=0)
+    per_extra_screen_usd = Column(Numeric(10, 2), nullable=False, default=0)
 
     # List of feature bullet strings, e.g. ["Unlimited access to all Play content", ...]
     features = Column(JSONB, nullable=False, default=list)
@@ -508,4 +517,21 @@ class OtpVerification(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class ExchangeRateConfig(Base):
+    """Single-row table holding the fixed INR-per-USD rate used to convert
+    displayed/charged prices for non-India accounts. This is a fixed rate
+    YOU set (not a live market feed) — update this row whenever you want
+    to adjust it; the Subscription page always reads the latest value.
+    """
+    __tablename__ = "exchange_rate_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    inr_per_usd = Column(Numeric(10, 4), nullable=False, default=Decimal("83.5000"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
