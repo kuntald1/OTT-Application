@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,7 +12,11 @@ router = APIRouter(prefix="/tax-config", tags=["tax-config"])
 def get_tax_config(db: Session = Depends(get_db)):
     config = db.query(TaxConfig).first()
     if not config:
-        # No row seeded yet — fall back to a sane default rather than
-        # erroring out and breaking checkout entirely.
-        return TaxConfigOut(gst_percent=18)
+        # No silent fallback — if the config row is missing, say so
+        # clearly instead of quietly using a hardcoded number. Fix by
+        # running: docker compose exec theomy-backend python -m app.seed_data
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tax config is not set up. Run the seed script or insert a row into tax_config.",
+        )
     return config

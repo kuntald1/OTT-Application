@@ -82,7 +82,12 @@ def create_razorpay_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     tax_row = db.query(TaxConfig).first()
-    gst_percent = tax_row.gst_percent if tax_row else Decimal("18")
+    if not tax_row:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tax config is not set up. Run the seed script or insert a row into tax_config.",
+        )
+    gst_percent = tax_row.gst_percent
 
     base_amount, reward_used, tax_amount, total = _compute_pricing(
         plan, payload.duration_label, payload.screens, payload.reward_points_requested, gst_percent
@@ -197,12 +202,24 @@ def verify_razorpay_payment(
 
     # Reward points — deduct what was redeemed for this purchase, then
     # award new points earned from it (rate from the reward_config master
-    # table, defaults to 20% if no row exists yet). Both happen only here,
-    # on confirmed payment — never at order creation, so an
-    # abandoned/failed checkout never touches the balance.
+    # table). This runs AFTER payment is already confirmed and the
+    # subscription already created, so unlike the pre-payment checks
+    # above, we deliberately do NOT raise an error here if the config
+    # row is missing — a customer who already paid should never see a
+    # 500 error for something unrelated to their payment succeeding.
+    # Instead: award 0 points and log it loudly, so this gets noticed and
+    # fixed rather than silently pretending a percentage that isn't real.
     reward_config = db.query(RewardConfig).first()
-    earn_percent = reward_config.subscription_reward_percent if reward_config else Decimal("20")
-    points_earned = int((payment.total_amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    if reward_config:
+        earn_percent = reward_config.subscription_reward_percent
+        points_earned = int((payment.total_amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    else:
+        points_earned = 0
+        print(
+            f"WARNING: reward_config table is empty — payment {payment.id} for user "
+            f"{current_user.id} earned 0 reward points instead of the intended rate. "
+            f"Fix: docker compose exec theomy-backend python -m app.seed_data"
+        )
 
     current_user.reward_points_balance = max(
         0, current_user.reward_points_balance - payment.reward_points_used

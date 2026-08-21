@@ -69,7 +69,12 @@ def create_stripe_checkout_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
 
     rate_row = db.query(ExchangeRateConfig).first()
-    inr_per_usd = rate_row.inr_per_usd if rate_row else Decimal("83.5")
+    if not rate_row:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Exchange rate is not set up. Run the seed script or insert a row into exchange_rate_config.",
+        )
+    inr_per_usd = rate_row.inr_per_usd
 
     amount_usd = _compute_usd_pricing(plan, payload.duration_label, payload.screens, payload.reward_points_requested, inr_per_usd)
     if amount_usd <= 0:
