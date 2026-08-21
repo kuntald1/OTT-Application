@@ -86,3 +86,57 @@ Thank you for subscribing to theomy!
         _send_email(to_email, subject, text_body, html_body)
     except Exception:
         pass
+
+
+def send_event_enquiry_acknowledgement(to_email: str, org_name: str, event_title: str) -> None:
+    """Sends the "we received your enquiry" acknowledgement email after a
+    successful Event Listing Enquiry submission. Non-fatal on failure —
+    the on-screen acknowledgement is the primary confirmation; email is a
+    backup, so a delivery failure here should never fail the submission.
+    """
+    subject = "We've received your event listing enquiry — theomy"
+    text_body = f"""Hi,
+
+Thank you for submitting an event listing enquiry to theomy on behalf of {org_name}.
+
+Event: {event_title}
+
+Our team will review your submission and reach out to the contact details
+provided if we need any more information. If approved, we'll manually
+create the event listing and let you know.
+
+— theomy
+"""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">Enquiry received</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Thank you for submitting an event listing enquiry on behalf of <strong style="color:#f5ebdd;">{org_name}</strong>.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8); margin-bottom:20px;">
+              <tr><td style="padding:6px 0;">Event</td><td style="padding:6px 0; text-align:right; font-weight:600;">{event_title}</td></tr>
+              <tr><td style="padding:6px 0;">Status</td><td style="padding:6px 0; text-align:right;">Pending review</td></tr>
+            </table>
+            <p style="margin:0; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.6);">
+              Our team will review your submission and reach out to the contact details provided if we need more information. If approved, we'll manually create the event listing and let you know.
+            </p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass

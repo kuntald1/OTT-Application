@@ -396,3 +396,81 @@ class WithdrawalRequest(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     processed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+
+class EnquiryStatus(str, enum.Enum):
+    pending = "pending"
+    reviewed = "reviewed"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class EventEnquiry(Base):
+    """Event listing enquiry -- Content Creator / Plays Organiser only.
+    Only becomes a real, publicly visible event once status='approved' --
+    the Super Admin reviews these manually (no admin panel yet -- status
+    changes via direct DB update for now, same pattern as
+    WithdrawalRequest) and, if approved, the future public Events listing
+    page filters on status='approved' to decide what's visible.
+
+    event_category deliberately reuses the SAME category values as the
+    site's existing Category menu (Bengali Theatre, Drama, Comedy,
+    Musical Theatre, Classical Theatre, Experimental Theatre, Popular
+    Shows) rather than free text, so a future public listing page can
+    filter approved events by category using the exact same taxonomy
+    already in use elsewhere on theomy.
+    """
+    __tablename__ = "event_enquiries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submitted_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+
+    # Organisation & contact details
+    org_name = Column(String(255), nullable=False)
+    org_about = Column(Text, nullable=True)
+    contact_person = Column(String(255), nullable=False)
+    contact_email = Column(String(255), nullable=False)
+    contact_phone = Column(String(20), nullable=False)
+
+    # Event information
+    event_title = Column(String(255), nullable=False)
+    event_category = Column(String(100), nullable=False)
+    event_description = Column(Text, nullable=True)
+    proposed_date = Column(DateTime(timezone=True), nullable=False)
+    proposed_time = Column(String(20), nullable=True)  # free-text, e.g. "7:00 PM"
+    venue = Column(String(255), nullable=False)
+
+    remarks = Column(Text, nullable=True)
+
+    status = Column(Enum(EnquiryStatus), nullable=False, default=EnquiryStatus.pending)
+    admin_note = Column(String(500), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class EventTicketTier(Base):
+    """A single ticket category for an event enquiry, e.g. Normal ₹250 x40,
+    Executive ₹300 x35, Premium ₹350 x25. Multiple rows per enquiry.
+    """
+    __tablename__ = "event_ticket_tiers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enquiry_id = Column(UUID(as_uuid=True), ForeignKey("event_enquiries.id"), nullable=False, index=True)
+    tier_name = Column(String(100), nullable=False)  # e.g. "Normal", "Executive", "Premium"
+    price = Column(Numeric(10, 2), nullable=False)
+    quantity = Column(Integer, nullable=False)
+
+
+class EventEnquiryAttachment(Base):
+    __tablename__ = "event_enquiry_attachments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enquiry_id = Column(UUID(as_uuid=True), ForeignKey("event_enquiries.id"), nullable=False, index=True)
+    file_url = Column(String(500), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    uploaded_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

@@ -331,3 +331,48 @@ class WithdrawalRequestOut(BaseModel):
     processed_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+
+class EventEnquiryAttachmentOut(BaseModel):
+    id: uuid.UUID
+    file_url: str
+    original_filename: str
+
+    model_config = {"from_attributes": True}
+
+
+class TicketTierIn(BaseModel):
+    tier_name: str = Field(min_length=1, max_length=100)
+    price: Decimal = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class TicketTierOut(BaseModel):
+    id: uuid.UUID
+    tier_name: str
+    price: Decimal
+    quantity: int
+
+    model_config = {"from_attributes": True}
+
+
+class EventEnquiryOut(BaseModel):
+    id: uuid.UUID
+    org_name: str
+    org_about: Optional[str] = None
+    contact_person: str
+    contact_email: str
+    contact_phone: str
+    event_title: str
+    event_category: str
+    event_description: Optional[str] = None
+    proposed_date: datetime
+    proposed_time: Optional[str] = None
+    venue: str
+    remarks: Optional[str] = None
+    status: str
+    admin_note: Optional[str] = None
+    ticket_tiers: List[TicketTierOut]
+    attachments: List[EventEnquiryAttachmentOut]
+    created_at: datetime

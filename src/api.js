@@ -235,6 +235,33 @@ export function fetchWithdrawalHistory() {
   return request("/revenue/withdrawals", { auth: true });
 }
 
+export async function submitEventEnquiry(fields, ticketTiers, files) {
+  const token = getToken();
+  const formData = new FormData();
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      formData.append(key, value);
+    }
+  });
+  formData.append("ticket_tiers", JSON.stringify(ticketTiers));
+  (files || []).forEach((file) => formData.append("files", file));
+
+  const res = await fetch(`${BASE_URL}/event-enquiries`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't submit enquiry. Please try again.");
+  }
+  return data;
+}
+
+export function fetchMyEventEnquiries() {
+  return request("/event-enquiries", { auth: true });
+}
+
 export function createDonationOrder({ organiserUserId, amount }) {
   return request("/donations/razorpay/create-order", {
     method: "POST",
