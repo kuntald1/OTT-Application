@@ -43,9 +43,13 @@ class Settings:
     # How long a WhatsApp OTP code stays valid
     OTP_EXPIRE_MINUTES = int(os.getenv("OTP_EXPIRE_MINUTES", "10"))
 
-    # Razorpay (test mode) — used for subscription checkout
+    # Razorpay (test mode) — used for subscription checkout (India)
     RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+    # Stripe (test mode) — used for subscription checkout (non-India, USD)
+    STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+    STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 
     # Twilio — WhatsApp payment/subscription notifications
     TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
