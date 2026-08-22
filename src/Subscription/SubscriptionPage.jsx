@@ -395,86 +395,127 @@ export default function SubscriptionPage({ onBack }) {
 
             <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
               <h3 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
-                <Calendar className="h-4 w-4" style={{ color: COLORS.gold }} /> Subscription details
+                <Calendar className="h-4 w-4" style={{ color: COLORS.gold }} /> Your subscriptions
               </h3>
 
-              {historyLoading ? (
+              {historyLoading || paymentsLoading ? (
                 <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
               ) : history.length === 0 ? (
                 <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No subscriptions yet.</p>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {history.map((sub) => (
-                    <div
-                      key={sub.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                    >
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                          {sub.plan_name} — {sub.duration_label}, {sub.screens} screen{sub.screens > 1 ? "s" : ""}
-                        </p>
-                        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                          Activated {formatDate(sub.started_at)} · Expires {formatDate(sub.expires_at)} · {sub.currency === "USD" ? "$" : "₹"}{sub.price}
-                        </p>
-                      </div>
-                      <span
-                        className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-                        style={{
-                          background: sub.is_active ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
-                          color: sub.is_active ? "#6FCF97" : "rgba(245,235,221,0.5)",
-                        }}
+                  {history.map((sub) => {
+                    // The payment that actually paid for THIS subscription —
+                    // matched by the real subscription_id link, not by
+                    // eyeballing dates/amounts across two separate lists.
+                    const matchingPayment = payments.find((p) => p.subscription_id === sub.id);
+                    return (
+                      <div
+                        key={sub.id}
+                        className="overflow-hidden rounded-xl"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
                       >
-                        {sub.is_active ? "Active" : "Expired"}
-                      </span>
-                    </div>
-                  ))}
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
+                              {sub.plan_name} — {sub.duration_label}, {sub.screens} screen{sub.screens > 1 ? "s" : ""}
+                            </p>
+                            <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                              Activated {formatDate(sub.started_at)} · Expires {formatDate(sub.expires_at)}
+                            </p>
+                          </div>
+                          <span
+                            className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            style={{
+                              background: sub.is_active ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
+                              color: sub.is_active ? "#6FCF97" : "rgba(245,235,221,0.5)",
+                            }}
+                          >
+                            {sub.is_active ? "Active" : "Expired"}
+                          </span>
+                        </div>
+
+                        {/* Payment, shown INSIDE its subscription's card — this
+                            is the actual fix: no more guessing which payment
+                            belongs to which subscription. */}
+                        {matchingPayment ? (
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.12)" }}>
+                            <div className="flex items-center gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                              <Receipt className="h-3 w-3 flex-shrink-0" style={{ color: COLORS.gold }} />
+                              Paid {matchingPayment.currency === "USD" ? "$" : "₹"}{matchingPayment.total_amount} via {matchingPayment.gateway}
+                              {" "}(Base {matchingPayment.currency === "USD" ? "$" : "₹"}{matchingPayment.base_amount}
+                              {Number(matchingPayment.tax_amount) > 0 ? ` + Tax ${matchingPayment.currency === "USD" ? "$" : "₹"}${matchingPayment.tax_amount}` : ""})
+                              {matchingPayment.reward_points_used > 0 && ` · ${matchingPayment.reward_points_used} reward points used`}
+                              {" · "}{formatDate(matchingPayment.created_at)}
+                            </div>
+                            <span
+                              className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize"
+                              style={{
+                                background:
+                                  matchingPayment.status === "paid" ? "rgba(111,207,151,0.15)"
+                                  : matchingPayment.status === "failed" ? "rgba(248,113,113,0.15)"
+                                  : "rgba(255,255,255,0.08)",
+                                color:
+                                  matchingPayment.status === "paid" ? "#6FCF97"
+                                  : matchingPayment.status === "failed" ? "#f87171"
+                                  : "rgba(245,235,221,0.6)",
+                              }}
+                            >
+                              {matchingPayment.status}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="border-t px-4 py-2.5 text-xs" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.12)", color: "rgba(245,235,221,0.4)" }}>
+                            No matching payment record found for this subscription.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-              <h3 className="mb-4 mt-8 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
-                <Receipt className="h-4 w-4" style={{ color: COLORS.gold }} /> Payment records
-              </h3>
-
-              {paymentsLoading ? (
-                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
-              ) : payments.length === 0 ? (
-                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No payment records yet.</p>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {payments.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                    >
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                          {p.plan_name} — {p.currency === "USD" ? "$" : "₹"}{p.total_amount} via {p.gateway}
-                        </p>
-                        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                          {formatDate(p.created_at)} · Base {p.currency === "USD" ? "$" : "₹"}{p.base_amount}{Number(p.tax_amount) > 0 ? ` + Tax ${p.currency === "USD" ? "$" : "₹"}${p.tax_amount}` : ""}
-                          {p.reward_points_used > 0 && ` · ${p.reward_points_used} reward points used`}
-                        </p>
-                      </div>
-                      <span
-                        className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
-                        style={{
-                          background:
-                            p.status === "paid" ? "rgba(111,207,151,0.15)"
-                            : p.status === "failed" ? "rgba(248,113,113,0.15)"
-                            : "rgba(255,255,255,0.08)",
-                          color:
-                            p.status === "paid" ? "#6FCF97"
-                            : p.status === "failed" ? "#f87171"
-                            : "rgba(245,235,221,0.6)",
-                        }}
+              {/* Any payment attempts that never resulted in an active
+                  subscription (e.g. abandoned/failed checkouts) — shown
+                  separately so nothing silently disappears, but clearly
+                  distinguished from the successful, linked ones above. */}
+              {!historyLoading && !paymentsLoading && payments.some((p) => !history.some((sub) => sub.id === p.subscription_id)) && (
+                <>
+                  <h3 className="mb-4 mt-8 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+                    <Receipt className="h-4 w-4" style={{ color: COLORS.gold }} /> Other payment attempts
+                  </h3>
+                  <div className="flex flex-col gap-3">
+                    {payments.filter((p) => !history.some((sub) => sub.id === p.subscription_id)).map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
                       >
-                        {p.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
+                            {p.plan_name} — {p.currency === "USD" ? "$" : "₹"}{p.total_amount} via {p.gateway}
+                          </p>
+                          <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{formatDate(p.created_at)}</p>
+                        </div>
+                        <span
+                          className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
+                          style={{
+                            background:
+                              p.status === "paid" ? "rgba(111,207,151,0.15)"
+                              : p.status === "failed" ? "rgba(248,113,113,0.15)"
+                              : "rgba(255,255,255,0.08)",
+                            color:
+                              p.status === "paid" ? "#6FCF97"
+                              : p.status === "failed" ? "#f87171"
+                              : "rgba(245,235,221,0.6)",
+                          }}
+                        >
+                          {p.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>

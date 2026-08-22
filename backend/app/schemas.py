@@ -148,6 +148,7 @@ class SubscriptionPlanOut(BaseModel):
 
 class PaymentOut(BaseModel):
     id: uuid.UUID
+    subscription_id: Optional[uuid.UUID] = None
     gateway: PaymentGateway
     plan_name: str
     duration_label: str
