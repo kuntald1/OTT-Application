@@ -139,7 +139,7 @@ def list_published_videos(
 ALLOWED_VIDEO_CONTENT_TYPES = {
     "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/x-msvideo",
 }
-MAX_VIDEO_BYTES = 500 * 1024 * 1024  # 500 MB — generous for testing; revisit if real usage needs more
+MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB — matches Nginx's client_max_body_size
 
 
 @router.post("/{video_id}/upload-file", response_model=VideoOut)
@@ -183,7 +183,7 @@ async def upload_video_file(
             detail="Video hosting isn't configured yet. Bunny Stream credentials are missing.",
         )
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=900.0) as client:  # 15 min — generous for 2GB files on modest upload speeds
         # Step 1: create the video "slot" in the Bunny library
         create_resp = await client.post(
             f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos",
