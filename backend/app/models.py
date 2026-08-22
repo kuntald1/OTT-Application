@@ -667,7 +667,12 @@ class Video(Base):
     category = Column(String(100), nullable=False)
 
     release_year = Column(Integer, nullable=False)
-    age_rating = Column(Enum(AgeRating), nullable=False)
+    # values_callable makes this store the actual human-readable value
+    # (U, UA7+, UA13+...) rather than SQLAlchemy's default of the
+    # internal Python enum name (u, ua7, ua13...) — critical here since
+    # this column gets edited via raw SQL, and anyone typing 'UA16+'
+    # directly should have it just work, not silently mismatch.
+    age_rating = Column(Enum(AgeRating, values_callable=lambda x: [e.value for e in x]), nullable=False)
     # Comma-separated, e.g. "Bengali, English" — simple list, no per-item
     # attributes needed (unlike categories/cast/crew below), so a single
     # column is enough rather than a whole related table.
