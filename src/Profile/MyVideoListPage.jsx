@@ -37,10 +37,18 @@ function makeEmptyTier() {
   return { key: Math.random().toString(36).slice(2), min_minutes: "", max_minutes: "", rate_per_minute_inr: "" };
 }
 function makeEmptyCast() {
-  return { key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false, occupation: "", birthplace: "", about: "" };
+  return {
+    key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false,
+    occupation: "", date_of_birth: "", birthplace: "", about: "",
+    early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
+  };
 }
 function makeEmptyCrew() {
-  return { key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false, occupation: "", birthplace: "", about: "" };
+  return {
+    key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false,
+    occupation: "", date_of_birth: "", birthplace: "", about: "",
+    early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
+  };
 }
 
 function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions }) {
@@ -166,11 +174,17 @@ export default function MyVideoListPage({ onBack }) {
         })),
         cast: cast.filter((c) => c.name.trim()).map((c) => ({
           name: c.name.trim(), character_role: c.character_role.trim() || null,
-          occupation: c.occupation.trim() || null, birthplace: c.birthplace.trim() || null, about: c.about.trim() || null,
+          occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
+          about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
+          debut_initial_years: c.debut_initial_years.trim() || null, breakthrough_beyond: c.breakthrough_beyond.trim() || null,
+          recent_projects: c.recent_projects.trim() || null,
         })),
         crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({
           role: c.role.trim(), name: c.name.trim(),
-          occupation: c.occupation.trim() || null, birthplace: c.birthplace.trim() || null, about: c.about.trim() || null,
+          occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
+          about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
+          debut_initial_years: c.debut_initial_years.trim() || null, breakthrough_beyond: c.breakthrough_beyond.trim() || null,
+          recent_projects: c.recent_projects.trim() || null,
         })),
       };
       await uploadVideo(payload);
@@ -399,8 +413,14 @@ export default function MyVideoListPage({ onBack }) {
                     {c.showBio && (
                       <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
                         <input type="text" placeholder="Occupation (e.g. Actor, Writer)" value={c.occupation} onChange={(e) => updateCast(c.key, "occupation", e.target.value)} style={inputStyle} />
-                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} style={inputStyle} />
+                        <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCast(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
+                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
                         <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCast(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Early Life" value={c.early_life} onChange={(e) => updateCast(c.key, "early_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Personal Life" value={c.personal_life} onChange={(e) => updateCast(c.key, "personal_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Debut & Initial Years" value={c.debut_initial_years} onChange={(e) => updateCast(c.key, "debut_initial_years", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Breakthrough & Beyond" value={c.breakthrough_beyond} onChange={(e) => updateCast(c.key, "breakthrough_beyond", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Recent Projects" value={c.recent_projects} onChange={(e) => updateCast(c.key, "recent_projects", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
                       </div>
                     )}
                   </div>
@@ -436,8 +456,14 @@ export default function MyVideoListPage({ onBack }) {
                     {c.showBio && (
                       <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
                         <input type="text" placeholder="Occupation (e.g. Director)" value={c.occupation} onChange={(e) => updateCrew(c.key, "occupation", e.target.value)} style={inputStyle} />
-                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} style={inputStyle} />
+                        <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCrew(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
+                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
                         <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCrew(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Early Life" value={c.early_life} onChange={(e) => updateCrew(c.key, "early_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Personal Life" value={c.personal_life} onChange={(e) => updateCrew(c.key, "personal_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Debut & Initial Years" value={c.debut_initial_years} onChange={(e) => updateCrew(c.key, "debut_initial_years", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Breakthrough & Beyond" value={c.breakthrough_beyond} onChange={(e) => updateCrew(c.key, "breakthrough_beyond", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                        <textarea rows={2} placeholder="Recent Projects" value={c.recent_projects} onChange={(e) => updateCrew(c.key, "recent_projects", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
                       </div>
                     )}
                   </div>
