@@ -748,27 +748,62 @@ class VideoCategory(Base):
     category = Column(String(100), nullable=False)
 
 
+class Person(Base):
+    """A real, reusable profile for an actor/crew member — deliberately
+    its OWN entity, not free text repeated on every video. The same
+    person appearing in multiple videos should have ONE bio that stays
+    consistent, not a separate copy per video that can drift out of sync.
+
+    KNOWN LIMITATION (documented, not silently glossed over): there's no
+    search/reuse step yet when adding cast/crew to a video — every entry
+    currently creates a fresh Person row, even if that person already
+    exists from an earlier video. A search-and-select step is a
+    reasonable follow-up, not built in this pass.
+    """
+    __tablename__ = "people"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    photo_url = Column(String(500), nullable=True)
+    occupation = Column(String(255), nullable=True)  # e.g. "Actor, Writer"
+    date_of_birth = Column(DateTime(timezone=True), nullable=True)
+    birthplace = Column(String(255), nullable=True)
+    about = Column(Text, nullable=True)
+    early_life = Column(Text, nullable=True)
+    personal_life = Column(Text, nullable=True)
+    debut_initial_years = Column(Text, nullable=True)
+    breakthrough_beyond = Column(Text, nullable=True)
+    recent_projects = Column(Text, nullable=True)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class VideoCast(Base):
-    """One row per cast member, up to 10 per video."""
+    """One row per cast member, up to 10 per video. character_role is
+    per-video (the same actor plays different characters in different
+    productions) — everything else about who they are lives on Person.
+    """
     __tablename__ = "video_cast"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id"), nullable=False)
     character_role = Column(String(255), nullable=True)
     display_order = Column(Integer, nullable=False, default=0)
 
 
 class VideoCrew(Base):
     """One row per crew member (Director, Writer, etc.), up to 5 per
-    video. role is free text rather than an enum — theatre/video
-    productions use varied crew titles (Director, Writer, Cinematographer,
-    Editor, Music, ...) that shouldn't require a schema change to extend.
+    video. role is per-video free text (Director on one production,
+    Writer on another) — everything else about who they are lives on
+    Person.
     """
     __tablename__ = "video_crew"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id"), nullable=False)
     role = Column(String(100), nullable=False)
-    name = Column(String(255), nullable=False)
     display_order = Column(Integer, nullable=False, default=0)

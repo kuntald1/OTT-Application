@@ -37,10 +37,10 @@ function makeEmptyTier() {
   return { key: Math.random().toString(36).slice(2), min_minutes: "", max_minutes: "", rate_per_minute_inr: "" };
 }
 function makeEmptyCast() {
-  return { key: Math.random().toString(36).slice(2), name: "", character_role: "" };
+  return { key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false, occupation: "", birthplace: "", about: "" };
 }
 function makeEmptyCrew() {
-  return { key: Math.random().toString(36).slice(2), role: "", name: "" };
+  return { key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false, occupation: "", birthplace: "", about: "" };
 }
 
 function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions }) {
@@ -164,8 +164,14 @@ export default function MyVideoListPage({ onBack }) {
           max_minutes: t.max_minutes === "" ? null : Number(t.max_minutes),
           rate_per_minute_inr: Number(t.rate_per_minute_inr),
         })),
-        cast: cast.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), character_role: c.character_role.trim() || null })),
-        crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({ role: c.role.trim(), name: c.name.trim() })),
+        cast: cast.filter((c) => c.name.trim()).map((c) => ({
+          name: c.name.trim(), character_role: c.character_role.trim() || null,
+          occupation: c.occupation.trim() || null, birthplace: c.birthplace.trim() || null, about: c.about.trim() || null,
+        })),
+        crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({
+          role: c.role.trim(), name: c.name.trim(),
+          occupation: c.occupation.trim() || null, birthplace: c.birthplace.trim() || null, about: c.about.trim() || null,
+        })),
       };
       await uploadVideo(payload);
       resetForm();
@@ -374,12 +380,29 @@ export default function MyVideoListPage({ onBack }) {
               <label style={labelStyle}>Cast (optional, up to 10)</label>
               <div className="flex flex-col gap-2">
                 {cast.map((c) => (
-                  <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
-                    <input type="text" placeholder="Actor name" value={c.name} onChange={(e) => updateCast(c.key, "name", e.target.value)} style={inputStyle} />
-                    <input type="text" placeholder="Character (optional)" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
-                    <button type="button" onClick={() => removeCast(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
-                      <Trash2 className="h-4 w-4" />
+                  <div key={c.key} className="rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
+                    <div className="grid grid-cols-[1fr_1fr_32px] items-center gap-2 p-1">
+                      <input type="text" placeholder="Actor name" value={c.name} onChange={(e) => updateCast(c.key, "name", e.target.value)} style={inputStyle} />
+                      <input type="text" placeholder="Character (optional)" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
+                      <button type="button" onClick={() => removeCast(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateCast(c.key, "showBio", !c.showBio)}
+                      className="px-1 pb-1.5 text-[11px] font-medium hover:opacity-80"
+                      style={{ color: COLORS.gold }}
+                    >
+                      {c.showBio ? "− Hide biography details" : "+ Add biography details"}
                     </button>
+                    {c.showBio && (
+                      <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
+                        <input type="text" placeholder="Occupation (e.g. Actor, Writer)" value={c.occupation} onChange={(e) => updateCast(c.key, "occupation", e.target.value)} style={inputStyle} />
+                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} style={inputStyle} />
+                        <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCast(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -394,12 +417,29 @@ export default function MyVideoListPage({ onBack }) {
               <label style={labelStyle}>Crew (optional, up to 5)</label>
               <div className="flex flex-col gap-2">
                 {crew.map((c) => (
-                  <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
-                    <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
-                    <input type="text" placeholder="Name" value={c.name} onChange={(e) => updateCrew(c.key, "name", e.target.value)} style={inputStyle} />
-                    <button type="button" onClick={() => removeCrew(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
-                      <Trash2 className="h-4 w-4" />
+                  <div key={c.key} className="rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
+                    <div className="grid grid-cols-[1fr_1fr_32px] items-center gap-2 p-1">
+                      <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
+                      <input type="text" placeholder="Name" value={c.name} onChange={(e) => updateCrew(c.key, "name", e.target.value)} style={inputStyle} />
+                      <button type="button" onClick={() => removeCrew(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateCrew(c.key, "showBio", !c.showBio)}
+                      className="px-1 pb-1.5 text-[11px] font-medium hover:opacity-80"
+                      style={{ color: COLORS.gold }}
+                    >
+                      {c.showBio ? "− Hide biography details" : "+ Add biography details"}
                     </button>
+                    {c.showBio && (
+                      <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
+                        <input type="text" placeholder="Occupation (e.g. Director)" value={c.occupation} onChange={(e) => updateCrew(c.key, "occupation", e.target.value)} style={inputStyle} />
+                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} style={inputStyle} />
+                        <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCrew(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -513,13 +553,13 @@ export default function MyVideoListPage({ onBack }) {
                         {v.cast.length > 0 && (
                           <p className="flex items-start gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
                             <Users className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                            {v.cast.map((c) => c.character_role ? `${c.name} as ${c.character_role}` : c.name).join(", ")}
+                            {v.cast.map((c) => c.character_role ? `${c.person.name} as ${c.character_role}` : c.person.name).join(", ")}
                           </p>
                         )}
                         {v.crew.length > 0 && (
                           <p className="flex items-start gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
                             <Film className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                            {v.crew.map((c) => `${c.role}: ${c.name}`).join(" · ")}
+                            {v.crew.map((c) => `${c.role}: ${c.person.name}`).join(" · ")}
                           </p>
                         )}
                       </div>

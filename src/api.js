@@ -324,6 +324,27 @@ export function fetchMyVideos() {
   return request("/videos/mine", { auth: true });
 }
 
+export function fetchPerson(personId) {
+  return request(`/people/${personId}`);
+}
+
+export async function uploadPersonPhoto(personId, file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/people/${personId}/upload-photo`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload photo. Please try again.");
+  }
+  return data;
+}
+
 export function fetchRevenueSummary() {
   return request("/revenue/summary", { auth: true });
 }

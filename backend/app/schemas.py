@@ -472,30 +472,64 @@ class VideoRevenueTierOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PersonOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    photo_url: Optional[str] = None
+    occupation: Optional[str] = None
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = None
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class VideoCastIn(BaseModel):
+    # Always creates a fresh Person for now — no search/reuse step yet
+    # (documented limitation, see Person model docstring).
     name: str = Field(min_length=1, max_length=255)
     character_role: Optional[str] = Field(default=None, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
 
 
 class VideoCastOut(BaseModel):
     id: uuid.UUID
-    name: str
+    person: PersonOut
     character_role: Optional[str] = None
-
-    model_config = {"from_attributes": True}
 
 
 class VideoCrewIn(BaseModel):
     role: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
 
 
 class VideoCrewOut(BaseModel):
     id: uuid.UUID
     role: str
-    name: str
-
-    model_config = {"from_attributes": True}
+    person: PersonOut
 
 
 class VideoCreate(BaseModel):

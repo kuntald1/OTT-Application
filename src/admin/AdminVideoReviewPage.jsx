@@ -153,12 +153,12 @@ export default function AdminVideoReviewPage() {
                     )}
                     {v.cast.length > 0 && (
                       <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-                        Cast: {v.cast.map((c) => c.character_role ? `${c.name} as ${c.character_role}` : c.name).join(", ")}
+                        Cast: {v.cast.map((c) => c.character_role ? `${c.person.name} as ${c.character_role}` : c.person.name).join(", ")}
                       </p>
                     )}
                     {v.crew.length > 0 && (
                       <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-                        Crew: {v.crew.map((c) => `${c.role}: ${c.name}`).join(" · ")}
+                        Crew: {v.crew.map((c) => `${c.role}: ${c.person.name}`).join(" · ")}
                       </p>
                     )}
                     {v.admin_note && (

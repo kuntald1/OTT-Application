@@ -12,11 +12,11 @@ from app.deps import get_current_user
 from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
-    VideoCategory, VideoCast, VideoCrew,
+    VideoCategory, VideoCast, VideoCrew, Person,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
-    VideoCastOut, VideoCrewOut,
+    VideoCastOut, VideoCrewOut, PersonOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -91,8 +91,20 @@ def _to_out(video: Video, db: Session) -> VideoOut:
             )
             for t in tiers
         ],
-        cast=[VideoCastOut(id=c.id, name=c.name, character_role=c.character_role) for c in cast],
-        crew=[VideoCrewOut(id=c.id, role=c.role, name=c.name) for c in crew],
+        cast=[
+            VideoCastOut(
+                id=c.id, character_role=c.character_role,
+                person=PersonOut.model_validate(db.query(Person).filter(Person.id == c.person_id).first()),
+            )
+            for c in cast
+        ],
+        crew=[
+            VideoCrewOut(
+                id=c.id, role=c.role,
+                person=PersonOut.model_validate(db.query(Person).filter(Person.id == c.person_id).first()),
+            )
+            for c in crew
+        ],
         has_file=bool(video.bunny_video_id),
         playback_url=(
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/playlist.m3u8"
@@ -161,10 +173,28 @@ def upload_video(
         db.add(VideoCategory(video_id=video.id, category=cat))
 
     for i, member in enumerate(payload.cast):
-        db.add(VideoCast(video_id=video.id, name=member.name, character_role=member.character_role, display_order=i))
+        person = Person(
+            name=member.name, occupation=member.occupation, date_of_birth=member.date_of_birth,
+            birthplace=member.birthplace, about=member.about, early_life=member.early_life,
+            personal_life=member.personal_life, debut_initial_years=member.debut_initial_years,
+            breakthrough_beyond=member.breakthrough_beyond, recent_projects=member.recent_projects,
+            created_by_user_id=current_user.id,
+        )
+        db.add(person)
+        db.flush()
+        db.add(VideoCast(video_id=video.id, person_id=person.id, character_role=member.character_role, display_order=i))
 
     for i, member in enumerate(payload.crew):
-        db.add(VideoCrew(video_id=video.id, role=member.role, name=member.name, display_order=i))
+        person = Person(
+            name=member.name, occupation=member.occupation, date_of_birth=member.date_of_birth,
+            birthplace=member.birthplace, about=member.about, early_life=member.early_life,
+            personal_life=member.personal_life, debut_initial_years=member.debut_initial_years,
+            breakthrough_beyond=member.breakthrough_beyond, recent_projects=member.recent_projects,
+            created_by_user_id=current_user.id,
+        )
+        db.add(person)
+        db.flush()
+        db.add(VideoCrew(video_id=video.id, person_id=person.id, role=member.role, display_order=i))
 
     if payload.monetization_type == "pay_per_video":
         db.add(VideoPricing(
