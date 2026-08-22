@@ -51,6 +51,11 @@ class Settings:
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
     STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 
+    # Bunny Stream — video storage, HLS encoding, CDN delivery
+    BUNNY_LIBRARY_ID = os.getenv("BUNNY_LIBRARY_ID", "")
+    BUNNY_API_KEY = os.getenv("BUNNY_API_KEY", "")
+    BUNNY_CDN_HOSTNAME = os.getenv("BUNNY_CDN_HOSTNAME", "")
+
     # Twilio — WhatsApp payment/subscription notifications
     TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
     TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")

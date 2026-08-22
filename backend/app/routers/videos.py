@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
@@ -50,6 +52,11 @@ def _to_out(video: Video, db: Session) -> VideoOut:
             )
             for t in tiers
         ],
+        has_file=bool(video.bunny_video_id),
+        playback_url=(
+            f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/playlist.m3u8"
+            if video.bunny_video_id else None
+        ),
         created_at=video.created_at,
         published_at=video.published_at,
     )
@@ -127,3 +134,82 @@ def list_published_videos(
         query = query.filter(Video.section == VideoSection(section))
     videos = query.order_by(Video.published_at.desc()).all()
     return [_to_out(v, db) for v in videos]
+
+
+ALLOWED_VIDEO_CONTENT_TYPES = {
+    "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/x-msvideo",
+}
+MAX_VIDEO_BYTES = 500 * 1024 * 1024  # 500 MB — generous for testing; revisit if real usage needs more
+
+
+@router.post("/{video_id}/upload-file", response_model=VideoOut)
+async def upload_video_file(
+    video_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Phase 2 — the browser sends the video file to US, and we relay it
+    to Bunny Stream (create the video object, then PUT the bytes). This
+    keeps the Bunny API key entirely server-side, never exposed to the
+    frontend. Uses this server's own bandwidth for the relay — fine for
+    early-stage volume; if this becomes a bottleneck, a future
+    improvement would generate a signed direct-to-Bunny upload URL
+    instead so large files skip our server entirely.
+    """
+    _require_creator_or_organiser(current_user)
+
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    if video.bunny_video_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This video already has a file uploaded.")
+
+    if file.content_type not in ALLOWED_VIDEO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only MP4, MOV, MKV, WEBM, or AVI files are allowed.",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_VIDEO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File exceeds the 500MB size limit.",
+        )
+    if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Video hosting isn't configured yet. Bunny Stream credentials are missing.",
+        )
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        # Step 1: create the video "slot" in the Bunny library
+        create_resp = await client.post(
+            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos",
+            headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
+            json={"title": video.title},
+        )
+        if create_resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't create video on Bunny Stream: {create_resp.text}",
+            )
+        bunny_video_id = create_resp.json()["guid"]
+
+        # Step 2: upload the actual file bytes to that slot
+        upload_resp = await client.put(
+            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{bunny_video_id}",
+            headers={"AccessKey": settings.BUNNY_API_KEY},
+            content=contents,
+        )
+        if upload_resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't upload video file to Bunny Stream: {upload_resp.text}",
+            )
+
+    video.bunny_video_id = bunny_video_id
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db)

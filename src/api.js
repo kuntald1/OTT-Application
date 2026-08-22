@@ -266,6 +266,23 @@ export function uploadVideo(payload) {
   });
 }
 
+export async function uploadVideoFile(videoId, file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/videos/${videoId}/upload-file`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload video file. Please try again.");
+  }
+  return data;
+}
+
 export function fetchMyVideos() {
   return request("/videos/mine", { auth: true });
 }

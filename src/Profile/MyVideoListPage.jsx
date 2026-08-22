@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Video, Plus, Trash2, ChevronDown } from "lucide-react";
+import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, fetchMyVideos } from "../api";
+import { uploadVideo, uploadVideoFile, fetchMyVideos } from "../api";
 
 // ---------------------------------------------------------------------------
 // My Video List — Phase 1: metadata, pricing, and revenue tiers only. No
@@ -55,6 +55,8 @@ export default function MyVideoListPage({ onBack }) {
   const [tiers, setTiers] = useState([makeEmptyTier()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [uploadingFileFor, setUploadingFileFor] = useState(null);
+  const [fileUploadError, setFileUploadError] = useState("");
 
   const loadVideos = () => {
     setLoading(true);
@@ -109,6 +111,21 @@ export default function MyVideoListPage({ onBack }) {
   };
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+  const handleFileSelect = async (videoId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileUploadError("");
+    setUploadingFileFor(videoId);
+    try {
+      await uploadVideoFile(videoId, file);
+      loadVideos();
+    } catch (err) {
+      setFileUploadError(err.message || "Couldn't upload video file. Please try again.");
+    } finally {
+      setUploadingFileFor(null);
+    }
+  };
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
@@ -287,6 +304,33 @@ export default function MyVideoListPage({ onBack }) {
                     <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
                       Pay-Per-Video: ₹{v.pricing.price_inr} / ${v.pricing.price_usd}
                     </p>
+                  )}
+
+                  {/* Phase 2 — actual video file upload */}
+                  {v.has_file ? (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: "#6FCF97" }}>
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Video file uploaded — processing may take a few minutes before it's playable.
+                    </p>
+                  ) : (
+                    <div className="mt-3">
+                      <label
+                        className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                        style={{ borderColor: "rgba(212,175,55,0.3)", color: COLORS.gold }}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {uploadingFileFor === v.id ? "Uploading…" : "Upload video file"}
+                        <input
+                          type="file"
+                          accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
+                          className="hidden"
+                          disabled={uploadingFileFor === v.id}
+                          onChange={(e) => handleFileSelect(v.id, e)}
+                        />
+                      </label>
+                      {fileUploadError && uploadingFileFor === null && (
+                        <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               );
