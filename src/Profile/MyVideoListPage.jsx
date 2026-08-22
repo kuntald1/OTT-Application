@@ -164,7 +164,7 @@ export default function MyVideoListPage({ onBack }) {
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
-      <main className="mx-auto max-w-2xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
+      <main className="mx-auto max-w-3xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
         <button type="button" onClick={onBack} className="mb-6 flex items-center gap-1.5 text-sm font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
@@ -306,79 +306,84 @@ export default function MyVideoListPage({ onBack }) {
             <p className="text-sm font-medium" style={{ color: "rgba(245,235,221,0.7)" }}>No videos yet</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             {videos.map((v) => {
               const st = STATUS_STYLES[v.status] || STATUS_STYLES.pending;
               return (
                 <div key={v.id} className="overflow-hidden rounded-2xl" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div className="flex items-start gap-4 p-5">
-                    <div
-                      className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl"
-                      style={{ background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.2)" }}
-                    >
-                      <Clapperboard className="h-6 w-6" style={{ color: COLORS.gold }} />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
-                        <span className="flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize" style={{ background: st.bg, color: st.color }}>{v.status}</span>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.section}</span>
-                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.category}</span>
-                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.monetization_type.replace(/_/g, " ")}</span>
-                        <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>
-                          {v.has_ads ? <Megaphone className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />} {v.has_ads ? "Ad Present" : "Ad Free"}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Submitted {formatDate(v.created_at)}</p>
-                      {v.admin_note && (
-                        <p className="mt-1.5 text-xs font-medium" style={{ color: v.status === "rejected" ? "#f87171" : "rgba(245,235,221,0.5)" }}>Note: {v.admin_note}</p>
-                      )}
-                      {v.pricing && (
-                        <p className="mt-1.5 flex items-center gap-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                          <IndianRupee className="h-3 w-3" /> Pay-Per-Video: ₹{v.pricing.price_inr} / ${v.pricing.price_usd}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border-t px-5 py-3" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
+                  {/* Poster area — real Bunny-generated thumbnail once a file is uploaded */}
+                  <div className="relative aspect-video w-full overflow-hidden" style={{ background: "linear-gradient(135deg, rgba(212,175,55,0.15), rgba(0,0,0,0.4))" }}>
                     {v.has_file ? (
-                      <p className="flex items-center gap-1.5 text-xs" style={{ color: "#6FCF97" }}>
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Video file uploaded — processing may take a few minutes before it's playable.
-                      </p>
-                    ) : uploadingFileFor === v.id ? (
-                      <div className="max-w-xs">
-                        <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                          <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
-                          <span>{uploadProgress}%</span>
-                        </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }} />
-                        </div>
-                      </div>
+                      <img src={v.thumbnail_url} alt={v.title} className="h-full w-full object-cover" />
                     ) : (
-                      <div>
-                        <label
-                          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-                          style={{ borderColor: "rgba(212,175,55,0.3)", color: COLORS.gold }}
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          Upload video file
-                          <input
-                            type="file"
-                            accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
-                            className="hidden"
-                            onChange={(e) => handleFileSelect(v.id, e)}
-                          />
-                        </label>
-                        {fileUploadError && uploadingFileFor === null && (
-                          <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
-                        )}
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Clapperboard className="h-10 w-10" style={{ color: "rgba(212,175,55,0.4)" }} />
                       </div>
                     )}
+                    <span
+                      className="absolute left-2.5 top-2.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize"
+                      style={{ background: st.bg, color: st.color, backdropFilter: "blur(4px)" }}
+                    >
+                      {v.status}
+                    </span>
+                  </div>
+
+                  <div className="p-4">
+                    <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.section}</span>
+                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.category}</span>
+                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.monetization_type.replace(/_/g, " ")}</span>
+                      <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>
+                        {v.has_ads ? <Megaphone className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />} {v.has_ads ? "Ad Present" : "Ad Free"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Submitted {formatDate(v.created_at)}</p>
+                    {v.admin_note && (
+                      <p className="mt-1.5 text-xs font-medium" style={{ color: v.status === "rejected" ? "#f87171" : "rgba(245,235,221,0.5)" }}>Note: {v.admin_note}</p>
+                    )}
+                    {v.pricing && (
+                      <p className="mt-1.5 flex items-center gap-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                        <IndianRupee className="h-3 w-3" /> Pay-Per-Video: ₹{v.pricing.price_inr} / ${v.pricing.price_usd}
+                      </p>
+                    )}
+
+                    <div className="mt-3 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                      {v.has_file ? (
+                        <p className="flex items-center gap-1.5 text-xs" style={{ color: "#6FCF97" }}>
+                          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" /> Uploaded — processing may take a few minutes before it's playable.
+                        </p>
+                      ) : uploadingFileFor === v.id ? (
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                            <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label
+                            className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                            style={{ borderColor: "rgba(212,175,55,0.3)", color: COLORS.gold }}
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            Upload video file
+                            <input
+                              type="file"
+                              accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
+                              className="hidden"
+                              onChange={(e) => handleFileSelect(v.id, e)}
+                            />
+                          </label>
+                          {fileUploadError && uploadingFileFor === null && (
+                            <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
