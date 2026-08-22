@@ -303,6 +303,23 @@ export function uploadVideoFile(videoId, file, onProgress) {
   });
 }
 
+export async function uploadVideoPoster(videoId, file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/videos/${videoId}/upload-poster`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload poster. Please try again.");
+  }
+  return data;
+}
+
 export function fetchMyVideos() {
   return request("/videos/mine", { auth: true });
 }

@@ -1,5 +1,9 @@
+import os
+import uuid as uuid_module
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -7,17 +11,26 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
-    VideoSection, VideoStatus, VideoMonetization,
+    VideoSection, VideoStatus, VideoMonetization, AgeRating,
+    VideoCategory, VideoCast, VideoCrew,
 )
-from app.schemas import VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut
+from app.schemas import (
+    VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
+    VideoCastOut, VideoCrewOut,
+)
 
 router = APIRouter(prefix="/videos", tags=["videos"])
+
+POSTER_UPLOAD_DIR = Path("uploads/video_posters")
+ALLOWED_POSTER_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_POSTER_BYTES = 5 * 1024 * 1024  # 5 MB
 
 # Same taxonomy as the site's Category menu and Event Enquiry form.
 ALLOWED_CATEGORIES = {
     "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
     "Classical Theatre", "Experimental Theatre", "Popular Shows",
 }
+ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+", "A"}
 
 
 def _require_creator_or_organiser(user: User) -> None:
@@ -37,13 +50,32 @@ def _to_out(video: Video, db: Session) -> VideoOut:
         .order_by(VideoRevenueTier.min_minutes.asc())
         .all()
     )
+    categories = (
+        db.query(VideoCategory).filter(VideoCategory.video_id == video.id).all()
+    )
+    cast = (
+        db.query(VideoCast)
+        .filter(VideoCast.video_id == video.id)
+        .order_by(VideoCast.display_order.asc())
+        .all()
+    )
+    crew = (
+        db.query(VideoCrew)
+        .filter(VideoCrew.video_id == video.id)
+        .order_by(VideoCrew.display_order.asc())
+        .all()
+    )
     return VideoOut(
         id=video.id,
         uploaded_by_name=uploader.name if uploader else "Unknown",
         title=video.title,
         description=video.description,
         section=video.section.value,
-        category=video.category,
+        categories=[c.category for c in categories] or [video.category],
+        release_year=video.release_year,
+        age_rating=video.age_rating.value,
+        languages=[l.strip() for l in video.languages.split(",")] if video.languages else [],
+        poster_image_url=video.poster_image_url,
         has_ads=video.has_ads,
         monetization_type=video.monetization_type.value,
         status=video.status.value,
@@ -59,6 +91,8 @@ def _to_out(video: Video, db: Session) -> VideoOut:
             )
             for t in tiers
         ],
+        cast=[VideoCastOut(id=c.id, name=c.name, character_role=c.character_role) for c in cast],
+        crew=[VideoCrewOut(id=c.id, role=c.role, name=c.name) for c in crew],
         has_file=bool(video.bunny_video_id),
         playback_url=(
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/playlist.m3u8"
@@ -89,10 +123,16 @@ def upload_video(
 ):
     _require_creator_or_organiser(current_user)
 
-    if payload.category not in ALLOWED_CATEGORIES:
+    invalid_categories = [c for c in payload.categories if c not in ALLOWED_CATEGORIES]
+    if invalid_categories:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"category must be one of: {', '.join(sorted(ALLOWED_CATEGORIES))}",
+            detail=f"Invalid categories: {', '.join(invalid_categories)}. Must be one of: {', '.join(sorted(ALLOWED_CATEGORIES))}",
+        )
+    if payload.age_rating not in ALLOWED_AGE_RATINGS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"age_rating must be one of: {', '.join(sorted(ALLOWED_AGE_RATINGS))}",
         )
 
     if payload.monetization_type == "pay_per_video":
@@ -107,12 +147,24 @@ def upload_video(
         title=payload.title,
         description=payload.description,
         section=VideoSection(payload.section),
-        category=payload.category,
+        category=payload.categories[0],  # backward-compat column, see model docstring
+        release_year=payload.release_year,
+        age_rating=AgeRating(payload.age_rating),
+        languages=", ".join(payload.languages) if payload.languages else None,
         has_ads=payload.has_ads,
         monetization_type=VideoMonetization(payload.monetization_type),
     )
     db.add(video)
     db.flush()
+
+    for cat in payload.categories:
+        db.add(VideoCategory(video_id=video.id, category=cat))
+
+    for i, member in enumerate(payload.cast):
+        db.add(VideoCast(video_id=video.id, name=member.name, character_role=member.character_role, display_order=i))
+
+    for i, member in enumerate(payload.crew):
+        db.add(VideoCrew(video_id=video.id, role=member.role, name=member.name, display_order=i))
 
     if payload.monetization_type == "pay_per_video":
         db.add(VideoPricing(
@@ -125,6 +177,45 @@ def upload_video(
             max_minutes=tier.max_minutes, rate_per_minute_inr=tier.rate_per_minute_inr,
         ))
 
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db)
+
+
+@router.post("/{video_id}/upload-poster", response_model=VideoOut)
+async def upload_video_poster(
+    video_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Custom poster image — separate from Bunny's auto-grabbed video
+    thumbnail. Saved to the project folder (bind-mounted, same pattern as
+    profile photos and community post images), not to Bunny — this is a
+    static image, not video content.
+    """
+    _require_creator_or_organiser(current_user)
+
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    if file.content_type not in ALLOWED_POSTER_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, or WEBP images are allowed.",
+        )
+    contents = await file.read()
+    if len(contents) > MAX_POSTER_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Poster image must be smaller than 5MB.")
+
+    POSTER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    stored_name = f"{uuid_module.uuid4()}{ext}"
+    with open(POSTER_UPLOAD_DIR / stored_name, "wb") as out:
+        out.write(contents)
+
+    video.poster_image_url = f"/api/uploads/video_posters/{stored_name}"
     db.commit()
     db.refresh(video)
     return _to_out(video, db)

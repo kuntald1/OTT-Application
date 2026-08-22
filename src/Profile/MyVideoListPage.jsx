@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play } from "lucide-react";
+import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoFile, fetchMyVideos } from "../api";
+import { uploadVideo, uploadVideoFile, uploadVideoPoster, fetchMyVideos } from "../api";
 import { CATEGORIES } from "../shared/categories";
+
+const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
 
 const inputStyle = {
   width: "100%",
@@ -33,6 +35,12 @@ const STATUS_STYLES = {
 
 function makeEmptyTier() {
   return { key: Math.random().toString(36).slice(2), min_minutes: "", max_minutes: "", rate_per_minute_inr: "" };
+}
+function makeEmptyCast() {
+  return { key: Math.random().toString(36).slice(2), name: "", character_role: "" };
+}
+function makeEmptyCrew() {
+  return { key: Math.random().toString(36).slice(2), role: "", name: "" };
 }
 
 function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions }) {
@@ -79,10 +87,12 @@ export default function MyVideoListPage({ onBack }) {
   const [showUpload, setShowUpload] = useState(false);
 
   const [form, setForm] = useState({
-    title: "", description: "", section: "play", category: "", has_ads: true, monetization_type: "subscription_only",
-    price_inr: "", price_usd: "",
+    title: "", description: "", section: "play", categories: [], release_year: "", age_rating: "", languages: "",
+    has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "",
   });
   const [tiers, setTiers] = useState([makeEmptyTier()]);
+  const [cast, setCast] = useState([]);
+  const [crew, setCrew] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -91,6 +101,7 @@ export default function MyVideoListPage({ onBack }) {
   const [playingVideoId, setPlayingVideoId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileUploadError, setFileUploadError] = useState("");
+  const [uploadingPosterFor, setUploadingPosterFor] = useState(null);
 
   const loadVideos = () => {
     setLoading(true);
@@ -100,18 +111,35 @@ export default function MyVideoListPage({ onBack }) {
   useEffect(() => { loadVideos(); }, []);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const toggleCategory = (cat) => setForm((f) => {
+    const has = f.categories.includes(cat);
+    if (has) return { ...f, categories: f.categories.filter((c) => c !== cat) };
+    if (f.categories.length >= 3) return f;
+    return { ...f, categories: [...f.categories, cat] };
+  });
+
   const updateTier = (key, field, value) => setTiers((list) => list.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
   const addTier = () => tiers.length < 5 && setTiers((list) => [...list, makeEmptyTier()]);
   const removeTier = (key) => setTiers((list) => (list.length > 1 ? list.filter((t) => t.key !== key) : list));
 
+  const updateCast = (key, field, value) => setCast((list) => list.map((c) => (c.key === key ? { ...c, [field]: value } : c)));
+  const addCast = () => cast.length < 10 && setCast((list) => [...list, makeEmptyCast()]);
+  const removeCast = (key) => setCast((list) => list.filter((c) => c.key !== key));
+
+  const updateCrew = (key, field, value) => setCrew((list) => list.map((c) => (c.key === key ? { ...c, [field]: value } : c)));
+  const addCrew = () => crew.length < 5 && setCrew((list) => [...list, makeEmptyCrew()]);
+  const removeCrew = (key) => setCrew((list) => list.filter((c) => c.key !== key));
+
   const isPayPerVideo = form.monetization_type === "pay_per_video";
   const tiersValid = tiers.every((t) => t.min_minutes !== "" && Number(t.rate_per_minute_inr) > 0);
   const pricingValid = !isPayPerVideo || (Number(form.price_inr) > 0 && Number(form.price_usd) > 0);
-  const canSubmit = form.title.trim() && form.category && tiersValid && pricingValid;
+  const canSubmit = form.title.trim() && form.categories.length > 0 && form.release_year && form.age_rating && tiersValid && pricingValid;
 
   const resetForm = () => {
-    setForm({ title: "", description: "", section: "play", category: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
+    setForm({ title: "", description: "", section: "play", categories: [], release_year: "", age_rating: "", languages: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
     setTiers([makeEmptyTier()]);
+    setCast([]);
+    setCrew([]);
   };
 
   const handleSubmit = async () => {
@@ -123,7 +151,10 @@ export default function MyVideoListPage({ onBack }) {
         title: form.title.trim(),
         description: form.description.trim() || null,
         section: form.section,
-        category: form.category,
+        categories: form.categories,
+        release_year: Number(form.release_year),
+        age_rating: form.age_rating,
+        languages: form.languages.trim() ? form.languages.split(",").map((l) => l.trim()).filter(Boolean) : null,
         has_ads: form.has_ads,
         monetization_type: form.monetization_type,
         price_inr: isPayPerVideo ? Number(form.price_inr) : null,
@@ -133,6 +164,8 @@ export default function MyVideoListPage({ onBack }) {
           max_minutes: t.max_minutes === "" ? null : Number(t.max_minutes),
           rate_per_minute_inr: Number(t.rate_per_minute_inr),
         })),
+        cast: cast.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), character_role: c.character_role.trim() || null })),
+        crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({ role: c.role.trim(), name: c.name.trim() })),
       };
       await uploadVideo(payload);
       resetForm();
@@ -164,6 +197,20 @@ export default function MyVideoListPage({ onBack }) {
     }
   };
 
+  const handlePosterSelect = async (videoId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPosterFor(videoId);
+    try {
+      await uploadVideoPoster(videoId, file);
+      loadVideos();
+    } catch (err) {
+      alert(err.message || "Couldn't upload poster. Please try again.");
+    } finally {
+      setUploadingPosterFor(null);
+    }
+  };
+
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
@@ -174,7 +221,7 @@ export default function MyVideoListPage({ onBack }) {
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold" style={{ color: COLORS.cream }}>My Video List</h1>
-            <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Submit videos for admin review, then upload the file for approved content.</p>
+            <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Submit videos for admin review, then upload the file and poster for approved content.</p>
           </div>
           <button
             type="button"
@@ -203,7 +250,43 @@ export default function MyVideoListPage({ onBack }) {
 
             <div className="grid gap-4 sm:grid-cols-3">
               <Dropdown label="Section *" value={form.section} options={["play", "archive"]} onChange={(v) => setForm((f) => ({ ...f, section: v }))} capitalizeOptions />
-              <Dropdown label="Category *" value={form.category} options={CATEGORIES} onChange={(v) => setForm((f) => ({ ...f, category: v }))} placeholder="Select a category" />
+              <div>
+                <label style={labelStyle}>Release Year *</label>
+                <input type="number" min="1900" max="2100" placeholder="2026" value={form.release_year} onChange={update("release_year")} style={inputStyle} />
+              </div>
+              <Dropdown label="Age Rating *" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} placeholder="Select rating" />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Categories * (up to 3)</label>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((cat) => {
+                  const selected = form.categories.includes(cat);
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => toggleCategory(cat)}
+                      disabled={!selected && form.categories.length >= 3}
+                      className="rounded-full border px-3 py-1.5 text-xs font-medium disabled:opacity-30"
+                      style={{
+                        borderColor: selected ? COLORS.gold : "rgba(245,235,221,0.15)",
+                        background: selected ? "rgba(212,175,55,0.14)" : "transparent",
+                        color: selected ? COLORS.gold : "rgba(245,235,221,0.7)",
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label style={labelStyle}>Languages</label>
+                <input type="text" placeholder="e.g. Bengali, English" value={form.languages} onChange={update("languages")} style={inputStyle} />
+              </div>
               <div>
                 <label style={labelStyle}>Ads</label>
                 <button
@@ -285,6 +368,48 @@ export default function MyVideoListPage({ onBack }) {
               )}
             </div>
 
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+
+            <div>
+              <label style={labelStyle}>Cast (optional, up to 10)</label>
+              <div className="flex flex-col gap-2">
+                {cast.map((c) => (
+                  <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
+                    <input type="text" placeholder="Actor name" value={c.name} onChange={(e) => updateCast(c.key, "name", e.target.value)} style={inputStyle} />
+                    <input type="text" placeholder="Character (optional)" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
+                    <button type="button" onClick={() => removeCast(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {cast.length < 10 && (
+                <button type="button" onClick={addCast} className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
+                  <Plus className="h-3.5 w-3.5" /> Add cast member
+                </button>
+              )}
+            </div>
+
+            <div>
+              <label style={labelStyle}>Crew (optional, up to 5)</label>
+              <div className="flex flex-col gap-2">
+                {crew.map((c) => (
+                  <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
+                    <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
+                    <input type="text" placeholder="Name" value={c.name} onChange={(e) => updateCrew(c.key, "name", e.target.value)} style={inputStyle} />
+                    <button type="button" onClick={() => removeCrew(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {crew.length < 5 && (
+                <button type="button" onClick={addCrew} className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
+                  <Plus className="h-3.5 w-3.5" /> Add crew member
+                </button>
+              )}
+            </div>
+
             {error && <p className="text-sm font-medium" style={{ color: "#f87171" }}>{error}</p>}
 
             <button
@@ -313,9 +438,6 @@ export default function MyVideoListPage({ onBack }) {
               const st = STATUS_STYLES[v.status] || STATUS_STYLES.pending;
               return (
                 <div key={v.id} className="overflow-hidden rounded-2xl" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {/* Poster area — real Bunny-generated thumbnail once a file is
-                      uploaded. Hover shows Bunny's animated preview clip; click
-                      opens the full embedded player. */}
                   <div
                     className="relative aspect-video w-full overflow-hidden"
                     style={{ background: "linear-gradient(135deg, rgba(212,175,55,0.15), rgba(0,0,0,0.4))", cursor: v.has_file ? "pointer" : "default" }}
@@ -340,18 +462,20 @@ export default function MyVideoListPage({ onBack }) {
                           ✕
                         </button>
                       </>
-                    ) : v.has_file ? (
+                    ) : v.poster_image_url || v.has_file ? (
                       <>
                         <img
-                          src={hoveredVideoId === v.id ? v.preview_url : v.thumbnail_url}
+                          src={v.poster_image_url || (hoveredVideoId === v.id ? v.preview_url : v.thumbnail_url)}
                           alt={v.title}
                           className="h-full w-full object-cover"
                         />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity hover:opacity-100" style={{ background: "rgba(0,0,0,0.25)" }}>
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,0.5)" }}>
-                            <Play className="ml-0.5 h-4 w-4" style={{ color: COLORS.cream }} fill={COLORS.cream} />
+                        {v.has_file && (
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity hover:opacity-100" style={{ background: "rgba(0,0,0,0.25)" }}>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,0.5)" }}>
+                              <Play className="ml-0.5 h-4 w-4" style={{ color: COLORS.cream }} fill={COLORS.cream} />
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </>
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
@@ -370,14 +494,37 @@ export default function MyVideoListPage({ onBack }) {
 
                   <div className="p-4">
                     <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
+                    <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+                      {v.release_year} · {v.age_rating}{v.languages.length > 0 ? ` · ${v.languages.join(", ")}` : ""}
+                    </p>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.section}</span>
-                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.category}</span>
+                      {v.categories.map((cat) => (
+                        <span key={cat} className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{cat}</span>
+                      ))}
                       <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.monetization_type.replace(/_/g, " ")}</span>
                       <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>
                         {v.has_ads ? <Megaphone className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />} {v.has_ads ? "Ad Present" : "Ad Free"}
                       </span>
                     </div>
+
+                    {(v.cast.length > 0 || v.crew.length > 0) && (
+                      <div className="mt-2.5 flex flex-col gap-1">
+                        {v.cast.length > 0 && (
+                          <p className="flex items-start gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                            <Users className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                            {v.cast.map((c) => c.character_role ? `${c.name} as ${c.character_role}` : c.name).join(", ")}
+                          </p>
+                        )}
+                        {v.crew.length > 0 && (
+                          <p className="flex items-start gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                            <Film className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                            {v.crew.map((c) => `${c.role}: ${c.name}`).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Submitted {formatDate(v.created_at)}</p>
                     {v.admin_note && (
                       <p className="mt-1.5 text-xs font-medium" style={{ color: v.status === "rejected" ? "#f87171" : "rgba(245,235,221,0.5)" }}>Note: {v.admin_note}</p>
@@ -388,7 +535,7 @@ export default function MyVideoListPage({ onBack }) {
                       </p>
                     )}
 
-                    <div className="mt-3 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                    <div className="mt-3 flex flex-col gap-2.5 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
                       {v.has_file ? (
                         <p className="flex items-center gap-1.5 text-xs" style={{ color: "#6FCF97" }}>
                           <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" /> Uploaded — processing may take a few minutes before it's playable.
@@ -423,6 +570,21 @@ export default function MyVideoListPage({ onBack }) {
                           )}
                         </div>
                       )}
+
+                      <label
+                        className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                        style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                      >
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        {uploadingPosterFor === v.id ? "Uploading poster…" : v.poster_image_url ? "Change poster" : "Upload custom poster"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          disabled={uploadingPosterFor === v.id}
+                          onChange={(e) => handlePosterSelect(v.id, e)}
+                        />
+                      </label>
                     </div>
                   </div>
                 </div>

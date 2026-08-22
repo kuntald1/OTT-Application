@@ -607,6 +607,14 @@ class AdminUser(Base):
     )
 
 
+class AgeRating(str, enum.Enum):
+    u = "U"
+    ua7 = "UA7+"
+    ua13 = "UA13+"
+    ua16 = "UA16+"
+    a = "A"
+
+
 class VideoSection(str, enum.Enum):
     play = "play"
     archive = "archive"
@@ -652,7 +660,22 @@ class Video(Base):
     # menu (Bengali Theatre, Drama, Comedy, etc.) — kept as plain String
     # rather than a DB enum so the category list can be extended later
     # without a migration; validated against the shared list server-side.
+    # DEPRECATED as of multi-category support — kept only so this column
+    # (already NOT NULL on existing rows) doesn't need a destructive
+    # migration. Always auto-populated with categories[0] for backward
+    # compatibility. VideoCategory below is the real source of truth now.
     category = Column(String(100), nullable=False)
+
+    release_year = Column(Integer, nullable=False)
+    age_rating = Column(Enum(AgeRating), nullable=False)
+    # Comma-separated, e.g. "Bengali, English" — simple list, no per-item
+    # attributes needed (unlike categories/cast/crew below), so a single
+    # column is enough rather than a whole related table.
+    languages = Column(String(255), nullable=True)
+    # Custom poster image, uploaded separately from the video file itself
+    # — distinct from Bunny's auto-grabbed thumbnail, since a real poster
+    # is usually purpose-designed, not just a random video frame.
+    poster_image_url = Column(String(500), nullable=True)
 
     # True = ads play during this video; False = ad-free. Can be toggled
     # by the uploader at any time — ads stop immediately once set False.
@@ -704,3 +727,43 @@ class VideoRevenueTier(Base):
     min_minutes = Column(Integer, nullable=False)
     max_minutes = Column(Integer, nullable=True)  # null = unbounded top tier
     rate_per_minute_inr = Column(Numeric(10, 2), nullable=False)
+
+
+class VideoCategory(Base):
+    """Multiple categories/genres per video (up to 3), e.g. "Bengali
+    Theatre" + "Classical Theatre" — replaces the old single-category
+    limitation. Video.category (singular) stays populated with
+    categories[0] for backward compatibility, but this table is the
+    real source of truth going forward.
+    """
+    __tablename__ = "video_categories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    category = Column(String(100), nullable=False)
+
+
+class VideoCast(Base):
+    """One row per cast member, up to 10 per video."""
+    __tablename__ = "video_cast"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    character_role = Column(String(255), nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+
+
+class VideoCrew(Base):
+    """One row per crew member (Director, Writer, etc.), up to 5 per
+    video. role is free text rather than an enum — theatre/video
+    productions use varied crew titles (Director, Writer, Cinematographer,
+    Editor, Music, ...) that shouldn't require a schema change to extend.
+    """
+    __tablename__ = "video_crew"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    role = Column(String(100), nullable=False)
+    name = Column(String(255), nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)

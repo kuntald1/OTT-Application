@@ -472,16 +472,47 @@ class VideoRevenueTierOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VideoCastIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    character_role: Optional[str] = Field(default=None, max_length=255)
+
+
+class VideoCastOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    character_role: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class VideoCrewIn(BaseModel):
+    role: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class VideoCrewOut(BaseModel):
+    id: uuid.UUID
+    role: str
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class VideoCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: Optional[str] = None
     section: str = Field(pattern="^(play|archive)$")
-    category: str = Field(min_length=1, max_length=100)
+    categories: List[str] = Field(min_length=1, max_length=3)
+    release_year: int = Field(ge=1900, le=2100)
+    age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+|A)$")
+    languages: Optional[List[str]] = None
     has_ads: bool = True
     monetization_type: str = Field(pattern="^(subscription_only|pay_per_video)$", default="subscription_only")
     price_inr: Optional[Decimal] = Field(default=None, gt=0)
     price_usd: Optional[Decimal] = Field(default=None, gt=0)
     revenue_tiers: List[VideoRevenueTierIn] = Field(min_length=1, max_length=5)
+    cast: List[VideoCastIn] = Field(default=[], max_length=10)
+    crew: List[VideoCrewIn] = Field(default=[], max_length=5)
 
 
 class VideoPricingOut(BaseModel):
@@ -497,13 +528,19 @@ class VideoOut(BaseModel):
     title: str
     description: Optional[str] = None
     section: str
-    category: str
+    categories: List[str]
+    release_year: int
+    age_rating: str
+    languages: List[str]
+    poster_image_url: Optional[str] = None
     has_ads: bool
     monetization_type: str
     status: str
     admin_note: Optional[str] = None
     pricing: Optional[VideoPricingOut] = None
     revenue_tiers: List[VideoRevenueTierOut]
+    cast: List[VideoCastOut]
+    crew: List[VideoCrewOut]
     has_file: bool
     playback_url: Optional[str] = None
     embed_url: Optional[str] = None
