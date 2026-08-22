@@ -66,3 +66,22 @@ export function deactivateAdminAccount(adminId) {
     auth: true,
   });
 }
+
+export function fetchAdminVideos(statusFilter = "pending") {
+  return request(`/admin/videos?status_filter=${statusFilter}`, { auth: true });
+}
+
+export function approveVideo(videoId) {
+  return request(`/admin/videos/${videoId}/approve`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function rejectVideo(videoId, adminNote) {
+  return request(`/admin/videos/${videoId}/reject`, {
+    method: "POST",
+    auth: true,
+    body: { admin_note: adminNote },
+  });
+}

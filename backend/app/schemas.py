@@ -504,3 +504,7 @@ class VideoOut(BaseModel):
     playback_url: Optional[str] = None
     created_at: datetime
     published_at: Optional[datetime] = None
+
+
+class AdminVideoRejectRequest(BaseModel):
+    admin_note: str = Field(min_length=1, max_length=500)
