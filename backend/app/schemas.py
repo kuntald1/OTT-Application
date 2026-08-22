@@ -453,3 +453,52 @@ class AdminCreateRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: str = Field(pattern="^(superadmin|admin)$", default="admin")
+
+
+class VideoRevenueTierIn(BaseModel):
+    min_minutes: int = Field(ge=1)
+    max_minutes: Optional[int] = Field(default=None, ge=1)
+    rate_per_minute_inr: Decimal = Field(gt=0)
+
+
+class VideoRevenueTierOut(BaseModel):
+    id: uuid.UUID
+    min_minutes: int
+    max_minutes: Optional[int] = None
+    rate_per_minute_inr: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class VideoCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: Optional[str] = None
+    section: str = Field(pattern="^(play|archive)$")
+    has_ads: bool = True
+    monetization_type: str = Field(pattern="^(subscription_only|pay_per_video)$", default="subscription_only")
+    price_inr: Optional[Decimal] = Field(default=None, gt=0)
+    price_usd: Optional[Decimal] = Field(default=None, gt=0)
+    revenue_tiers: List[VideoRevenueTierIn] = Field(min_length=1, max_length=5)
+
+
+class VideoPricingOut(BaseModel):
+    price_inr: Decimal
+    price_usd: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class VideoOut(BaseModel):
+    id: uuid.UUID
+    uploaded_by_name: str
+    title: str
+    description: Optional[str] = None
+    section: str
+    has_ads: bool
+    monetization_type: str
+    status: str
+    admin_note: Optional[str] = None
+    pricing: Optional[VideoPricingOut] = None
+    revenue_tiers: List[VideoRevenueTierOut]
+    created_at: datetime
+    published_at: Optional[datetime] = None

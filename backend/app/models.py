@@ -605,3 +605,96 @@ class AdminUser(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class VideoSection(str, enum.Enum):
+    play = "play"
+    archive = "archive"
+
+
+class VideoStatus(str, enum.Enum):
+    pending = "pending"
+    published = "published"
+    rejected = "rejected"
+
+
+class VideoMonetization(str, enum.Enum):
+    subscription_only = "subscription_only"
+    pay_per_video = "pay_per_video"
+
+
+class Video(Base):
+    """Video Phase 1 — metadata, pricing, and the admin approval workflow
+    only. No actual video FILE is stored yet — bunny_video_id stays null
+    until Phase 2 wires in real Bunny Stream upload + HLS playback.
+
+    A video only becomes visible on Play/Archive once status='published'
+    — set by an admin (via direct SQL for now, same pattern as event
+    enquiries and withdrawal requests, until the Admin Module grows an
+    approval UI in a later phase).
+
+    monetization_type='pay_per_video' means: even a subscriber must pay
+    the video's own separate price to watch it — subscription is only
+    the PREREQUISITE that unlocks the ability to buy pay-per-video
+    content at all, never a free pass to it. A user with no subscription
+    can't purchase pay-per-video content regardless of price.
+    """
+    __tablename__ = "videos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    uploaded_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    section = Column(Enum(VideoSection), nullable=False)
+
+    # True = ads play during this video; False = ad-free. Can be toggled
+    # by the uploader at any time — ads stop immediately once set False.
+    has_ads = Column(Boolean, nullable=False, default=True)
+
+    monetization_type = Column(Enum(VideoMonetization), nullable=False, default=VideoMonetization.subscription_only)
+
+    status = Column(Enum(VideoStatus), nullable=False, default=VideoStatus.pending)
+    admin_note = Column(String(500), nullable=True)
+
+    # Filled in during Phase 2, once real Bunny Stream upload exists
+    bunny_video_id = Column(String(255), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class VideoPricing(Base):
+    """Pay-Per-Video price — only present when Video.monetization_type is
+    'pay_per_video'. Both currencies set explicitly by the uploader, same
+    reasoning as subscription_plans.base_price_usd: not auto-converted,
+    a deliberate price for each market.
+    """
+    __tablename__ = "video_pricing"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, unique=True)
+    price_inr = Column(Numeric(10, 2), nullable=False)
+    price_usd = Column(Numeric(10, 2), nullable=False)
+
+
+class VideoRevenueTier(Base):
+    """One row per view-length tier for a single video's revenue-share
+    rate, e.g. 1-500 min => ₹1.50/min, 501-1500 => ₹1.00/min, etc. Set by
+    the Content Creator / Plays Organiser at upload time, up to 5 tiers
+    per video. max_minutes NULL means "and above" (an unbounded top
+    tier, e.g. "1-unlimited => ₹1.20/min").
+
+    Actual revenue calculation from real watch-time (Phase 3) will use
+    these tiers together with the "max single-session view" rule
+    confirmed earlier — not simply summing every session's minutes.
+    """
+    __tablename__ = "video_revenue_tiers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    min_minutes = Column(Integer, nullable=False)
+    max_minutes = Column(Integer, nullable=True)  # null = unbounded top tier
+    rate_per_minute_inr = Column(Numeric(10, 2), nullable=False)

@@ -258,6 +258,18 @@ export function fetchRevenueRate() {
   return request("/revenue-rate");
 }
 
+export function uploadVideo(payload) {
+  return request("/videos", {
+    method: "POST",
+    auth: true,
+    body: payload,
+  });
+}
+
+export function fetchMyVideos() {
+  return request("/videos/mine", { auth: true });
+}
+
 export function fetchRevenueSummary() {
   return request("/revenue/summary", { auth: true });
 }
