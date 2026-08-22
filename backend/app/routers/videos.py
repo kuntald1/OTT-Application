@@ -72,6 +72,10 @@ def _to_out(video: Video, db: Session) -> VideoOut:
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/thumbnail.jpg"
             if video.bunny_video_id else None
         ),
+        preview_url=(
+            f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/preview.webp"
+            if video.bunny_video_id else None
+        ),
         created_at=video.created_at,
         published_at=video.published_at,
     )

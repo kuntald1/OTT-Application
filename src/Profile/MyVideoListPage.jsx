@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX } from "lucide-react";
+import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { uploadVideo, uploadVideoFile, fetchMyVideos } from "../api";
 import { CATEGORIES } from "../shared/categories";
@@ -87,6 +87,8 @@ export default function MyVideoListPage({ onBack }) {
   const [error, setError] = useState("");
 
   const [uploadingFileFor, setUploadingFileFor] = useState(null);
+  const [hoveredVideoId, setHoveredVideoId] = useState(null);
+  const [playingVideoId, setPlayingVideoId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileUploadError, setFileUploadError] = useState("");
 
@@ -311,21 +313,59 @@ export default function MyVideoListPage({ onBack }) {
               const st = STATUS_STYLES[v.status] || STATUS_STYLES.pending;
               return (
                 <div key={v.id} className="overflow-hidden rounded-2xl" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {/* Poster area — real Bunny-generated thumbnail once a file is uploaded */}
-                  <div className="relative aspect-video w-full overflow-hidden" style={{ background: "linear-gradient(135deg, rgba(212,175,55,0.15), rgba(0,0,0,0.4))" }}>
-                    {v.has_file ? (
-                      <img src={v.thumbnail_url} alt={v.title} className="h-full w-full object-cover" />
+                  {/* Poster area — real Bunny-generated thumbnail once a file is
+                      uploaded. Hover shows Bunny's animated preview clip; click
+                      opens the full embedded player. */}
+                  <div
+                    className="relative aspect-video w-full overflow-hidden"
+                    style={{ background: "linear-gradient(135deg, rgba(212,175,55,0.15), rgba(0,0,0,0.4))", cursor: v.has_file ? "pointer" : "default" }}
+                    onMouseEnter={() => v.has_file && setHoveredVideoId(v.id)}
+                    onMouseLeave={() => setHoveredVideoId(null)}
+                    onClick={() => v.has_file && setPlayingVideoId(playingVideoId === v.id ? null : v.id)}
+                  >
+                    {playingVideoId === v.id ? (
+                      <>
+                        <iframe
+                          src={v.embed_url}
+                          loading="lazy"
+                          style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                          allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
+                          allowFullScreen
+                        />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPlayingVideoId(null); }}
+                          className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
+                          style={{ background: "rgba(0,0,0,0.6)", color: COLORS.cream }}
+                        >
+                          ✕
+                        </button>
+                      </>
+                    ) : v.has_file ? (
+                      <>
+                        <img
+                          src={hoveredVideoId === v.id ? v.preview_url : v.thumbnail_url}
+                          alt={v.title}
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity hover:opacity-100" style={{ background: "rgba(0,0,0,0.25)" }}>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,0.5)" }}>
+                            <Play className="ml-0.5 h-4 w-4" style={{ color: COLORS.cream }} fill={COLORS.cream} />
+                          </div>
+                        </div>
+                      </>
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
                         <Clapperboard className="h-10 w-10" style={{ color: "rgba(212,175,55,0.4)" }} />
                       </div>
                     )}
-                    <span
-                      className="absolute left-2.5 top-2.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize"
-                      style={{ background: st.bg, color: st.color, backdropFilter: "blur(4px)" }}
-                    >
-                      {v.status}
-                    </span>
+                    {playingVideoId !== v.id && (
+                      <span
+                        className="absolute left-2.5 top-2.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize"
+                        style={{ background: st.bg, color: st.color, backdropFilter: "blur(4px)" }}
+                      >
+                        {v.status}
+                      </span>
+                    )}
                   </div>
 
                   <div className="p-4">

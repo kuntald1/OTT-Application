@@ -506,6 +506,7 @@ class VideoOut(BaseModel):
     playback_url: Optional[str] = None
     embed_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    preview_url: Optional[str] = None
     created_at: datetime
     published_at: Optional[datetime] = None
 
