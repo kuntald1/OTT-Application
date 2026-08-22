@@ -56,6 +56,7 @@ export default function MyVideoListPage({ onBack }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [uploadingFileFor, setUploadingFileFor] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [fileUploadError, setFileUploadError] = useState("");
 
   const loadVideos = () => {
@@ -116,14 +117,16 @@ export default function MyVideoListPage({ onBack }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileUploadError("");
+    setUploadProgress(0);
     setUploadingFileFor(videoId);
     try {
-      await uploadVideoFile(videoId, file);
+      await uploadVideoFile(videoId, file, (pct) => setUploadProgress(pct));
       loadVideos();
     } catch (err) {
       setFileUploadError(err.message || "Couldn't upload video file. Please try again.");
     } finally {
       setUploadingFileFor(null);
+      setUploadProgress(0);
     }
   };
 
@@ -313,20 +316,34 @@ export default function MyVideoListPage({ onBack }) {
                     </p>
                   ) : (
                     <div className="mt-3">
-                      <label
-                        className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-                        style={{ borderColor: "rgba(212,175,55,0.3)", color: COLORS.gold }}
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                        {uploadingFileFor === v.id ? "Uploading…" : "Upload video file"}
-                        <input
-                          type="file"
-                          accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
-                          className="hidden"
-                          disabled={uploadingFileFor === v.id}
-                          onChange={(e) => handleFileSelect(v.id, e)}
-                        />
-                      </label>
+                      {uploadingFileFor === v.id ? (
+                        <div className="max-w-xs">
+                          <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                            <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                          style={{ borderColor: "rgba(212,175,55,0.3)", color: COLORS.gold }}
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          Upload video file
+                          <input
+                            type="file"
+                            accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
+                            className="hidden"
+                            onChange={(e) => handleFileSelect(v.id, e)}
+                          />
+                        </label>
+                      )}
                       {fileUploadError && uploadingFileFor === null && (
                         <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
                       )}

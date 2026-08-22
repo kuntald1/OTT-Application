@@ -266,21 +266,41 @@ export function uploadVideo(payload) {
   });
 }
 
-export async function uploadVideoFile(videoId, file) {
-  const token = getToken();
-  const formData = new FormData();
-  formData.append("file", file);
+// fetch() has no way to report upload progress — this is a real browser
+// API gap, not something we're working around unnecessarily.
+// XMLHttpRequest's upload.onprogress event is the standard, reliable way
+// to get real percentage-complete during a large file upload, so this
+// one call uses XHR instead of fetch specifically for that reason.
+export function uploadVideoFile(videoId, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
 
-  const res = await fetch(`${BASE_URL}/videos/${videoId}/upload-file`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE_URL}/videos/${videoId}/upload-file`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload video file. Please try again."));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during upload. Please try again."));
+
+    xhr.send(formData);
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload video file. Please try again.");
-  }
-  return data;
 }
 
 export function fetchMyVideos() {
