@@ -568,3 +568,40 @@ class RewardConfig(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class AdminRole(str, enum.Enum):
+    superadmin = "superadmin"
+    admin = "admin"
+
+
+class AdminUser(Base):
+    """Staff/admin accounts — deliberately a SEPARATE table from `users`,
+    not another role value on the customer User model. This means an
+    admin's JWT and a regular user's JWT are naturally isolated from each
+    other: each auth dependency queries its own table, so a token issued
+    for one can never resolve to an account in the other, even by
+    accident.
+
+    superadmin — full access: manage other admin accounts, edit
+    config/rate tables (tax, revenue share, exchange rate, rewards).
+    admin — day-to-day operational access: approve/reject event
+    enquiries, process withdrawal requests, etc. Cannot manage other
+    admin accounts or touch financial config.
+
+    No public registration endpoint exists for this table — the first
+    superadmin is created via a one-time script (see app/create_admin.py),
+    and every admin account after that is created by an existing
+    superadmin through the admin panel itself.
+    """
+    __tablename__ = "admin_users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(Enum(AdminRole), nullable=False, default=AdminRole.admin)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

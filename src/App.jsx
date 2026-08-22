@@ -22,9 +22,11 @@ import CommunityRoomsPage from './Community/CommunityRoomsPage'
 import CommunityRoomPage from './Community/CommunityRoomPage'
 import DonationPage from './Community/DonationPage'
 import ResetPasswordPage from './Auth/ResetPasswordPage'
+import StripeSuccessPage from './Subscription/StripeSuccessPage'
 import MyVideoListPage from './Profile/MyVideoListPage'
 import RevenuePage from './Profile/RevenuePage'
 import EventEnquiryPage from './Profile/EventEnquiryPage'
+import AdminApp from './admin/AdminApp'
 
 // Route state is { view, params }. navigate(view, params) pushes the
 // CURRENT route onto a history stack before switching, so goBack() can pop
@@ -45,11 +47,26 @@ function getInitialRoute() {
       return { view: 'resetPassword', params: { token } }
     }
   }
+  if (window.location.pathname === '/stripe/success') {
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session_id')
+    return { view: 'stripeSuccess', params: { sessionId } }
+  }
   return { view: 'hero', params: {} }
 }
 
 export default function App() {
   const [route, setRoute] = useState(getInitialRoute)
+
+  // Admin is a completely separate application. Matches on any path
+  // starting with /admin (not just an exact match) since the admin app
+  // may grow its own internal pages later; AdminApp handles
+  // login/dashboard switching entirely on its own. Checked before the
+  // rest of App's history state is used, same pattern as resetPassword
+  // and stripeSuccess below.
+  if (window.location.pathname.startsWith('/admin')) {
+    return <AdminApp />
+  }
   const [history, setHistory] = useState([])
 
   const navigate = (view, params = {}) => {
@@ -80,6 +97,23 @@ export default function App() {
     return (
       <ResetPasswordPage
         token={route.params.token}
+        onDone={() => {
+          window.history.replaceState({}, '', '/')
+          setRoute({ view: 'hero', params: {} })
+        }}
+      />
+    )
+  }
+
+  // Stripe success is also rendered standalone (outside AppProvider's
+  // login-modal-forcing behavior) — the user IS logged in at this point
+  // (their JWT is already in localStorage from before they left for
+  // Stripe's checkout page), api.js reads it directly regardless of
+  // whether AppProvider has mounted yet.
+  if (route.view === 'stripeSuccess') {
+    return (
+      <StripeSuccessPage
+        sessionId={route.params.sessionId}
         onDone={() => {
           window.history.replaceState({}, '', '/')
           setRoute({ view: 'hero', params: {} })

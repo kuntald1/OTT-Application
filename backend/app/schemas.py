@@ -424,3 +424,32 @@ class StripeConfirmRequest(BaseModel):
 class RewardConfigOut(BaseModel):
     subscription_reward_percent: Decimal
     ticket_reward_percent: Decimal
+
+
+class AdminLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1)
+
+
+class AdminOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdminToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    admin: AdminOut
+
+
+class AdminCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    role: str = Field(pattern="^(superadmin|admin)$", default="admin")
