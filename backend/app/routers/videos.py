@@ -13,6 +13,12 @@ from app.schemas import VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTier
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
+# Same taxonomy as the site's Category menu and Event Enquiry form.
+ALLOWED_CATEGORIES = {
+    "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
+    "Classical Theatre", "Experimental Theatre", "Popular Shows",
+}
+
 
 def _require_creator_or_organiser(user: User) -> None:
     if user.role not in (UserRole.content_creator, UserRole.plays_organiser):
@@ -37,6 +43,7 @@ def _to_out(video: Video, db: Session) -> VideoOut:
         title=video.title,
         description=video.description,
         section=video.section.value,
+        category=video.category,
         has_ads=video.has_ads,
         monetization_type=video.monetization_type.value,
         status=video.status.value,
@@ -70,6 +77,12 @@ def upload_video(
 ):
     _require_creator_or_organiser(current_user)
 
+    if payload.category not in ALLOWED_CATEGORIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"category must be one of: {', '.join(sorted(ALLOWED_CATEGORIES))}",
+        )
+
     if payload.monetization_type == "pay_per_video":
         if payload.price_inr is None or payload.price_usd is None:
             raise HTTPException(
@@ -82,6 +95,7 @@ def upload_video(
         title=payload.title,
         description=payload.description,
         section=VideoSection(payload.section),
+        category=payload.category,
         has_ads=payload.has_ads,
         monetization_type=VideoMonetization(payload.monetization_type),
     )

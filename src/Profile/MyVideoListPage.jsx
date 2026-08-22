@@ -1,15 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { uploadVideo, uploadVideoFile, fetchMyVideos } from "../api";
-
-// ---------------------------------------------------------------------------
-// My Video List — Phase 1: metadata, pricing, and revenue tiers only. No
-// actual video FILE upload yet — that's Phase 2, once Bunny Stream is
-// wired in. A video submitted here starts "pending" and only becomes
-// visible on Play/Archive once an admin approves it (currently via
-// direct SQL, until the Admin Module grows an approval UI).
-// ---------------------------------------------------------------------------
+import { CATEGORIES } from "../shared/categories";
 
 const inputStyle = {
   width: "100%",
@@ -42,19 +35,57 @@ function makeEmptyTier() {
   return { key: Math.random().toString(36).slice(2), min_minutes: "", max_minutes: "", rate_per_minute_inr: "" };
 }
 
+function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm ${capitalizeOptions ? "capitalize" : ""}`}
+          style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: value ? COLORS.cream : "rgba(245,235,221,0.4)" }}
+        >
+          {value || placeholder}
+          <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div className={`absolute left-0 top-full z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl ${capitalizeOptions ? "capitalize" : ""}`} style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.25)" }}>
+              {options.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => { onChange(opt); setOpen(false); }}
+                  className="block w-full px-4 py-2.5 text-left text-sm hover:bg-white/10"
+                  style={{ color: value === opt ? COLORS.gold : "rgba(245,235,221,0.85)" }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function MyVideoListPage({ onBack }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
 
   const [form, setForm] = useState({
-    title: "", description: "", section: "play", has_ads: true, monetization_type: "subscription_only",
+    title: "", description: "", section: "play", category: "", has_ads: true, monetization_type: "subscription_only",
     price_inr: "", price_usd: "",
   });
-  const [sectionOpen, setSectionOpen] = useState(false);
   const [tiers, setTiers] = useState([makeEmptyTier()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
   const [uploadingFileFor, setUploadingFileFor] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileUploadError, setFileUploadError] = useState("");
@@ -74,10 +105,10 @@ export default function MyVideoListPage({ onBack }) {
   const isPayPerVideo = form.monetization_type === "pay_per_video";
   const tiersValid = tiers.every((t) => t.min_minutes !== "" && Number(t.rate_per_minute_inr) > 0);
   const pricingValid = !isPayPerVideo || (Number(form.price_inr) > 0 && Number(form.price_usd) > 0);
-  const canSubmit = form.title.trim() && tiersValid && pricingValid;
+  const canSubmit = form.title.trim() && form.category && tiersValid && pricingValid;
 
   const resetForm = () => {
-    setForm({ title: "", description: "", section: "play", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
+    setForm({ title: "", description: "", section: "play", category: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
     setTiers([makeEmptyTier()]);
   };
 
@@ -90,6 +121,7 @@ export default function MyVideoListPage({ onBack }) {
         title: form.title.trim(),
         description: form.description.trim() || null,
         section: form.section,
+        category: form.category,
         has_ads: form.has_ads,
         monetization_type: form.monetization_type,
         price_inr: isPayPerVideo ? Number(form.price_inr) : null,
@@ -140,7 +172,7 @@ export default function MyVideoListPage({ onBack }) {
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold" style={{ color: COLORS.cream }}>My Video List</h1>
-            <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Submit video details for admin review. Actual video file upload is coming in the next phase.</p>
+            <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>Submit videos for admin review, then upload the file for approved content.</p>
           </div>
           <button
             type="button"
@@ -153,59 +185,43 @@ export default function MyVideoListPage({ onBack }) {
         </div>
 
         {showUpload && (
-          <div className="mb-8 flex flex-col gap-4 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}>
-            <div>
-              <label style={labelStyle}>Title *</label>
-              <input type="text" value={form.title} onChange={update("title")} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Description</label>
-              <textarea rows={3} value={form.description} onChange={update("description")} style={{ ...inputStyle, resize: "vertical" }} />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+          <div className="mb-8 flex flex-col gap-5 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}>
+            <div className="flex flex-col gap-4">
               <div>
-                <label style={labelStyle}>Section *</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setSectionOpen((v) => !v)}
-                    className="flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm capitalize"
-                    style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-                  >
-                    {form.section}
-                    <ChevronDown className={`h-4 w-4 transition-transform ${sectionOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {sectionOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setSectionOpen(false)} />
-                      <div className="absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded-xl" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.25)" }}>
-                        {["play", "archive"].map((s) => (
-                          <button key={s} type="button" onClick={() => { setForm((f) => ({ ...f, section: s })); setSectionOpen(false); }} className="block w-full px-4 py-2.5 text-left text-sm capitalize hover:bg-white/10" style={{ color: form.section === s ? COLORS.gold : "rgba(245,235,221,0.85)" }}>
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                <label style={labelStyle}>Title *</label>
+                <input type="text" value={form.title} onChange={update("title")} style={inputStyle} />
               </div>
+              <div>
+                <label style={labelStyle}>Description</label>
+                <textarea rows={3} value={form.description} onChange={update("description")} style={{ ...inputStyle, resize: "vertical" }} />
+              </div>
+            </div>
 
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Dropdown label="Section *" value={form.section} options={["play", "archive"]} onChange={(v) => setForm((f) => ({ ...f, section: v }))} capitalizeOptions />
+              <Dropdown label="Category *" value={form.category} options={CATEGORIES} onChange={(v) => setForm((f) => ({ ...f, category: v }))} placeholder="Select a category" />
               <div>
                 <label style={labelStyle}>Ads</label>
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, has_ads: !f.has_ads }))}
-                  className="flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm"
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border px-4 py-2.5 text-left text-sm"
                   style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
                 >
-                  {form.has_ads ? "Ad Present" : "Ad Free"}
+                  <span className="flex items-center gap-1.5">
+                    {form.has_ads ? <Megaphone className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                    {form.has_ads ? "Ad Present" : "Ad Free"}
+                  </span>
                   <div className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5" style={{ background: form.has_ads ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}>
                     <div className="h-4 w-4 rounded-full bg-white transition-transform" style={{ transform: form.has_ads ? "translateX(16px)" : "translateX(0)" }} />
                   </div>
                 </button>
               </div>
             </div>
+
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
             <div>
               <label style={labelStyle}>Monetization</label>
@@ -240,6 +256,8 @@ export default function MyVideoListPage({ onBack }) {
                 </div>
               </div>
             )}
+
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
             <div>
               <label style={labelStyle}>Revenue-Share Tiers * (up to 5)</label>
@@ -288,48 +306,61 @@ export default function MyVideoListPage({ onBack }) {
             <p className="text-sm font-medium" style={{ color: "rgba(245,235,221,0.7)" }}>No videos yet</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {videos.map((v) => {
               const st = STATUS_STYLES[v.status] || STATUS_STYLES.pending;
               return (
-                <div key={v.id} className="rounded-xl px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
-                      <p className="mt-0.5 text-xs capitalize" style={{ color: "rgba(245,235,221,0.5)" }}>
-                        {v.section} · {v.monetization_type.replace(/_/g, " ")} · {v.has_ads ? "Ad Present" : "Ad Free"} · Submitted {formatDate(v.created_at)}
-                        {v.admin_note && ` · ${v.admin_note}`}
-                      </p>
+                <div key={v.id} className="overflow-hidden rounded-2xl" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="flex items-start gap-4 p-5">
+                    <div
+                      className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl"
+                      style={{ background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.2)" }}
+                    >
+                      <Clapperboard className="h-6 w-6" style={{ color: COLORS.gold }} />
                     </div>
-                    <span className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize" style={{ background: st.bg, color: st.color }}>{v.status}</span>
-                  </div>
-                  {v.pricing && (
-                    <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
-                      Pay-Per-Video: ₹{v.pricing.price_inr} / ${v.pricing.price_usd}
-                    </p>
-                  )}
 
-                  {/* Phase 2 — actual video file upload */}
-                  {v.has_file ? (
-                    <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: "#6FCF97" }}>
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Video file uploaded — processing may take a few minutes before it's playable.
-                    </p>
-                  ) : (
-                    <div className="mt-3">
-                      {uploadingFileFor === v.id ? (
-                        <div className="max-w-xs">
-                          <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                            <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
-                            <span>{uploadProgress}%</span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }}
-                            />
-                          </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
+                        <span className="flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize" style={{ background: st.bg, color: st.color }}>{v.status}</span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.section}</span>
+                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.category}</span>
+                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.monetization_type.replace(/_/g, " ")}</span>
+                        <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>
+                          {v.has_ads ? <Megaphone className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />} {v.has_ads ? "Ad Present" : "Ad Free"}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Submitted {formatDate(v.created_at)}</p>
+                      {v.admin_note && (
+                        <p className="mt-1.5 text-xs font-medium" style={{ color: v.status === "rejected" ? "#f87171" : "rgba(245,235,221,0.5)" }}>Note: {v.admin_note}</p>
+                      )}
+                      {v.pricing && (
+                        <p className="mt-1.5 flex items-center gap-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                          <IndianRupee className="h-3 w-3" /> Pay-Per-Video: ₹{v.pricing.price_inr} / ${v.pricing.price_usd}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border-t px-5 py-3" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
+                    {v.has_file ? (
+                      <p className="flex items-center gap-1.5 text-xs" style={{ color: "#6FCF97" }}>
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Video file uploaded — processing may take a few minutes before it's playable.
+                      </p>
+                    ) : uploadingFileFor === v.id ? (
+                      <div className="max-w-xs">
+                        <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                          <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                          <span>{uploadProgress}%</span>
                         </div>
-                      ) : (
+                        <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
                         <label
                           className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
                           style={{ borderColor: "rgba(212,175,55,0.3)", color: COLORS.gold }}
@@ -343,12 +374,12 @@ export default function MyVideoListPage({ onBack }) {
                             onChange={(e) => handleFileSelect(v.id, e)}
                           />
                         </label>
-                      )}
-                      {fileUploadError && uploadingFileFor === null && (
-                        <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
-                      )}
-                    </div>
-                  )}
+                        {fileUploadError && uploadingFileFor === null && (
+                          <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

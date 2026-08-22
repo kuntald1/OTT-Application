@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AdminLoginPage from "./AdminLoginPage";
-import AdminDashboardPage from "./AdminDashboardPage";
+import AdminLayout from "./AdminLayout";
 import { getAdminToken, fetchCurrentAdmin } from "./adminApi";
 
 // Entirely self-contained — does NOT use the regular consumer AppContext
@@ -36,5 +36,5 @@ export default function AdminApp() {
     return <AdminLoginPage onLoggedIn={setCurrentAdmin} />;
   }
 
-  return <AdminDashboardPage currentAdmin={currentAdmin} onLogout={() => setCurrentAdmin(null)} />;
+  return <AdminLayout currentAdmin={currentAdmin} onLogout={() => setCurrentAdmin(null)} />;
 }

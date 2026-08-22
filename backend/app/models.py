@@ -647,6 +647,11 @@ class Video(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     section = Column(Enum(VideoSection), nullable=False)
+    # Same taxonomy as the Event Enquiry category and the site's Category
+    # menu (Bengali Theatre, Drama, Comedy, etc.) — kept as plain String
+    # rather than a DB enum so the category list can be extended later
+    # without a migration; validated against the shared list server-side.
+    category = Column(String(100), nullable=False)
 
     # True = ads play during this video; False = ad-free. Can be toggled
     # by the uploader at any time — ads stop immediately once set False.

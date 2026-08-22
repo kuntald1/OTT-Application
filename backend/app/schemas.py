@@ -474,6 +474,7 @@ class VideoCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: Optional[str] = None
     section: str = Field(pattern="^(play|archive)$")
+    category: str = Field(min_length=1, max_length=100)
     has_ads: bool = True
     monetization_type: str = Field(pattern="^(subscription_only|pay_per_video)$", default="subscription_only")
     price_inr: Optional[Decimal] = Field(default=None, gt=0)
@@ -494,6 +495,7 @@ class VideoOut(BaseModel):
     title: str
     description: Optional[str] = None
     section: str
+    category: str
     has_ads: bool
     monetization_type: str
     status: str
