@@ -439,14 +439,21 @@ export default function SubscriptionPage({ onBack }) {
                             is the actual fix: no more guessing which payment
                             belongs to which subscription. */}
                         {matchingPayment ? (
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.12)" }}>
-                            <div className="flex items-center gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                              <Receipt className="h-3 w-3 flex-shrink-0" style={{ color: COLORS.gold }} />
-                              Paid {matchingPayment.currency === "USD" ? "$" : "₹"}{matchingPayment.total_amount} via {matchingPayment.gateway}
-                              {" "}(Base {matchingPayment.currency === "USD" ? "$" : "₹"}{matchingPayment.base_amount}
-                              {Number(matchingPayment.tax_amount) > 0 ? ` + Tax ${matchingPayment.currency === "USD" ? "$" : "₹"}${matchingPayment.tax_amount}` : ""})
-                              {matchingPayment.reward_points_used > 0 && ` · ${matchingPayment.reward_points_used} reward points used`}
-                              {" · "}{formatDate(matchingPayment.created_at)}
+                          <div className="flex flex-wrap items-start justify-between gap-2 border-t px-4 py-2.5" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.12)" }}>
+                            <div className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                              <p className="flex items-center gap-1.5">
+                                <Receipt className="h-3 w-3 flex-shrink-0" style={{ color: COLORS.gold }} />
+                                Paid {matchingPayment.currency === "USD" ? "$" : "₹"}{matchingPayment.total_amount} via {matchingPayment.gateway}
+                                {" "}(Base {matchingPayment.currency === "USD" ? "$" : "₹"}{matchingPayment.base_amount}
+                                {Number(matchingPayment.tax_amount) > 0 ? ` + Tax ${matchingPayment.currency === "USD" ? "$" : "₹"}${matchingPayment.tax_amount}` : ""})
+                                {matchingPayment.reward_points_used > 0 && ` · ${matchingPayment.reward_points_used} reward points used`}
+                                {" · "}{formatDate(matchingPayment.created_at)}
+                              </p>
+                              {matchingPayment.gateway_payment_id && (
+                                <p className="mt-1 font-mono text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                                  Transaction ID: {matchingPayment.gateway_payment_id}
+                                </p>
+                              )}
                             </div>
                             <span
                               className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize"
