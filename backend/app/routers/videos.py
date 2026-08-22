@@ -64,6 +64,10 @@ def _to_out(video: Video, db: Session) -> VideoOut:
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/playlist.m3u8"
             if video.bunny_video_id else None
         ),
+        embed_url=(
+            f"https://player.mediadelivery.net/embed/{settings.BUNNY_LIBRARY_ID}/{video.bunny_video_id}"
+            if video.bunny_video_id else None
+        ),
         created_at=video.created_at,
         published_at=video.published_at,
     )

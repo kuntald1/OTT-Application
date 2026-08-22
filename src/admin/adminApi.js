@@ -85,3 +85,23 @@ export function rejectVideo(videoId, adminNote) {
     body: { admin_note: adminNote },
   });
 }
+
+export function disableVideo(videoId) {
+  return request(`/admin/videos/${videoId}/disable`, { method: "POST", auth: true });
+}
+
+export function enableVideo(videoId) {
+  return request(`/admin/videos/${videoId}/enable`, { method: "POST", auth: true });
+}
+
+export async function deleteVideo(videoId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/videos/${videoId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete this video.");
+  }
+}

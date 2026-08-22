@@ -615,6 +615,7 @@ class VideoSection(str, enum.Enum):
 class VideoStatus(str, enum.Enum):
     pending = "pending"
     published = "published"
+    disabled = "disabled"  # approved once, hidden from public without deleting anything
     rejected = "rejected"
 
 

@@ -504,6 +504,7 @@ class VideoOut(BaseModel):
     revenue_tiers: List[VideoRevenueTierOut]
     has_file: bool
     playback_url: Optional[str] = None
+    embed_url: Optional[str] = None
     created_at: datetime
     published_at: Optional[datetime] = None
 

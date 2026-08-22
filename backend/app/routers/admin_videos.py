@@ -1,10 +1,12 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Video, VideoStatus
+from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus
 from app.schemas import VideoOut, AdminVideoRejectRequest
 from app.routers.videos import _to_out
 
@@ -22,7 +24,7 @@ def list_videos_for_review(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    if status_filter not in ("pending", "published", "rejected", "all"):
+    if status_filter not in ("pending", "published", "disabled", "rejected", "all"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status filter")
 
     query = db.query(Video)
@@ -66,3 +68,79 @@ def reject_video(
     db.commit()
     db.refresh(video)
     return _to_out(video, db)
+
+
+@router.post("/{video_id}/disable", response_model=VideoOut)
+def disable_video(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Hides a published video from the public site WITHOUT deleting it
+    from the database or removing the file from Bunny Stream — fully
+    reversible via /enable.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    if video.status != VideoStatus.published:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only published videos can be disabled.")
+
+    video.status = VideoStatus.disabled
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db)
+
+
+@router.post("/{video_id}/enable", response_model=VideoOut)
+def enable_video(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    if video.status != VideoStatus.disabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only disabled videos can be re-enabled.")
+
+    video.status = VideoStatus.published
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db)
+
+
+@router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_video(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Permanently removes the video — deletes the file from Bunny Stream
+    (if one was uploaded) AND the database rows. This is the ONLY
+    irreversible action in video review; disable/enable is reversible,
+    this is not. The frontend is responsible for confirming with the
+    admin before calling this.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    if video.bunny_video_id and settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                await client.delete(
+                    f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{video.bunny_video_id}",
+                    headers={"AccessKey": settings.BUNNY_API_KEY},
+                )
+            except Exception:
+                # Don't block the database cleanup if Bunny is unreachable
+                # — worst case, an orphaned file sits in Bunny storage,
+                # which is far better than a video the admin thinks was
+                # deleted but is still live on the actual database.
+                pass
+
+    db.query(VideoPricing).filter(VideoPricing.video_id == video.id).delete()
+    db.query(VideoRevenueTier).filter(VideoRevenueTier.video_id == video.id).delete()
+    db.delete(video)
+    db.commit()
