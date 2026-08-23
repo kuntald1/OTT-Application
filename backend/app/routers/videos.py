@@ -168,15 +168,24 @@ def _sync_cast_and_crew(
     Deletes the old Person rows too — safe because there's no
     search/reuse step yet (see Person model docstring), so every Person
     is only ever linked to exactly one VideoCast/VideoCrew row right now.
+
+    Deletion order matters: VideoCast/VideoCrew hold a foreign key
+    POINTING AT Person, so the referencing row must be deleted before
+    the Person it references — deleting Person first violates
+    referential integrity and raises an unhandled database error
+    (surfaces as a bare 500), which is exactly what was happening here.
     """
     old_cast = db.query(VideoCast).filter(VideoCast.video_id == video.id).all()
     old_crew = db.query(VideoCrew).filter(VideoCrew.video_id == video.id).all()
+    old_cast_person_ids = [c.person_id for c in old_cast]
+    old_crew_person_ids = [c.person_id for c in old_crew]
     for c in old_cast:
-        db.query(Person).filter(Person.id == c.person_id).delete()
         db.delete(c)
     for c in old_crew:
-        db.query(Person).filter(Person.id == c.person_id).delete()
         db.delete(c)
+    db.flush()
+    for person_id in old_cast_person_ids + old_crew_person_ids:
+        db.query(Person).filter(Person.id == person_id).delete()
     db.flush()
 
     for i, member in enumerate(payload.cast):
