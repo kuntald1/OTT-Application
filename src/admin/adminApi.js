@@ -94,6 +94,35 @@ export function enableVideo(videoId) {
   return request(`/admin/videos/${videoId}/enable`, { method: "POST", auth: true });
 }
 
+export function fetchAdminEnquiries(statusFilter = "pending") {
+  return request(`/admin/event-enquiries?status_filter=${statusFilter}`, { auth: true });
+}
+
+export function approveEnquiry(enquiryId) {
+  return request(`/admin/event-enquiries/${enquiryId}/approve`, { method: "POST", auth: true });
+}
+
+export function rejectEnquiry(enquiryId, adminNote) {
+  return request(`/admin/event-enquiries/${enquiryId}/reject`, {
+    method: "POST", auth: true, body: { admin_note: adminNote },
+  });
+}
+
+export function editEnquiry(enquiryId, payload) {
+  return request(`/admin/event-enquiries/${enquiryId}`, { method: "PUT", auth: true, body: payload });
+}
+
+export async function deleteEnquiry(enquiryId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/event-enquiries/${enquiryId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete this enquiry.");
+  }
+}
 export function editVideo(videoId, payload) {
   return request(`/admin/videos/${videoId}`, {
     method: "PUT",

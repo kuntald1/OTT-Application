@@ -270,3 +270,72 @@ def send_video_rejected_email(to_email: str, creator_name: str, video_title: str
         _send_email(to_email, subject, text_body, html_body)
     except Exception:
         pass
+
+
+def send_enquiry_approved_email(to_email: str, contact_person: str, event_title: str) -> None:
+    subject = f'Your event listing "{event_title}" has been approved'
+    text_body = (
+        f"Hi {contact_person},\n\nGreat news! Your event listing enquiry for "
+        f"\"{event_title}\" has been approved.\n\nThank you for submitting to theomy.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Your event listing is approved! \U0001F389",
+        [f'Hi {contact_person},', f'Your event listing enquiry for "<b>{event_title}</b>" has been approved.', "Thank you for submitting to theomy."],
+        "#6FCF97",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_enquiry_rejected_email(to_email: str, contact_person: str, event_title: str, reason: str) -> None:
+    subject = f'Update on your event listing "{event_title}"'
+    text_body = (
+        f"Hi {contact_person},\n\nYour event listing enquiry for \"{event_title}\" was not approved.\n\n"
+        f"Reason: {reason}\n\nYou're welcome to make changes and resubmit.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Event listing not approved",
+        [f'Hi {contact_person},', f'Your event listing enquiry for "<b>{event_title}</b>" was not approved.',
+         f'<b>Reason:</b> {reason}', "You're welcome to make changes and resubmit."],
+        "#f87171",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_enquiry_approved_whatsapp(to_phone: str, contact_person: str, event_title: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Great news, {contact_person}! Your event listing enquiry for "
+        f"\"{event_title}\" has been approved. Thank you for submitting to theomy!"
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_enquiry_rejected_whatsapp(to_phone: str, contact_person: str, event_title: str, reason: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Hi {contact_person}, your event listing enquiry for \"{event_title}\" "
+        f"was not approved. Reason: {reason}. You're welcome to make changes and resubmit."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass

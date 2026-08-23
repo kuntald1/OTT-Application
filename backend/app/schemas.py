@@ -605,3 +605,23 @@ class AdminVideoCreate(VideoCreate):
     # account with role content_creator or plays_organiser; validated
     # server-side, not just trusted from the request.
     attributed_user_id: Optional[uuid.UUID] = None
+
+
+class EventEnquiryEdit(BaseModel):
+    """Admin edit — same fields as submission, minus file attachments
+    (attachment editing isn't built in this pass; still viewable/
+    deletable, just not re-uploadable from the edit form).
+    """
+    org_name: str = Field(min_length=1, max_length=255)
+    org_about: Optional[str] = None
+    contact_person: str = Field(min_length=1, max_length=255)
+    contact_email: str = Field(min_length=1, max_length=255)
+    contact_phone: str = Field(min_length=1, max_length=20)
+    event_title: str = Field(min_length=1, max_length=255)
+    event_category: str = Field(min_length=1, max_length=100)
+    event_description: Optional[str] = None
+    proposed_date: datetime
+    proposed_time: Optional[str] = None
+    venue: str = Field(min_length=1, max_length=255)
+    remarks: Optional[str] = None
+    ticket_tiers: List[TicketTierIn] = Field(min_length=1)
