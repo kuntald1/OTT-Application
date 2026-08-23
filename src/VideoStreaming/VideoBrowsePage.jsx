@@ -61,7 +61,7 @@ const TITLE_POOL = [
 ];
 
 const CATEGORIES = [
-  "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
+  "Drama", "Comedy", "Musical Theatre",
   "Classical Theatre", "Experimental Theatre", "Popular Shows",
 ];
 
@@ -140,7 +140,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
         {realVideos.length > 0 && (
-          <GenreRow category="Recently Uploaded" cards={realVideos} onSelect={handleSelectCard} />
+          <GenreRow category="Bengali Theatre" cards={realVideos} onSelect={handleSelectCard} />
         )}
         {CATEGORIES.map((category) => {
           const cards = Array.from({ length: 6 }, (_, i) => buildVideoCard(category, i));
