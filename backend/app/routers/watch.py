@@ -8,7 +8,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, Video, VideoStatus, VideoRevenueTier, VideoWatchRecord,
-    RevenueRateConfig, CreatorEarnings,
+    RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry,
 )
 from app.routers.videos import _check_video_access
 from app.schemas import WatchHeartbeatRequest, WatchHeartbeatResponse, ContentPerformanceOut
@@ -125,6 +125,15 @@ def watch_heartbeat(
                 earnings.available_balance_paisa += delta_creator_paisa
                 credited_this_call_paisa = delta_creator_paisa
                 record.creator_credited_paisa += delta_creator_paisa
+
+                db.add(RevenueLedgerEntry(
+                    video_id=video.id,
+                    user_id=current_user.id,
+                    creator_user_id=video.uploaded_by_user_id,
+                    viewer_country=current_user.country,
+                    delta_gross_paisa=delta_gross_paisa,
+                    delta_creator_paisa=delta_creator_paisa,
+                ))
 
         record.gross_revenue_paisa = new_gross_paisa
         record.max_session_seconds = payload.session_seconds

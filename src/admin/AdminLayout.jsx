@@ -89,7 +89,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "videos" && <AdminVideoReviewPage />}
           {activePage === "add-video" && <AdminAddVideoPage />}
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}
-          {activePage === "revenue" && <AdminRevenuePage />}
+          {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "admins" && isSuperadmin && <AdminAccountsPage currentAdmin={currentAdmin} />}
         </div>
       </main>

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Wallet, BarChart3, Check, X, Banknote } from "lucide-react";
+import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp } from "lucide-react";
 import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
-  fetchAdminContentPerformance,
+  fetchAdminContentPerformance, fetchAdminRevenueConfig, updateAdminRevenueConfig,
+  fetchRevenueByDay, fetchRevenueByCountry,
 } from "./adminApi";
 
 const COLORS = {
@@ -10,6 +11,9 @@ const COLORS = {
   cream: "#f5ebdd",
   gold: "#D4AF37",
 };
+
+const CTA_GRADIENT = "linear-gradient(135deg, #D4AF37, #b8912c)";
+const CTA_TEXT_COLOR = "#0a0104";
 
 function formatDate(isoString) {
   return new Date(isoString).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -22,7 +26,8 @@ const STATUS_STYLES = {
   rejected: { bg: "rgba(248,113,113,0.15)", color: "#f87171" },
 };
 
-export default function AdminRevenuePage() {
+export default function AdminRevenuePage({ currentAdmin }) {
+  const isSuperadmin = currentAdmin?.role === "superadmin";
   // Revenue Sharing Management — two sub-tabs: withdrawal request &
   // payment tracking (manual admin payout, since RazorpayX payout
   // automation isn't wired up yet), and content performance analytics
@@ -37,6 +42,17 @@ export default function AdminRevenuePage() {
 
   const [performance, setPerformance] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(true);
+
+  const [revenueByDay, setRevenueByDay] = useState([]);
+  const [revenueByCountry, setRevenueByCountry] = useState([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+
+  const [config, setConfig] = useState(null);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [configForm, setConfigForm] = useState({ ratePaisa: "", commissionPercent: "" });
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState("");
+  const [configSaved, setConfigSaved] = useState(false);
 
   // Custom confirmation dialog — replaces window.confirm/window.prompt's
   // unbranded browser popup with theomy's own styling. `action` is
@@ -67,6 +83,58 @@ export default function AdminRevenuePage() {
       .catch(() => setPerformance([]))
       .finally(() => setPerformanceLoading(false));
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "analytics") return;
+    setAnalyticsLoading(true);
+    Promise.all([fetchRevenueByDay(30), fetchRevenueByCountry()])
+      .then(([byDay, byCountry]) => {
+        setRevenueByDay(byDay);
+        setRevenueByCountry(byCountry);
+      })
+      .catch(() => {
+        setRevenueByDay([]);
+        setRevenueByCountry([]);
+      })
+      .finally(() => setAnalyticsLoading(false));
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "settings" || !isSuperadmin) return;
+    setConfigLoading(true);
+    fetchAdminRevenueConfig()
+      .then((c) => {
+        setConfig(c);
+        setConfigForm({ ratePaisa: String(c.rate_paisa_per_minute), commissionPercent: String(c.platform_commission_percent) });
+      })
+      .catch(() => setConfig(null))
+      .finally(() => setConfigLoading(false));
+  }, [tab, isSuperadmin]);
+
+  const handleSaveConfig = async () => {
+    setConfigError("");
+    setConfigSaved(false);
+    const rate = Number(configForm.ratePaisa);
+    const commission = Number(configForm.commissionPercent);
+    if (!rate || rate <= 0) {
+      setConfigError("Rate must be a positive number (in paisa/min).");
+      return;
+    }
+    if (commission < 0 || commission > 100) {
+      setConfigError("Commission must be between 0 and 100.");
+      return;
+    }
+    setConfigSaving(true);
+    try {
+      const updated = await updateAdminRevenueConfig({ ratePaisaPerMinute: rate, platformCommissionPercent: commission });
+      setConfig(updated);
+      setConfigSaved(true);
+    } catch (err) {
+      setConfigError(err.message || "Couldn't save. Please try again.");
+    } finally {
+      setConfigSaving(false);
+    }
+  };
 
   const handleApprove = async (id) => {
     setActioningId(id);
@@ -143,11 +211,35 @@ export default function AdminRevenuePage() {
         >
           <BarChart3 className="h-4 w-4" /> Content Performance
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("analytics")}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+          style={{
+            background: tab === "analytics" ? "rgba(212,175,55,0.12)" : "transparent",
+            color: tab === "analytics" ? COLORS.gold : "rgba(245,235,221,0.6)",
+          }}
+        >
+          <Globe2 className="h-4 w-4" /> Analytics
+        </button>
+        {isSuperadmin && (
+          <button
+            type="button"
+            onClick={() => setTab("settings")}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+            style={{
+              background: tab === "settings" ? "rgba(212,175,55,0.12)" : "transparent",
+              color: tab === "settings" ? COLORS.gold : "rgba(245,235,221,0.6)",
+            }}
+          >
+            <Settings className="h-4 w-4" /> Platform Settings
+          </button>
+        )}
       </div>
 
       {error && <p className="mb-4 text-sm" style={{ color: "#f87171" }}>{error}</p>}
 
-      {tab === "withdrawals" ? (
+      {tab === "withdrawals" && (
         <div>
           <div className="mb-4 flex gap-2">
             {["pending", "approved", "paid", "rejected", ""].map((s) => (
@@ -242,7 +334,9 @@ export default function AdminRevenuePage() {
             </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {tab === "performance" && (
         <div>
           {performanceLoading ? (
             <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
@@ -274,6 +368,134 @@ export default function AdminRevenuePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "analytics" && (
+        <div>
+          <p className="mb-5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+            Built from real crediting events (RevenueLedgerEntry) — not estimates. "Country" is each viewer's registered
+            account country, not IP-based geolocation (theomy doesn't track that). Device, traffic-source, and
+            watch-retention breakdowns aren't available — those would need tracking that doesn't exist yet.
+          </p>
+
+          {analyticsLoading ? (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+          ) : (
+            <>
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <TrendingUp className="h-4 w-4" style={{ color: COLORS.gold }} /> Revenue — last 30 days
+              </h3>
+              {revenueByDay.length === 0 ? (
+                <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events in this window yet.</p>
+              ) : (
+                <div className="mb-8 flex items-end gap-1 rounded-xl p-4" style={{ background: COLORS.panel, border: "1px solid rgba(255,255,255,0.08)", height: 160 }}>
+                  {(() => {
+                    const max = Math.max(...revenueByDay.map((d) => Number(d.creator_earned_rupees)), 0.01);
+                    return revenueByDay.map((d) => (
+                      <div key={d.date} className="group relative flex flex-1 flex-col items-center justify-end" style={{ height: "100%" }}>
+                        <div
+                          className="w-full rounded-t transition-opacity group-hover:opacity-80"
+                          style={{
+                            background: CTA_GRADIENT,
+                            height: `${Math.max(4, (Number(d.creator_earned_rupees) / max) * 100)}%`,
+                          }}
+                          title={`${d.date}: ₹${d.creator_earned_rupees}`}
+                        />
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <Globe2 className="h-4 w-4" style={{ color: COLORS.gold }} /> Viewers by country
+              </h3>
+              {revenueByCountry.length === 0 ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+              ) : (
+                <div className="overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: COLORS.panel }}>
+                        <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Country</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Viewers</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Creator Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenueByCountry.map((row) => (
+                        <tr key={row.country} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.country}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.viewer_count}</td>
+                          <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "settings" && isSuperadmin && (
+        <div className="max-w-sm">
+          <h3 className="mb-1 text-sm font-semibold" style={{ color: COLORS.cream }}>Platform default rate</h3>
+          <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Only applies to a video with no custom Revenue-Share Tiers of its own — a video with tiers always uses those instead.
+          </p>
+
+          {configLoading ? (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+          ) : !config ? (
+            <p className="text-sm" style={{ color: "#f87171" }}>Couldn't load config.</p>
+          ) : (
+            <div className="rounded-xl p-5" style={{ background: COLORS.panel, border: "1px solid rgba(255,255,255,0.08)" }}>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                Rate (paisa per minute)
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={configForm.ratePaisa}
+                onChange={(e) => setConfigForm((f) => ({ ...f, ratePaisa: e.target.value }))}
+                className="mb-4 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                Platform commission (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={configForm.commissionPercent}
+                onChange={(e) => setConfigForm((f) => ({ ...f, commissionPercent: e.target.value }))}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+              <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                Taken from every credited view before the creator's share — e.g. 20 means creators keep 80%.
+              </p>
+
+              {configError && <p className="mt-3 text-xs font-medium" style={{ color: "#f87171" }}>{configError}</p>}
+              {configSaved && !configError && <p className="mt-3 text-xs font-medium" style={{ color: "#6FCF97" }}>Saved.</p>}
+
+              <button
+                type="button"
+                onClick={handleSaveConfig}
+                disabled={configSaving}
+                className="mt-4 w-full rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              >
+                {configSaving ? "Saving…" : "Save changes"}
+              </button>
             </div>
           )}
         </div>

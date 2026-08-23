@@ -453,6 +453,23 @@ class ContentPerformanceOut(BaseModel):
     creator_earned_rupees: Decimal
 
 
+class AdminRevenueConfigUpdate(BaseModel):
+    rate_paisa_per_minute: int = Field(gt=0)
+    platform_commission_percent: Decimal = Field(ge=0, le=100)
+
+
+class RevenueByDayOut(BaseModel):
+    date: str  # YYYY-MM-DD
+    creator_earned_rupees: Decimal
+    gross_revenue_rupees: Decimal
+
+
+class RevenueByCountryOut(BaseModel):
+    country: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
 class AdminContentPerformanceOut(BaseModel):
     video_id: uuid.UUID
     title: str

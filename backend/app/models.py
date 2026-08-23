@@ -417,6 +417,36 @@ class VideoWatchRecord(Base):
     )
 
 
+class RevenueLedgerEntry(Base):
+    """One row per moment a heartbeat actually credited a creator —
+    i.e. every time VideoWatchRecord's high-water-mark grew and
+    produced a positive delta. VideoWatchRecord alone only holds a
+    running total per (user, video), which can't answer "how much
+    revenue came in yesterday" or "which countries watched this video"
+    — this ledger exists specifically to make those real, queryable
+    (not estimated) analytics possible.
+
+    viewer_country is copied from User.country at the moment of
+    crediting — the account's registered country, NOT IP-based
+    geolocation (theomy doesn't do IP geolocation). It's real data, just
+    a proxy for "where the viewer is" rather than a precise location.
+    """
+    __tablename__ = "revenue_ledger_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    creator_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+
+    viewer_country = Column(String(100), nullable=True)
+    delta_gross_paisa = Column(Integer, nullable=False)
+    delta_creator_paisa = Column(Integer, nullable=False)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
 class WithdrawalStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"

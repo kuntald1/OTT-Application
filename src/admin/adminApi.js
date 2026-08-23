@@ -246,3 +246,28 @@ export function rejectWithdrawal(withdrawalId, adminNote) {
 export function fetchAdminContentPerformance() {
   return request(`/admin/revenue/content-performance`, { auth: true });
 }
+
+// Platform default rate + commission — superadmin-only editing.
+export function fetchAdminRevenueConfig() {
+  return request(`/admin/revenue/config`, { auth: true });
+}
+
+export function updateAdminRevenueConfig({ ratePaisaPerMinute, platformCommissionPercent }) {
+  return request(`/admin/revenue/config`, {
+    method: "PUT",
+    auth: true,
+    body: {
+      rate_paisa_per_minute: ratePaisaPerMinute,
+      platform_commission_percent: platformCommissionPercent,
+    },
+  });
+}
+
+// Revenue analytics — real data from RevenueLedgerEntry, not estimates.
+export function fetchRevenueByDay(days = 30) {
+  return request(`/admin/revenue/analytics/by-day?days=${days}`, { auth: true });
+}
+
+export function fetchRevenueByCountry() {
+  return request(`/admin/revenue/analytics/by-country`, { auth: true });
+}
