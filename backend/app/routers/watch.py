@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,7 +12,10 @@ from app.models import (
     RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry,
 )
 from app.routers.videos import _check_video_access
-from app.schemas import WatchHeartbeatRequest, WatchHeartbeatResponse, ContentPerformanceOut
+from app.schemas import (
+    WatchHeartbeatRequest, WatchHeartbeatResponse, ContentPerformanceOut,
+    RevenueByDayOut, RevenueByCountryOut,
+)
 
 router = APIRouter(prefix="/videos", tags=["watch"])
 
@@ -181,6 +185,74 @@ def get_my_content_performance(
             total_watch_minutes=(Decimal(r.total_seconds) / 60).quantize(Decimal("0.01")),
             gross_revenue_rupees=(Decimal(r.gross_paisa) / 100).quantize(Decimal("0.01")),
             creator_earned_rupees=(Decimal(r.credited_paisa) / 100).quantize(Decimal("0.01")),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/revenue/by-day/mine", response_model=list[RevenueByDayOut])
+def get_my_revenue_by_day(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A creator's own "Analytics" — same real, event-log-backed day-by-day
+    trend as the admin panel's platform-wide version, just scoped to
+    RevenueLedgerEntry rows where THIS creator was the one credited.
+    """
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="days must be between 1 and 365.")
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(
+            func.date(RevenueLedgerEntry.created_at).label("day"),
+            func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
+            func.sum(RevenueLedgerEntry.delta_gross_paisa).label("gross_paisa"),
+        )
+        .filter(
+            RevenueLedgerEntry.creator_user_id == current_user.id,
+            RevenueLedgerEntry.created_at >= since,
+        )
+        .group_by(func.date(RevenueLedgerEntry.created_at))
+        .order_by(func.date(RevenueLedgerEntry.created_at).asc())
+        .all()
+    )
+    return [
+        RevenueByDayOut(
+            date=str(r.day),
+            creator_earned_rupees=(Decimal(r.creator_paisa) / 100).quantize(Decimal("0.01")),
+            gross_revenue_rupees=(Decimal(r.gross_paisa) / 100).quantize(Decimal("0.01")),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/revenue/by-country/mine", response_model=list[RevenueByCountryOut])
+def get_my_revenue_by_country(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Same viewer-by-country breakdown as the admin panel, scoped to
+    this creator's own content. viewer_country is the viewer's
+    registered account country (not IP geolocation) — same caveat as
+    the admin version.
+    """
+    rows = (
+        db.query(
+            func.coalesce(RevenueLedgerEntry.viewer_country, "Unknown").label("country"),
+            func.count(func.distinct(RevenueLedgerEntry.user_id)).label("viewer_count"),
+            func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
+        )
+        .filter(RevenueLedgerEntry.creator_user_id == current_user.id)
+        .group_by(func.coalesce(RevenueLedgerEntry.viewer_country, "Unknown"))
+        .order_by(func.sum(RevenueLedgerEntry.delta_creator_paisa).desc())
+        .all()
+    )
+    return [
+        RevenueByCountryOut(
+            country=r.country,
+            viewer_count=r.viewer_count,
+            creator_earned_rupees=(Decimal(r.creator_paisa) / 100).quantize(Decimal("0.01")),
         )
         for r in rows
     ]

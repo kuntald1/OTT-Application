@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye } from "lucide-react";
+import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance } from "../api";
+import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry } from "../api";
 
 // ---------------------------------------------------------------------------
 // Revenue — Content Creator / Plays Organiser only.
@@ -44,6 +44,10 @@ export default function RevenuePage({ onBack }) {
   const [performance, setPerformance] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(true);
 
+  const [revenueByDay, setRevenueByDay] = useState([]);
+  const [revenueByCountry, setRevenueByCountry] = useState([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+
   const loadAll = (silent = false) => {
     if (!silent) setSummaryLoading(true);
     fetchRevenueSummary().then(setSummary).catch(() => {}).finally(() => setSummaryLoading(false));
@@ -59,6 +63,18 @@ export default function RevenuePage({ onBack }) {
     setPerformanceLoading(true);
     loadAll(false);
     setPerformanceLoading(false);
+
+    setAnalyticsLoading(true);
+    Promise.all([fetchMyRevenueByDay(30), fetchMyRevenueByCountry()])
+      .then(([byDay, byCountry]) => {
+        setRevenueByDay(byDay);
+        setRevenueByCountry(byCountry);
+      })
+      .catch(() => {
+        setRevenueByDay([]);
+        setRevenueByCountry([]);
+      })
+      .finally(() => setAnalyticsLoading(false));
 
     // Total Earned / Available / History / Content Performance are all
     // live server state that changes as videos get watched elsewhere —
@@ -265,6 +281,72 @@ export default function RevenuePage({ onBack }) {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+
+        <div className="mt-8">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: "rgba(245,235,221,0.7)" }}>
+            <TrendingUp className="h-4 w-4" style={{ color: COLORS.gold }} /> Analytics
+          </h3>
+          <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+            Built from real watch events, not estimates. "Country" is each viewer's registered account country, not IP-based location.
+          </p>
+
+          {analyticsLoading ? (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                Your revenue — last 30 days
+              </p>
+              {revenueByDay.length === 0 ? (
+                <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events in this window yet.</p>
+              ) : (
+                <div className="mb-6 flex items-end gap-1 rounded-xl p-4" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)", height: 140 }}>
+                  {(() => {
+                    const max = Math.max(...revenueByDay.map((d) => Number(d.creator_earned_rupees)), 0.01);
+                    return revenueByDay.map((d) => (
+                      <div key={d.date} className="relative flex flex-1 flex-col items-center justify-end" style={{ height: "100%" }} title={`${d.date}: ₹${d.creator_earned_rupees}`}>
+                        <div
+                          className="w-full rounded-t"
+                          style={{ background: CTA_GRADIENT, height: `${Math.max(4, (Number(d.creator_earned_rupees) / max) * 100)}%` }}
+                        />
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                Viewers by country
+              </p>
+              {revenueByCountry.length === 0 ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+              ) : (
+                <div className="overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: COLORS.blackSoft }}>
+                        <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>
+                          <span className="flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" style={{ color: COLORS.gold }} /> Country</span>
+                        </th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Viewers</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>You Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenueByCountry.map((row) => (
+                        <tr key={row.country} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.country}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.viewer_count}</td>
+                          <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

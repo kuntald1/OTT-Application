@@ -384,6 +384,17 @@ export function fetchMyContentPerformance() {
   return request(`/videos/content-performance/mine`, { auth: true });
 }
 
+// Creator-facing Analytics — real event-log-backed revenue trend and
+// viewer-by-country breakdown, scoped to this creator's own content
+// (same data shape as the admin panel's platform-wide version).
+export function fetchMyRevenueByDay(days = 30) {
+  return request(`/videos/revenue/by-day/mine?days=${days}`, { auth: true });
+}
+
+export function fetchMyRevenueByCountry() {
+  return request(`/videos/revenue/by-country/mine`, { auth: true });
+}
+
 // Real, backend-persisted My List — replaces the old in-memory-only
 // implementation that vanished on refresh/logout. Works uniformly for
 // real videos and demo cards alike (see MyListItem's model docstring).
