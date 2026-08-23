@@ -325,11 +325,39 @@ export function fetchMyVideos() {
 }
 
 export function fetchPublishedVideos(section) {
-  return request(`/videos${section ? `?section=${section}` : ""}`);
+  return request(`/videos${section ? `?section=${section}` : ""}`, { auth: true });
 }
 
 export function fetchVideoById(videoId) {
-  return request(`/videos/${videoId}`);
+  // auth: true only adds the Authorization header if a token exists —
+  // logged-out viewers still get the video (poster/synopsis/cast), just
+  // with has_access: false. This is what lets the backend tell a real
+  // subscriber apart from someone who's merely logged in, so the player
+  // can gate on actual subscription status, not just login state.
+  return request(`/videos/${videoId}`, { auth: true });
+}
+
+// Pay-Per-Video checkout (Razorpay, India only) — mirrors
+// createRazorpayOrder/verifyRazorpayPayment above but for a single
+// video purchase instead of a subscription.
+export function createVideoPurchaseOrder(videoId) {
+  return request(`/videos/${videoId}/purchase/razorpay/create-order`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function verifyVideoPurchasePayment({ purchaseId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
+  return request(`/videos/purchase/razorpay/verify`, {
+    method: "POST",
+    auth: true,
+    body: {
+      purchase_id: purchaseId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
 }
 
 export function fetchPerson(personId) {

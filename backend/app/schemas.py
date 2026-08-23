@@ -590,6 +590,44 @@ class VideoOut(BaseModel):
     created_at: datetime
     published_at: Optional[datetime] = None
 
+    # Real, server-computed access gate — see routers/videos.py's
+    # _check_video_access(). playback_url/embed_url above are only ever
+    # populated when has_access is True; a viewer without access gets
+    # every other field (poster, cast, description, etc.) so the detail
+    # page still works as a preview, just with no way to actually stream.
+    # access_reason lets the frontend show the right CTA without
+    # re-deriving the logic: "login_required" | "subscription_required"
+    # | "purchase_required" | None (None means access is already granted).
+    has_access: bool = False
+    access_reason: Optional[str] = None
+
+
+class VideoPurchaseOut(BaseModel):
+    id: uuid.UUID
+    video_id: uuid.UUID
+    amount: Decimal
+    currency: str
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreateVideoOrderResponse(BaseModel):
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    video_title: str
+
+
+class VerifyVideoPaymentRequest(BaseModel):
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
 
 class AdminVideoRejectRequest(BaseModel):
     admin_note: str = Field(min_length=1, max_length=500)

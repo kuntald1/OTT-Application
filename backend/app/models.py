@@ -823,3 +823,38 @@ class VideoCrew(Base):
     person_id = Column(UUID(as_uuid=True), ForeignKey("people.id"), nullable=False)
     role = Column(String(100), nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
+
+
+class VideoPurchase(Base):
+    """Phase 4 — one row per successful Pay-Per-Video purchase. A user
+    only gets playback access to a pay_per_video Video once a row exists
+    here with status='paid' for that (user, video) pair. Deliberately
+    mirrors Payment's created->paid/failed lifecycle and Razorpay
+    signature-verification pattern (see routers/payments.py) rather than
+    inventing a new one.
+
+    Access granted here is permanent (buy-once-watch-forever), matching
+    how the Video model's docstring frames Pay-Per-Video as a purchase,
+    not a timed rental — there's no expires_at by design. Only INR/
+    Razorpay is wired up in this pass, same India-only scope as the
+    donation flow; USD/Stripe pay-per-video checkout is not built yet
+    even though VideoPricing already stores a price_usd for display.
+    """
+    __tablename__ = "video_purchases"
+    __table_args__ = (UniqueConstraint("user_id", "video_id", name="uq_user_video_purchase"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+
+    gateway = Column(Enum(PaymentGateway), nullable=False, default=PaymentGateway.razorpay)
+    gateway_order_id = Column(String(255), nullable=True)
+    gateway_payment_id = Column(String(255), nullable=True)
+
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(3), nullable=False, default="INR")
+    status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.created)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

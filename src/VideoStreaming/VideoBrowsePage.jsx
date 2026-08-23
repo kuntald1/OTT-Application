@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -493,7 +493,9 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [entered, setEntered] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const { isInList, toggleListItem } = useApp();
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState("");
+  const { isInList, toggleListItem, profile, requestLogin } = useApp();
   const saved = isInList(card.id);
 
   React.useEffect(() => {
@@ -502,15 +504,84 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   }, []);
   const shown = entered && !closing;
 
+  // Razorpay's checkout widget, loaded once lazily — same pattern as
+  // SubscriptionPage.jsx / DonationPage.jsx, so it's available the
+  // moment someone hits "Buy" here without depending on having visited
+  // either of those pages first in this session.
   useEffect(() => {
+    if (document.getElementById("razorpay-checkout-js")) return;
+    const script = document.createElement("script");
+    script.id = "razorpay-checkout-js";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  const loadVideo = () => {
+    setLoading(true);
     fetchVideoById(card.videoId)
       .then(setVideo)
       .catch(() => setVideo(null))
       .finally(() => setLoading(false));
-  }, [card.videoId]);
+  };
 
-  const isPayPerVideo = video?.monetization_type === "pay_per_video";
-  const canPlay = video?.has_file && !isPayPerVideo;
+  useEffect(loadVideo, [card.videoId]);
+
+  // Real gating — has_access comes straight from the backend's actual
+  // subscription/purchase check (_check_video_access), not just "is
+  // there a login token". This is the fix for the known gap: someone
+  // whose subscription expired no longer gets a working embed_url at
+  // all, regardless of what the browser's login state says.
+  const canPlay = video?.has_file && video?.has_access;
+
+  const handleBuy = async () => {
+    setBuyError("");
+    setBuying(true);
+    try {
+      const order = await createVideoPurchaseOrder(card.videoId);
+
+      if (!window.Razorpay) {
+        throw new Error("Payment widget failed to load. Please refresh and try again.");
+      }
+
+      const rzp = new window.Razorpay({
+        key: order.razorpay_key_id,
+        amount: Math.round(Number(order.amount) * 100),
+        currency: order.currency,
+        name: "theomy",
+        description: order.video_title,
+        order_id: order.razorpay_order_id,
+        prefill: { email: profile.email, contact: profile.phone || undefined },
+        theme: { color: "#D4AF37" },
+        handler: async (response) => {
+          try {
+            await verifyVideoPurchasePayment({
+              purchaseId: order.purchase_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            // Re-fetch so embed_url/playback_url populate now that
+            // has_access is genuinely true, instead of faking it locally.
+            loadVideo();
+          } catch (err) {
+            setBuyError(err.message || "Payment verification failed. If money was deducted, contact support.");
+          } finally {
+            setBuying(false);
+          }
+        },
+        modal: { ondismiss: () => setBuying(false) },
+      });
+      rzp.on("payment.failed", () => {
+        setBuyError("Payment failed. Please try again.");
+        setBuying(false);
+      });
+      rzp.open();
+    } catch (err) {
+      setBuyError(err.message || "Couldn't start checkout. Please try again.");
+      setBuying(false);
+    }
+  };
 
   return (
     <div
@@ -560,45 +631,81 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
             <p className="text-sm" style={{ color: T.textFaint }}>Couldn't load this video.</p>
           ) : (
             <>
-              <div className="mb-4 flex items-center gap-3">
-                {!video.has_file ? (
-                  <p className="text-sm" style={{ color: T.textFaint }}>This video is still processing — check back soon.</p>
-                ) : isPayPerVideo ? (
-                  <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)", color: T.textMuted }}>
-                    Pay-Per-Video — ₹{video.pricing?.price_inr} / ${video.pricing?.price_usd}. Purchase flow coming soon.
-                  </div>
-                ) : !playing ? (
+              <div className="mb-4 flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  {!video.has_file ? (
+                    <p className="text-sm" style={{ color: T.textFaint }}>This video is still processing — check back soon.</p>
+                  ) : video.has_access ? (
+                    !playing ? (
+                      <button
+                        type="button"
+                        onClick={() => setPlaying(true)}
+                        className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                        style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                      >
+                        <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
+                      </button>
+                    ) : null
+                  ) : video.access_reason === "login_required" ? (
+                    <button
+                      type="button"
+                      onClick={requestLogin}
+                      className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                      style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                    >
+                      Log in to Watch
+                    </button>
+                  ) : video.access_reason === "purchase_required" ? (
+                    <button
+                      type="button"
+                      onClick={handleBuy}
+                      disabled={buying}
+                      className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-60"
+                      style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                    >
+                      {buying ? "Processing…" : `Buy for ₹${video.pricing?.price_inr}`}
+                    </button>
+                  ) : (
+                    // access_reason === "subscription_required" — covers both
+                    // a subscription_only video with no matching plan AND a
+                    // pay_per_video one where the prerequisite plan itself
+                    // is missing/expired (see Video model docstring: no
+                    // subscription means no ability to buy either).
+                    <button
+                      type="button"
+                      onClick={() => { onClose(); onNavigate?.("subscription"); }}
+                      className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                      style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                    >
+                      Subscribe to Watch
+                    </button>
+                  )}
+
+                  {/* Real "Add to My List" — same toggleListItem/isInList
+                      mechanism the demo cards already use, genuinely
+                      functional, not decorative. Thumbs-up stays decorative
+                      on purpose, matching the demo modal's own thumbs-up,
+                      which has no real "liked" state either. */}
                   <button
                     type="button"
-                    onClick={() => setPlaying(true)}
-                    className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
-                    style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                    onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Video Streaming" })}
+                    aria-label={saved ? "Remove from My List" : "Add to My List"}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
+                    style={{
+                      borderColor: saved ? COLORS.gold : "rgba(255,255,255,0.3)",
+                      color: saved ? COLORS.gold : "#fff",
+                      background: saved ? "rgba(212,175,55,0.12)" : "transparent",
+                    }}
                   >
-                    <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
+                    {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                   </button>
-                ) : null}
-
-                {/* Real "Add to My List" — same toggleListItem/isInList
-                    mechanism the demo cards already use, genuinely
-                    functional, not decorative. Thumbs-up stays decorative
-                    on purpose, matching the demo modal's own thumbs-up,
-                    which has no real "liked" state either. */}
-                <button
-                  type="button"
-                  onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Video Streaming" })}
-                  aria-label={saved ? "Remove from My List" : "Add to My List"}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
-                  style={{
-                    borderColor: saved ? COLORS.gold : "rgba(255,255,255,0.3)",
-                    color: saved ? COLORS.gold : "#fff",
-                    background: saved ? "rgba(212,175,55,0.12)" : "transparent",
-                  }}
-                >
-                  {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                </button>
-                <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
-                  <ThumbsUp className="h-4 w-4" />
-                </button>
+                  <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
+                    <ThumbsUp className="h-4 w-4" />
+                  </button>
+                </div>
+                {buyError && (
+                  <p className="text-xs" style={{ color: "#f87171" }}>{buyError}</p>
+                )}
               </div>
 
               <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: T.textMuted }}>

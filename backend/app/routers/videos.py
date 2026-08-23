@@ -1,5 +1,6 @@
 import os
 import uuid as uuid_module
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
@@ -8,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_current_user_optional
 from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
+    Subscription, VideoPurchase, PaymentStatus,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
@@ -68,7 +70,81 @@ def _fetch_and_cache_duration(video: Video, db: Session) -> None:
         pass
 
 
-def _to_out(video: Video, db: Session) -> VideoOut:
+# A subscription's plan_name covers a video's section if it's exactly
+# matched ("Play" plan -> "play" section) or the user bought "Both".
+_SECTION_TO_PLAN = {VideoSection.play: "Play", VideoSection.archive: "Archive"}
+
+
+def _has_active_subscription_for_section(user: User, section: VideoSection, db: Session) -> bool:
+    required_plan = _SECTION_TO_PLAN[section]
+    return (
+        db.query(Subscription)
+        .filter(
+            Subscription.user_id == user.id,
+            Subscription.is_active == True,  # noqa: E712
+            Subscription.expires_at > datetime.now(timezone.utc),
+            Subscription.plan_name.in_([required_plan, "Both"]),
+        )
+        .first()
+        is not None
+    )
+
+
+def _has_active_subscription_any(user: User, db: Session) -> bool:
+    """Pay-Per-Video's prerequisite check — ANY active, unexpired plan
+    unlocks the ability to buy pay-per-video content, regardless of
+    which section it covers (matches the Video model's docstring:
+    subscription is the gate to purchasing at all, not a specific-plan
+    match like the subscription_only case above).
+    """
+    return (
+        db.query(Subscription)
+        .filter(
+            Subscription.user_id == user.id,
+            Subscription.is_active == True,  # noqa: E712
+            Subscription.expires_at > datetime.now(timezone.utc),
+        )
+        .first()
+        is not None
+    )
+
+
+def _check_video_access(video: Video, user: User | None, db: Session) -> tuple[bool, str | None]:
+    """Real, server-side access gate — the only thing that decides
+    whether playback_url/embed_url get populated in _to_out below.
+    Replaces the old behaviour where the video player only checked
+    whether the browser had a login token, never whether that user's
+    subscription was actually active or had expired.
+
+    Returns (has_access, access_reason). access_reason is None only
+    when has_access is True.
+    """
+    if user is None:
+        return False, "login_required"
+
+    if video.monetization_type == VideoMonetization.pay_per_video:
+        if not _has_active_subscription_any(user, db):
+            return False, "subscription_required"
+        purchased = (
+            db.query(VideoPurchase)
+            .filter(
+                VideoPurchase.user_id == user.id,
+                VideoPurchase.video_id == video.id,
+                VideoPurchase.status == PaymentStatus.paid,
+            )
+            .first()
+        )
+        if not purchased:
+            return False, "purchase_required"
+        return True, None
+
+    # subscription_only
+    if _has_active_subscription_for_section(user, video.section, db):
+        return True, None
+    return False, "subscription_required"
+
+
+def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
     if video.bunny_video_id and video.duration_seconds is None:
         _fetch_and_cache_duration(video, db)
 
@@ -102,6 +178,7 @@ def _to_out(video: Video, db: Session) -> VideoOut:
         .order_by(VideoCrew.display_order.asc())
         .all()
     )
+    has_access, access_reason = _check_video_access(video, viewer, db)
     return VideoOut(
         id=video.id,
         uploaded_by_name=uploader_name,
@@ -146,11 +223,11 @@ def _to_out(video: Video, db: Session) -> VideoOut:
         has_file=bool(video.bunny_video_id),
         playback_url=(
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/playlist.m3u8"
-            if video.bunny_video_id else None
+            if video.bunny_video_id and has_access else None
         ),
         embed_url=(
             f"https://player.mediadelivery.net/embed/{settings.BUNNY_LIBRARY_ID}/{video.bunny_video_id}"
-            if video.bunny_video_id else None
+            if video.bunny_video_id and has_access else None
         ),
         thumbnail_url=(
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/thumbnail.jpg"
@@ -162,6 +239,8 @@ def _to_out(video: Video, db: Session) -> VideoOut:
         ),
         created_at=video.created_at,
         published_at=video.published_at,
+        has_access=has_access,
+        access_reason=access_reason,
     )
 
 
@@ -427,31 +506,48 @@ def list_my_videos(
 def list_published_videos(
     section: str | None = None,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     # Public — only ever returns published videos. Pending/rejected
     # videos are never visible outside their uploader's own "My Video
-    # List" (see /videos/mine above).
+    # List" (see /videos/mine above). Auth is optional here (browsing
+    # works logged out) but when a token IS present, each card's
+    # has_access reflects that viewer's real subscription/purchase
+    # status, so the browse grid can show a lock badge on content they
+    # can't actually play.
     query = db.query(Video).filter(Video.status == VideoStatus.published)
     if section:
         if section not in ("play", "archive"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
         query = query.filter(Video.section == VideoSection(section))
     videos = query.order_by(Video.published_at.desc()).all()
-    return [_to_out(v, db) for v in videos]
+    return [_to_out(v, db, current_user) for v in videos]
 
 
 @router.get("/{video_id}", response_model=VideoOut)
-def get_published_video(video_id: str, db: Session = Depends(get_db)):
+def get_published_video(
+    video_id: str,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
     """Public single-video fetch — powers the real video detail/player
     page. Only ever returns a published video, same visibility rule as
     the list endpoint above — a pending/rejected/disabled video's ID
     simply 404s here, it doesn't leak details to anyone who guesses the
     URL.
+
+    Auth is optional (the page still loads logged out, so a visitor can
+    see the poster/synopsis/cast and get prompted to log in) but
+    playback_url/embed_url are only ever populated for a viewer who
+    genuinely has access right now — see _check_video_access. This is
+    the fix for the previously-known gap where the player only checked
+    whether the browser HAD a login token, never whether that user's
+    subscription was actually active or had since expired.
     """
     video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    return _to_out(video, db)
+    return _to_out(video, db, current_user)
 
 
 ALLOWED_VIDEO_CONTENT_TYPES = {
