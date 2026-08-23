@@ -48,6 +48,7 @@ function makeEmptyCast() {
     key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false,
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
+    photoFile: null, photoFileName: "",
   };
 }
 function makeEmptyCrew() {
@@ -55,6 +56,7 @@ function makeEmptyCrew() {
     key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false,
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
+    photoFile: null, photoFileName: "",
   };
 }
 
@@ -174,6 +176,9 @@ export default function AdminAddVideoPage() {
     setError("");
     setSubmitting(true);
     try {
+      const filteredCast = cast.filter((c) => c.name.trim());
+      const filteredCrew = crew.filter((c) => c.role.trim() && c.name.trim());
+
       const payload = {
         attributed_user_id: attributedUser ? attributedUser.id : null,
         title: form.title.trim(),
@@ -192,14 +197,14 @@ export default function AdminAddVideoPage() {
           max_minutes: t.max_minutes === "" ? null : Number(t.max_minutes),
           rate_per_minute_inr: Number(t.rate_per_minute_inr),
         })),
-        cast: cast.filter((c) => c.name.trim()).map((c) => ({
+        cast: filteredCast.map((c) => ({
           name: c.name.trim(), character_role: c.character_role.trim() || null,
           occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
           about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
           debut_initial_years: c.debut_initial_years.trim() || null, breakthrough_beyond: c.breakthrough_beyond.trim() || null,
           recent_projects: c.recent_projects.trim() || null,
         })),
-        crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({
+        crew: filteredCrew.map((c) => ({
           role: c.role.trim(), name: c.name.trim(),
           occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
           about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
@@ -207,7 +212,28 @@ export default function AdminAddVideoPage() {
           recent_projects: c.recent_projects.trim() || null,
         })),
       };
-      const newVideo = await createAdminVideo(payload);
+      let newVideo = await createAdminVideo(payload);
+
+      // Photos picked in the form upload automatically now that real
+      // Person IDs exist — index-matched against the response, same
+      // order as submitted. One failing doesn't block the others or the
+      // video itself, which is already created successfully by now.
+      const [uploadedCastPhotos, uploadedCrewPhotos] = await Promise.all([
+        Promise.all(filteredCast.map((c, i) =>
+          c.photoFile && newVideo.cast[i] ? uploadAdminPersonPhoto(newVideo.cast[i].person.id, c.photoFile).catch(() => null) : Promise.resolve(null)
+        )),
+        Promise.all(filteredCrew.map((c, i) =>
+          c.photoFile && newVideo.crew[i] ? uploadAdminPersonPhoto(newVideo.crew[i].person.id, c.photoFile).catch(() => null) : Promise.resolve(null)
+        )),
+      ]);
+      // Patch the real uploaded photo_url into the local video object so
+      // the card shows the photo immediately, no page refresh needed.
+      newVideo = {
+        ...newVideo,
+        cast: newVideo.cast.map((c, i) => (uploadedCastPhotos[i] ? { ...c, person: uploadedCastPhotos[i] } : c)),
+        crew: newVideo.crew.map((c, i) => (uploadedCrewPhotos[i] ? { ...c, person: uploadedCrewPhotos[i] } : c)),
+      };
+
       resetForm();
       setAddedVideos((prev) => [newVideo, ...prev]);
     } catch (err) {
@@ -510,6 +536,19 @@ export default function AdminAddVideoPage() {
                     </button>
                     {c.showBio && (
                       <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs sm:col-span-2" style={{ borderColor: "rgba(212,175,55,0.3)", color: c.photoFileName ? COLORS.cream : COLORS.gold }}>
+                          <ImagePlus className="h-3.5 w-3.5 flex-shrink-0" />
+                          {c.photoFileName || "Upload photo (uploads automatically once you submit)"}
+                          <input
+                            type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              updateCast(c.key, "photoFile", file);
+                              updateCast(c.key, "photoFileName", file.name);
+                            }}
+                          />
+                        </label>
                         <input type="text" placeholder="Occupation (e.g. Actor, Writer)" value={c.occupation} onChange={(e) => updateCast(c.key, "occupation", e.target.value)} style={inputStyle} />
                         <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCast(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
                         <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
@@ -553,6 +592,19 @@ export default function AdminAddVideoPage() {
                     </button>
                     {c.showBio && (
                       <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs sm:col-span-2" style={{ borderColor: "rgba(212,175,55,0.3)", color: c.photoFileName ? COLORS.cream : COLORS.gold }}>
+                          <ImagePlus className="h-3.5 w-3.5 flex-shrink-0" />
+                          {c.photoFileName || "Upload photo (uploads automatically once you submit)"}
+                          <input
+                            type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              updateCrew(c.key, "photoFile", file);
+                              updateCrew(c.key, "photoFileName", file.name);
+                            }}
+                          />
+                        </label>
                         <input type="text" placeholder="Occupation (e.g. Director)" value={c.occupation} onChange={(e) => updateCrew(c.key, "occupation", e.target.value)} style={inputStyle} />
                         <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCrew(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
                         <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />

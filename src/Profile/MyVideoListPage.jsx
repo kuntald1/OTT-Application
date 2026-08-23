@@ -41,6 +41,7 @@ function makeEmptyCast() {
     key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false,
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
+    photoFile: null, photoFileName: "",
   };
 }
 function makeEmptyCrew() {
@@ -48,6 +49,7 @@ function makeEmptyCrew() {
     key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false,
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
+    photoFile: null, photoFileName: "",
   };
 }
 
@@ -156,6 +158,9 @@ export default function MyVideoListPage({ onBack }) {
     setError("");
     setSubmitting(true);
     try {
+      const filteredCast = cast.filter((c) => c.name.trim());
+      const filteredCrew = crew.filter((c) => c.role.trim() && c.name.trim());
+
       const payload = {
         title: form.title.trim(),
         description: form.description.trim() || null,
@@ -173,14 +178,14 @@ export default function MyVideoListPage({ onBack }) {
           max_minutes: t.max_minutes === "" ? null : Number(t.max_minutes),
           rate_per_minute_inr: Number(t.rate_per_minute_inr),
         })),
-        cast: cast.filter((c) => c.name.trim()).map((c) => ({
+        cast: filteredCast.map((c) => ({
           name: c.name.trim(), character_role: c.character_role.trim() || null,
           occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
           about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
           debut_initial_years: c.debut_initial_years.trim() || null, breakthrough_beyond: c.breakthrough_beyond.trim() || null,
           recent_projects: c.recent_projects.trim() || null,
         })),
-        crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({
+        crew: filteredCrew.map((c) => ({
           role: c.role.trim(), name: c.name.trim(),
           occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
           about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
@@ -188,7 +193,22 @@ export default function MyVideoListPage({ onBack }) {
           recent_projects: c.recent_projects.trim() || null,
         })),
       };
-      await uploadVideo(payload);
+      const created = await uploadVideo(payload);
+
+      // Photos picked in the form get uploaded automatically now that
+      // real Person IDs exist — the response's cast/crew arrays are in
+      // the exact same order as what was submitted, so index-matching
+      // is reliable. A single photo failing doesn't block the others or
+      // undo the video itself, which was already created successfully.
+      await Promise.all([
+        ...filteredCast.map((c, i) =>
+          c.photoFile && created.cast[i] ? uploadPersonPhoto(created.cast[i].person.id, c.photoFile).catch(() => {}) : Promise.resolve()
+        ),
+        ...filteredCrew.map((c, i) =>
+          c.photoFile && created.crew[i] ? uploadPersonPhoto(created.crew[i].person.id, c.photoFile).catch(() => {}) : Promise.resolve()
+        ),
+      ]);
+
       resetForm();
       setShowUpload(false);
       loadVideos();
@@ -427,6 +447,19 @@ export default function MyVideoListPage({ onBack }) {
                     </button>
                     {c.showBio && (
                       <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs sm:col-span-2" style={{ borderColor: "rgba(212,175,55,0.3)", color: c.photoFileName ? COLORS.cream : COLORS.gold }}>
+                          <ImagePlus className="h-3.5 w-3.5 flex-shrink-0" />
+                          {c.photoFileName || "Upload photo (uploads automatically once you submit)"}
+                          <input
+                            type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              updateCast(c.key, "photoFile", file);
+                              updateCast(c.key, "photoFileName", file.name);
+                            }}
+                          />
+                        </label>
                         <input type="text" placeholder="Occupation (e.g. Actor, Writer)" value={c.occupation} onChange={(e) => updateCast(c.key, "occupation", e.target.value)} style={inputStyle} />
                         <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCast(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
                         <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
@@ -470,6 +503,19 @@ export default function MyVideoListPage({ onBack }) {
                     </button>
                     {c.showBio && (
                       <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs sm:col-span-2" style={{ borderColor: "rgba(212,175,55,0.3)", color: c.photoFileName ? COLORS.cream : COLORS.gold }}>
+                          <ImagePlus className="h-3.5 w-3.5 flex-shrink-0" />
+                          {c.photoFileName || "Upload photo (uploads automatically once you submit)"}
+                          <input
+                            type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              updateCrew(c.key, "photoFile", file);
+                              updateCrew(c.key, "photoFileName", file.name);
+                            }}
+                          />
+                        </label>
                         <input type="text" placeholder="Occupation (e.g. Director)" value={c.occupation} onChange={(e) => updateCrew(c.key, "occupation", e.target.value)} style={inputStyle} />
                         <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCrew(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
                         <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
