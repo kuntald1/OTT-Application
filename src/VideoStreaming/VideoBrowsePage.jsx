@@ -576,18 +576,26 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
               <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: T.textMuted }}>
                 <span>{video.release_year}</span>
                 <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: GOLD, color: GOLD }}>{video.age_rating}</span>
-                {video.categories.map((cat) => (
-                  <span key={cat} className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: GOLD }}>{cat}</span>
-                ))}
+                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: GOLD }}>{video.categories[0]}</span>
               </div>
 
-              {video.description && <p className="mb-4 text-sm leading-relaxed" style={{ color: T.textMuted }}>{video.description}</p>}
-
-              {video.languages.length > 0 && (
-                <p className="mb-4 text-xs" style={{ color: T.textFainter }}>
-                  <span style={{ color: T.textFaint }}>Available in: </span>{video.languages.join(", ")}
-                </p>
-              )}
+              <div className="grid gap-6 sm:grid-cols-3">
+                <p className="text-sm leading-relaxed sm:col-span-2" style={{ color: T.textMuted }}>{video.description}</p>
+                <div className="flex flex-col gap-3 text-xs">
+                  {video.categories.length > 0 && (
+                    <div>
+                      <p className="mb-1" style={{ color: T.textFainter }}>GENRES</p>
+                      <p style={{ color: T.textMuted }}>{video.categories.join(", ")}</p>
+                    </div>
+                  )}
+                  {video.languages.length > 0 && (
+                    <div>
+                      <p className="mb-1" style={{ color: T.textFainter }}>AVAILABLE IN</p>
+                      <p style={{ color: T.textMuted }}>{video.languages.join(", ")}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {(video.cast.length > 0 || video.crew.length > 0) && (
                 <div className="mt-6 grid gap-6 border-t pt-6 sm:grid-cols-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
