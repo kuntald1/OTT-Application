@@ -94,6 +94,14 @@ export function enableVideo(videoId) {
   return request(`/admin/videos/${videoId}/enable`, { method: "POST", auth: true });
 }
 
+export function editVideo(videoId, payload) {
+  return request(`/admin/videos/${videoId}`, {
+    method: "PUT",
+    auth: true,
+    body: payload,
+  });
+}
+
 export async function deleteVideo(videoId) {
   const token = getAdminToken();
   const res = await fetch(`${BASE_URL}/admin/videos/${videoId}`, {

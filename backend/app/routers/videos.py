@@ -134,17 +134,7 @@ def _to_out(video: Video, db: Session) -> VideoOut:
     )
 
 
-def _create_video_core(
-    payload: VideoCreate, db: Session,
-    uploaded_by_user_id: str | None = None, uploaded_by_admin_id: str | None = None,
-    person_created_by_user_id: str | None = None, person_created_by_admin_id: str | None = None,
-    auto_publish: bool = False,
-) -> Video:
-    """Shared by both the Creator/Organiser upload endpoint and the Admin
-    'Add Video' endpoint, so the two paths can never silently drift apart
-    — exactly one of uploaded_by_user_id/uploaded_by_admin_id should be
-    set by the caller, matching Video's either/or ownership design.
-    """
+def _validate_video_payload(payload: VideoCreate) -> None:
     invalid_categories = [c for c in payload.categories if c not in ALLOWED_CATEGORIES]
     if invalid_categories:
         raise HTTPException(
@@ -163,28 +153,31 @@ def _create_video_core(
                 detail="Pay-Per-Video requires both an INR and a USD price.",
             )
 
-    video = Video(
-        uploaded_by_user_id=uploaded_by_user_id,
-        uploaded_by_admin_id=uploaded_by_admin_id,
-        title=payload.title,
-        description=payload.description,
-        section=VideoSection(payload.section),
-        category=payload.categories[0],  # backward-compat column, see model docstring
-        release_year=payload.release_year,
-        age_rating=AgeRating(payload.age_rating),
-        languages=", ".join(payload.languages) if payload.languages else None,
-        has_ads=payload.has_ads,
-        monetization_type=VideoMonetization(payload.monetization_type),
-    )
-    if auto_publish:
-        from datetime import datetime, timezone
-        video.status = VideoStatus.published
-        video.published_at = datetime.now(timezone.utc)
-    db.add(video)
-    db.flush()
 
+def _sync_categories(video: Video, payload: VideoCreate, db: Session) -> None:
+    db.query(VideoCategory).filter(VideoCategory.video_id == video.id).delete()
     for cat in payload.categories:
         db.add(VideoCategory(video_id=video.id, category=cat))
+
+
+def _sync_cast_and_crew(
+    video: Video, payload: VideoCreate, db: Session,
+    person_created_by_user_id: str | None = None, person_created_by_admin_id: str | None = None,
+) -> None:
+    """Replaces ALL cast/crew for this video with what's in the payload.
+    Deletes the old Person rows too — safe because there's no
+    search/reuse step yet (see Person model docstring), so every Person
+    is only ever linked to exactly one VideoCast/VideoCrew row right now.
+    """
+    old_cast = db.query(VideoCast).filter(VideoCast.video_id == video.id).all()
+    old_crew = db.query(VideoCrew).filter(VideoCrew.video_id == video.id).all()
+    for c in old_cast:
+        db.query(Person).filter(Person.id == c.person_id).delete()
+        db.delete(c)
+    for c in old_crew:
+        db.query(Person).filter(Person.id == c.person_id).delete()
+        db.delete(c)
+    db.flush()
 
     for i, member in enumerate(payload.cast):
         person = Person(
@@ -210,17 +203,73 @@ def _create_video_core(
         db.flush()
         db.add(VideoCrew(video_id=video.id, person_id=person.id, role=member.role, display_order=i))
 
-    if payload.monetization_type == "pay_per_video":
-        db.add(VideoPricing(
-            video_id=video.id, price_inr=payload.price_inr, price_usd=payload.price_usd,
-        ))
 
+def _sync_pricing_and_tiers(video: Video, payload: VideoCreate, db: Session) -> None:
+    db.query(VideoPricing).filter(VideoPricing.video_id == video.id).delete()
+    if payload.monetization_type == "pay_per_video":
+        db.add(VideoPricing(video_id=video.id, price_inr=payload.price_inr, price_usd=payload.price_usd))
+
+    db.query(VideoRevenueTier).filter(VideoRevenueTier.video_id == video.id).delete()
     for tier in payload.revenue_tiers:
         db.add(VideoRevenueTier(
             video_id=video.id, min_minutes=tier.min_minutes,
             max_minutes=tier.max_minutes, rate_per_minute_inr=tier.rate_per_minute_inr,
         ))
 
+
+def _apply_video_fields(video: Video, payload: VideoCreate) -> None:
+    video.title = payload.title
+    video.description = payload.description
+    video.section = VideoSection(payload.section)
+    video.category = payload.categories[0]  # backward-compat column, see model docstring
+    video.release_year = payload.release_year
+    video.age_rating = AgeRating(payload.age_rating)
+    video.languages = ", ".join(payload.languages) if payload.languages else None
+    video.has_ads = payload.has_ads
+    video.monetization_type = VideoMonetization(payload.monetization_type)
+
+
+def _create_video_core(
+    payload: VideoCreate, db: Session,
+    uploaded_by_user_id: str | None = None, uploaded_by_admin_id: str | None = None,
+    person_created_by_user_id: str | None = None, person_created_by_admin_id: str | None = None,
+    auto_publish: bool = False,
+) -> Video:
+    """Shared by both the Creator/Organiser upload endpoint and the Admin
+    'Add Video' endpoint, so the two paths can never silently drift apart
+    — exactly one of uploaded_by_user_id/uploaded_by_admin_id should be
+    set by the caller, matching Video's either/or ownership design.
+    """
+    _validate_video_payload(payload)
+
+    video = Video(uploaded_by_user_id=uploaded_by_user_id, uploaded_by_admin_id=uploaded_by_admin_id)
+    _apply_video_fields(video, payload)
+    if auto_publish:
+        from datetime import datetime, timezone
+        video.status = VideoStatus.published
+        video.published_at = datetime.now(timezone.utc)
+    db.add(video)
+    db.flush()
+
+    _sync_categories(video, payload, db)
+    _sync_cast_and_crew(video, payload, db, person_created_by_user_id, person_created_by_admin_id)
+    _sync_pricing_and_tiers(video, payload, db)
+
+    db.commit()
+    db.refresh(video)
+    return video
+
+
+def _update_video_core(video: Video, payload: VideoCreate, db: Session) -> Video:
+    """Admin edit — updates every field, reusing the exact same sync
+    helpers as creation so there's only one place that knows how to
+    correctly store categories/cast/crew/pricing/tiers.
+    """
+    _validate_video_payload(payload)
+    _apply_video_fields(video, payload)
+    _sync_categories(video, payload, db)
+    _sync_cast_and_crew(video, payload, db, video.uploaded_by_user_id, video.uploaded_by_admin_id)
+    _sync_pricing_and_tiers(video, payload, db)
     db.commit()
     db.refresh(video)
     return video

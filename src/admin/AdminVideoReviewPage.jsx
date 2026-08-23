@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo } from "./adminApi";
+import AdminVideoEditForm from "./AdminVideoEditForm";
 
 const COLORS = {
   panel: "#150307",
@@ -24,6 +25,7 @@ export default function AdminVideoReviewPage() {
   const [rejectNote, setRejectNote] = useState("");
   const [videoActionError, setVideoActionError] = useState("");
   const [expandedPreviewId, setExpandedPreviewId] = useState(null);
+  const [editingVideoId, setEditingVideoId] = useState(null);
 
   const loadVideos = (statusFilter) => {
     setVideosLoading(true);
@@ -138,7 +140,7 @@ export default function AdminVideoReviewPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
                     <p className="mt-0.5 text-xs capitalize" style={{ color: "rgba(245,235,221,0.5)" }}>
-                      By {v.uploaded_by_name} · {v.section} · {v.categories.join(", ")} · {v.release_year} · {v.age_rating} · {v.monetization_type.replace(/_/g, " ")} · {v.has_ads ? "Ad Present" : "Ad Free"} · Submitted {formatDate(v.created_at)}
+                      By {v.uploaded_by_name} · {v.section} · {v.category} · {v.monetization_type.replace(/_/g, " ")} · {v.has_ads ? "Ad Present" : "Ad Free"} · Submitted {formatDate(v.created_at)}
                     </p>
                     {v.description && (
                       <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>{v.description}</p>
@@ -149,16 +151,6 @@ export default function AdminVideoReviewPage() {
                     {v.revenue_tiers.length > 0 && (
                       <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
                         {v.revenue_tiers.map((t) => `${t.min_minutes}-${t.max_minutes ?? "unlimited"}min: ₹${t.rate_per_minute_inr}/min`).join(" · ")}
-                      </p>
-                    )}
-                    {v.cast.length > 0 && (
-                      <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-                        Cast: {v.cast.map((c) => c.character_role ? `${c.person.name} as ${c.character_role}` : c.person.name).join(", ")}
-                      </p>
-                    )}
-                    {v.crew.length > 0 && (
-                      <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-                        Crew: {v.crew.map((c) => `${c.role}: ${c.person.name}`).join(" · ")}
                       </p>
                     )}
                     {v.admin_note && (
@@ -192,6 +184,28 @@ export default function AdminVideoReviewPage() {
                   </div>
                 ) : (
                   <p className="mt-3 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>No video file uploaded yet — nothing to preview.</p>
+                )}
+
+                {/* Edit — works regardless of status, exactly as requested */}
+                <div className="mt-3 flex items-center gap-2 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  <button
+                    onClick={() => setEditingVideoId(editingVideoId === v.id ? null : v.id)}
+                    className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5"
+                    style={{ borderColor: "rgba(212,175,55,0.4)", color: COLORS.gold }}
+                  >
+                    {editingVideoId === v.id ? "Close editor" : "Edit"}
+                  </button>
+                </div>
+
+                {editingVideoId === v.id && (
+                  <AdminVideoEditForm
+                    video={v}
+                    onCancel={() => setEditingVideoId(null)}
+                    onSave={(updated) => {
+                      setVideos((list) => list.map((item) => (item.id === updated.id ? updated : item)));
+                      setEditingVideoId(null);
+                    }}
+                  />
                 )}
 
                 {/* Actions — different per status, exactly as specified */}

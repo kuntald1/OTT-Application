@@ -171,3 +171,102 @@ def send_otp_whatsapp(phone: str, otp_code: str, expire_minutes: int) -> bool:
         return True
     except Exception:
         return False
+
+
+def send_video_approved_whatsapp(to_phone: str, creator_name: str, video_title: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Great news, {creator_name}! Your video \"{video_title}\" has been "
+        f"approved and is now live on theomy. Thank you for your submission!"
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_video_rejected_whatsapp(to_phone: str, creator_name: str, video_title: str, reason: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Hi {creator_name}, your video \"{video_title}\" was not approved. "
+        f"Reason: {reason}. You're welcome to make changes and resubmit."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def _video_email_html(heading: str, body_lines: list[str], accent: str) -> str:
+    lines_html = "".join(f'<p style="margin:0 0 14px; color:#f5ebdd; font-size:15px; line-height:1.6;">{line}</p>' for line in body_lines)
+    return f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+                <span style="font-size:22px; font-weight:600; letter-spacing:0.5px; color:#f5ebdd;">theomy</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <p style="margin:0 0 16px; color:{accent}; font-size:18px; font-weight:600;">{heading}</p>
+                {lines_html}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def send_video_approved_email(to_email: str, creator_name: str, video_title: str) -> None:
+    subject = f'Your video "{video_title}" is now live on theomy'
+    text_body = (
+        f"Hi {creator_name},\n\nGreat news! Your video \"{video_title}\" has been approved "
+        f"and is now live on theomy.\n\nThank you for your submission.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Your video is now live! \U0001F389",
+        [f'Hi {creator_name},', f'Your video "<b>{video_title}</b>" has been approved and is now live on theomy.', "Thank you for your submission."],
+        "#6FCF97",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_video_rejected_email(to_email: str, creator_name: str, video_title: str, reason: str) -> None:
+    subject = f'Update on your video "{video_title}"'
+    text_body = (
+        f"Hi {creator_name},\n\nYour video \"{video_title}\" was not approved.\n\n"
+        f"Reason: {reason}\n\nYou're welcome to make changes and resubmit.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Video not approved",
+        [f'Hi {creator_name},', f'Your video "<b>{video_title}</b>" was not approved.',
+         f'<b>Reason:</b> {reason}', "You're welcome to make changes and resubmit."],
+        "#f87171",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass

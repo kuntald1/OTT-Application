@@ -8,7 +8,11 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole
 from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut
-from app.routers.videos import _to_out, _create_video_core, _upload_to_bunny, _save_poster_file
+from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _save_poster_file
+from app.notifications import (
+    send_video_approved_whatsapp, send_video_approved_email,
+    send_video_rejected_whatsapp, send_video_rejected_email,
+)
 
 router = APIRouter(prefix="/admin/videos", tags=["admin-videos"])
 
@@ -16,6 +20,27 @@ router = APIRouter(prefix="/admin/videos", tags=["admin-videos"])
 # "admin" and "superadmin" roles (get_current_admin alone is enough here,
 # unlike the admin-account-management endpoints in admin_auth.py which
 # require get_current_superadmin specifically).
+
+
+def _notify_video_uploader(video: Video, db: Session, decision: str, reason: str | None = None) -> None:
+    """Only Creator/Organiser-uploaded videos have someone to notify —
+    admin-uploaded videos with no attribution have no User account
+    behind them. Notification failures are non-fatal by design (see
+    notifications.py) so this never blocks the approve/reject action
+    itself, even if email/WhatsApp aren't configured or fail.
+    """
+    if not video.uploaded_by_user_id:
+        return
+    uploader = db.query(User).filter(User.id == video.uploaded_by_user_id).first()
+    if not uploader:
+        return
+
+    if decision == "approved":
+        send_video_approved_email(uploader.email, uploader.name, video.title)
+        send_video_approved_whatsapp(uploader.phone, uploader.name, video.title)
+    elif decision == "rejected":
+        send_video_rejected_email(uploader.email, uploader.name, video.title, reason or "")
+        send_video_rejected_whatsapp(uploader.phone, uploader.name, video.title, reason or "")
 
 
 @router.get("", response_model=list[VideoOut])
@@ -34,6 +59,27 @@ def list_videos_for_review(
     return [_to_out(v, db) for v in videos]
 
 
+@router.put("/{video_id}", response_model=VideoOut)
+def edit_video(
+    video_id: str,
+    payload: VideoCreate,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Full edit — works regardless of the video's current status
+    (Pending, Published, Disabled, Rejected). Reuses the exact same
+    field-sync helpers as creation (_update_video_core), so editing can
+    never silently diverge from how a video is created in the first
+    place. Does NOT change status or uploader attribution — this is
+    purely a content edit.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = _update_video_core(video, payload, db)
+    return _to_out(video, db)
+
+
 @router.post("/{video_id}/approve", response_model=VideoOut)
 def approve_video(
     video_id: str,
@@ -49,6 +95,7 @@ def approve_video(
     video.admin_note = None
     db.commit()
     db.refresh(video)
+    _notify_video_uploader(video, db, "approved")
     return _to_out(video, db)
 
 
@@ -67,6 +114,7 @@ def reject_video(
     video.admin_note = payload.admin_note
     db.commit()
     db.refresh(video)
+    _notify_video_uploader(video, db, "rejected", reason=payload.admin_note)
     return _to_out(video, db)
 
 
@@ -209,7 +257,12 @@ async def upload_video_file_as_admin(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_admin_id.isnot(None)).first()
+    # No ownership filter — any admin can upload the file for any video,
+    # matching approve/reject/disable/delete's scope. Previously this
+    # filtered by uploaded_by_admin_id.isnot(None), which broke for any
+    # video attributed to a Creator/Organiser account (those have
+    # uploaded_by_admin_id = null by design) — fixed here.
+    video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _upload_to_bunny(video, file, db)
@@ -223,7 +276,7 @@ async def upload_video_poster_as_admin(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_admin_id.isnot(None)).first()
+    video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _save_poster_file(video, file, db)
