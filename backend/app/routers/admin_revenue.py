@@ -15,7 +15,9 @@ from app.notifications import send_withdrawal_paid_email, send_withdrawal_paid_w
 from app.schemas import (
     AdminWithdrawalOut, AdminWithdrawalActionRequest, AdminContentPerformanceOut,
     AdminRevenueConfigUpdate, RevenueByDayOut, RevenueByCountryOut, RevenueRateOut,
+    AdminRevenueSummaryOut, AdminRevenueByCreatorOut,
 )
+from app.models import VideoStatus
 
 router = APIRouter(prefix="/admin/revenue", tags=["admin-revenue"])
 
@@ -275,6 +277,106 @@ def get_revenue_by_country(
         )
         for r in rows
     ]
+
+
+@router.get("/summary", response_model=AdminRevenueSummaryOut)
+def get_revenue_summary(
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Platform-wide KPI cards. gross_revenue is what all watched
+    minutes were worth before commission; platform/creator share split
+    that using the real per-video/per-viewer credited amounts (not a
+    single flat commission % applied after the fact, since older
+    records could in principle have used a different rate at the time).
+    """
+    totals = db.query(
+        func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
+        func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("creator_paisa"),
+        func.coalesce(func.sum(VideoWatchRecord.max_session_seconds), 0).label("total_seconds"),
+        func.count(VideoWatchRecord.id).label("viewer_records"),
+    ).first()
+
+    total_videos = db.query(func.count(Video.id)).filter(Video.status == VideoStatus.published).scalar() or 0
+
+    gross_paisa = totals.gross_paisa or 0
+    creator_paisa = totals.creator_paisa or 0
+    platform_paisa = gross_paisa - creator_paisa
+    total_minutes = Decimal(totals.total_seconds or 0) / 60
+
+    avg_rpm = (
+        (Decimal(gross_paisa) / 100) / total_minutes * 1000
+        if total_minutes > 0 else Decimal("0")
+    )
+
+    return AdminRevenueSummaryOut(
+        gross_revenue_rupees=(Decimal(gross_paisa) / 100).quantize(Decimal("0.01")),
+        platform_share_rupees=(Decimal(platform_paisa) / 100).quantize(Decimal("0.01")),
+        creator_share_rupees=(Decimal(creator_paisa) / 100).quantize(Decimal("0.01")),
+        total_watch_minutes=total_minutes.quantize(Decimal("0.01")),
+        total_viewer_records=totals.viewer_records or 0,
+        total_published_videos=total_videos,
+        avg_revenue_per_1000_minutes_rupees=avg_rpm.quantize(Decimal("0.01")),
+    )
+
+
+@router.get("/by-creator", response_model=list[AdminRevenueByCreatorOut])
+def get_revenue_by_creator(
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """The "Revenue Share Report" — one row per creator showing the
+    full Gross → Platform/Creator Share → Paid → Pending chain. Most
+    gross revenue first.
+    """
+    gross_rows = (
+        db.query(
+            Video.uploaded_by_user_id.label("creator_user_id"),
+            func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
+            func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("creator_paisa"),
+        )
+        .join(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
+        .filter(Video.uploaded_by_user_id.isnot(None))
+        .group_by(Video.uploaded_by_user_id)
+        .all()
+    )
+    paid_rows = (
+        db.query(
+            WithdrawalRequest.creator_user_id,
+            func.coalesce(func.sum(WithdrawalRequest.amount_paisa), 0).label("paid_paisa"),
+        )
+        .filter(WithdrawalRequest.status == WithdrawalStatus.paid)
+        .group_by(WithdrawalRequest.creator_user_id)
+        .all()
+    )
+    paid_by_creator = {r.creator_user_id: r.paid_paisa for r in paid_rows}
+
+    creator_ids = [r.creator_user_id for r in gross_rows]
+    creators = {u.id: u for u in db.query(User).filter(User.id.in_(creator_ids)).all()} if creator_ids else {}
+
+    results = []
+    for r in gross_rows:
+        creator = creators.get(r.creator_user_id)
+        gross_paisa = r.gross_paisa or 0
+        creator_paisa = r.creator_paisa or 0
+        platform_paisa = gross_paisa - creator_paisa
+        paid_paisa = paid_by_creator.get(r.creator_user_id, 0)
+        pending_paisa = max(0, creator_paisa - paid_paisa)
+        results.append(AdminRevenueByCreatorOut(
+            creator_user_id=r.creator_user_id,
+            creator_name=creator.name if creator else "Unknown",
+            creator_email=creator.email if creator else "unknown@theomy.com",
+            gross_revenue_rupees=(Decimal(gross_paisa) / 100).quantize(Decimal("0.01")),
+            platform_share_rupees=(Decimal(platform_paisa) / 100).quantize(Decimal("0.01")),
+            creator_share_rupees=(Decimal(creator_paisa) / 100).quantize(Decimal("0.01")),
+            paid_rupees=(Decimal(paid_paisa) / 100).quantize(Decimal("0.01")),
+            pending_rupees=(Decimal(pending_paisa) / 100).quantize(Decimal("0.01")),
+        ))
+    results.sort(key=lambda x: x.gross_revenue_rupees, reverse=True)
+    return results
+
+
+@router.get("/content-performance", response_model=list[AdminContentPerformanceOut])
 def get_all_content_performance(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),

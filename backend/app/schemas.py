@@ -470,6 +470,37 @@ class RevenueByCountryOut(BaseModel):
     creator_earned_rupees: Decimal
 
 
+class AdminRevenueSummaryOut(BaseModel):
+    """Platform-wide KPI cards — the theomy equivalent of a "Revenue
+    Summary" dashboard, built from real data (VideoWatchRecord,
+    published Video count), not YouTube-style ad metrics that don't
+    apply here (theomy hosts its own video, not on YouTube).
+    """
+    gross_revenue_rupees: Decimal
+    platform_share_rupees: Decimal
+    creator_share_rupees: Decimal
+    total_watch_minutes: Decimal
+    total_viewer_records: int  # count of distinct (viewer, video) pairs with any watch time
+    total_published_videos: int
+    avg_revenue_per_1000_minutes_rupees: Decimal  # theomy's RPM-equivalent
+
+
+class AdminRevenueByCreatorOut(BaseModel):
+    """One row per creator — the "Revenue Share Report": gross revenue
+    their content generated, theomy's cut, their cut, what's actually
+    been paid out (WithdrawalRequest status='paid'), and what's earned
+    but not yet paid.
+    """
+    creator_user_id: uuid.UUID
+    creator_name: str
+    creator_email: EmailStr
+    gross_revenue_rupees: Decimal
+    platform_share_rupees: Decimal
+    creator_share_rupees: Decimal
+    paid_rupees: Decimal
+    pending_rupees: Decimal
+
+
 class AdminContentPerformanceOut(BaseModel):
     video_id: uuid.UUID
     title: str

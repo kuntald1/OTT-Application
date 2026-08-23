@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film } from "lucide-react";
+import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance } from "../api";
 
@@ -214,8 +214,16 @@ export default function RevenuePage({ onBack }) {
 
         <div className="mt-8">
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: "rgba(245,235,221,0.7)" }}>
-            <Film className="h-4 w-4" style={{ color: COLORS.gold }} /> Content performance
+            <Film className="h-4 w-4" style={{ color: COLORS.gold }} /> Top performing content
           </h3>
+
+          {!performanceLoading && performance.length > 0 && (
+            <div className="mb-4 flex gap-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+              <span className="flex items-center gap-1"><Video className="h-3.5 w-3.5" style={{ color: COLORS.gold }} /> {performance.length} video{performance.length !== 1 ? "s" : ""}</span>
+              <span className="flex items-center gap-1"><Eye className="h-3.5 w-3.5" style={{ color: COLORS.gold }} /> {performance.reduce((sum, r) => sum + r.unique_viewers, 0)} total viewers</span>
+            </div>
+          )}
+
           {performanceLoading ? (
             <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
           ) : performance.length === 0 ? (
@@ -227,6 +235,7 @@ export default function RevenuePage({ onBack }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: COLORS.blackSoft }}>
+                    <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>#</th>
                     <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Video</th>
                     <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Viewers</th>
                     <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Watch Minutes</th>
@@ -234,8 +243,9 @@ export default function RevenuePage({ onBack }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {performance.map((row) => (
+                  {performance.map((row, i) => (
                     <tr key={row.video_id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                      <td className="px-4 py-2.5" style={{ color: "rgba(245,235,221,0.4)" }}>{i + 1}</td>
                       <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.title}</td>
                       <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.unique_viewers}</td>
                       <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.total_watch_minutes}</td>

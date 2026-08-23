@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp } from "lucide-react";
+import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, IndianRupee, Users, Film as FilmIcon, Award } from "lucide-react";
 import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
   fetchAdminContentPerformance, fetchAdminRevenueConfig, updateAdminRevenueConfig,
-  fetchRevenueByDay, fetchRevenueByCountry,
+  fetchRevenueByDay, fetchRevenueByCountry, fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
 } from "./adminApi";
 
 const COLORS = {
@@ -42,6 +42,10 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
   const [performance, setPerformance] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(true);
+
+  const [summary, setSummary] = useState(null);
+  const [byCreator, setByCreator] = useState([]);
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
@@ -82,6 +86,18 @@ export default function AdminRevenuePage({ currentAdmin }) {
       .then(setPerformance)
       .catch(() => setPerformance([]))
       .finally(() => setPerformanceLoading(false));
+
+    setSummaryLoading(true);
+    Promise.all([fetchAdminRevenueSummary(), fetchAdminRevenueByCreator()])
+      .then(([s, c]) => {
+        setSummary(s);
+        setByCreator(c);
+      })
+      .catch(() => {
+        setSummary(null);
+        setByCreator([]);
+      })
+      .finally(() => setSummaryLoading(false));
   }, [tab]);
 
   useEffect(() => {
@@ -338,6 +354,72 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
       {tab === "performance" && (
         <div>
+          {summaryLoading ? (
+            <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading summary…</p>
+          ) : summary && (
+            <>
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <TrendingUp className="h-4 w-4" style={{ color: COLORS.gold }} /> Revenue Summary
+              </h3>
+              <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {[
+                  { icon: IndianRupee, label: "Gross Revenue", value: `₹${summary.gross_revenue_rupees}` },
+                  { icon: Wallet, label: "Platform Share", value: `₹${summary.platform_share_rupees}` },
+                  { icon: Users, label: "Creator Share", value: `₹${summary.creator_share_rupees}` },
+                  { icon: FilmIcon, label: "Published Videos", value: summary.total_published_videos },
+                  { icon: BarChart3, label: "Viewer Records", value: summary.total_viewer_records },
+                  { icon: TrendingUp, label: "Avg / 1000 min", value: `₹${summary.avg_revenue_per_1000_minutes_rupees}` },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="rounded-xl p-4" style={{ background: COLORS.panel, border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <Icon className="mb-2 h-4 w-4" style={{ color: "rgba(212,175,55,0.6)" }} />
+                    <p className="text-lg font-semibold" style={{ color: COLORS.cream }}>{value}</p>
+                    <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <Award className="h-4 w-4" style={{ color: COLORS.gold }} /> Revenue Share Report — by creator
+              </h3>
+              {byCreator.length === 0 ? (
+                <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No creator revenue yet.</p>
+              ) : (
+                <div className="mb-8 overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: COLORS.panel }}>
+                        <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Creator</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Gross</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Platform Share</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Owner Share</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Paid</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Pending</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {byCreator.map((row) => (
+                        <tr key={row.creator_user_id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>
+                            {row.creator_name}
+                            <span className="ml-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>{row.creator_email}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>₹{row.gross_revenue_rupees}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>₹{row.platform_share_rupees}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: COLORS.gold }}>₹{row.creator_share_rupees}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "#6FCF97" }}>₹{row.paid_rupees}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: row.pending_rupees > 0 ? "#f87171" : "rgba(245,235,221,0.5)" }}>₹{row.pending_rupees}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+            <FilmIcon className="h-4 w-4" style={{ color: COLORS.gold }} /> Video-wise Revenue — top earners first
+          </h3>
           {performanceLoading ? (
             <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
           ) : performance.length === 0 ? (

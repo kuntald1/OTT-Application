@@ -247,6 +247,15 @@ export function fetchAdminContentPerformance() {
   return request(`/admin/revenue/content-performance`, { auth: true });
 }
 
+// Revenue Summary (platform-wide KPIs) + Revenue Share Report (per creator).
+export function fetchAdminRevenueSummary() {
+  return request(`/admin/revenue/summary`, { auth: true });
+}
+
+export function fetchAdminRevenueByCreator() {
+  return request(`/admin/revenue/by-creator`, { auth: true });
+}
+
 // Platform default rate + commission — superadmin-only editing.
 export function fetchAdminRevenueConfig() {
   return request(`/admin/revenue/config`, { auth: true });

@@ -170,7 +170,7 @@ def get_my_content_performance(
         .outerjoin(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
         .filter(Video.uploaded_by_user_id == current_user.id)
         .group_by(Video.id, Video.title)
-        .order_by(Video.title.asc())
+        .order_by(func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).desc())
         .all()
     )
     return [
