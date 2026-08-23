@@ -155,7 +155,7 @@ export default function AdminVideoReviewPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
                     <p className="mt-0.5 text-xs capitalize" style={{ color: "rgba(245,235,221,0.5)" }}>
-                      By {v.uploaded_by_name} · {v.section} · {v.category} · {v.monetization_type.replace(/_/g, " ")} · {v.has_ads ? "Ad Present" : "Ad Free"} · Submitted {formatDate(v.created_at)}
+                      By {v.uploaded_by_name} · {v.section} · {v.categories.join(", ")} · {v.release_year}{v.duration_seconds > 0 ? ` · ${Math.floor(v.duration_seconds / 3600)}h ${String(Math.round((v.duration_seconds % 3600) / 60)).padStart(2, "0")}m` : ""} · {v.age_rating} · {v.monetization_type.replace(/_/g, " ")} · {v.has_ads ? "Ad Present" : "Ad Free"} · Submitted {formatDate(v.created_at)}
                     </p>
                     {v.description && (
                       <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>{v.description}</p>

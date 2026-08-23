@@ -41,7 +41,37 @@ def _require_creator_or_organiser(user: User) -> None:
         )
 
 
+def _fetch_and_cache_duration(video: Video, db: Session) -> None:
+    """Lazily asks Bunny for this video's real runtime and caches it —
+    only runs for videos that have a file but no cached duration yet, so
+    once resolved this never calls Bunny again for that video. Uses a
+    SYNCHRONOUS httpx client deliberately: _to_out is called from many
+    non-async endpoint handlers, and making the whole call chain async
+    just for this would be a much bigger, riskier change than it's worth.
+    Silently does nothing on any failure — a missing duration is a minor
+    cosmetic gap, never worth breaking a video listing over.
+    """
+    if not (video.bunny_video_id and settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY):
+        return
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(
+                f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{video.bunny_video_id}",
+                headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
+            )
+            if resp.status_code == 200:
+                length = resp.json().get("length")
+                if length and length > 0:
+                    video.duration_seconds = int(length)
+                    db.commit()
+    except Exception:
+        pass
+
+
 def _to_out(video: Video, db: Session) -> VideoOut:
+    if video.bunny_video_id and video.duration_seconds is None:
+        _fetch_and_cache_duration(video, db)
+
     if video.uploaded_by_user_id:
         uploader = db.query(User).filter(User.id == video.uploaded_by_user_id).first()
         uploader_name = uploader.name if uploader else "Unknown"
@@ -83,6 +113,7 @@ def _to_out(video: Video, db: Session) -> VideoOut:
         age_rating=video.age_rating.value,
         languages=[l.strip() for l in video.languages.split(",")] if video.languages else [],
         poster_image_url=video.poster_image_url,
+        duration_seconds=video.duration_seconds,
         has_ads=video.has_ads,
         monetization_type=video.monetization_type.value,
         status=video.status.value,

@@ -622,7 +622,7 @@ export default function MyVideoListPage({ onBack }) {
                   <div className="p-4">
                     <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
                     <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
-                      {v.release_year} · {v.age_rating}{v.languages.length > 0 ? ` · ${v.languages.join(", ")}` : ""}
+                      {v.release_year}{v.duration_seconds > 0 ? ` · ${Math.floor(v.duration_seconds / 3600)}h ${String(Math.round((v.duration_seconds % 3600) / 60)).padStart(2, "0")}m` : ""} · {v.age_rating}{v.languages.length > 0 ? ` · ${v.languages.join(", ")}` : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.section}</span>

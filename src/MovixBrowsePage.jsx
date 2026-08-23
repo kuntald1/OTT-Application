@@ -659,6 +659,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
 
               <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: t.textMuted }}>
                 <span>{video.release_year}</span>
+                {video.duration_seconds > 0 && <span>{formatDuration(Math.round(video.duration_seconds / 60))}</span>}
                 <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: COLORS.gold, color: COLORS.gold }}>{video.age_rating}</span>
                 <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: COLORS.gold }}>{video.categories[0]}</span>
               </div>

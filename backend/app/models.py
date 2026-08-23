@@ -700,6 +700,12 @@ class Video(Base):
 
     # Filled in during Phase 2, once real Bunny Stream upload exists
     bunny_video_id = Column(String(255), nullable=True)
+    # Real runtime, fetched from Bunny once encoding finishes — never a
+    # manually-typed value, since a Creator guessing/mistyping a runtime
+    # would be less trustworthy than the actual file's real duration.
+    # Stays null until Bunny reports a non-zero length; populated lazily
+    # on read (see _to_out) rather than requiring a separate poll/webhook.
+    duration_seconds = Column(Integer, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

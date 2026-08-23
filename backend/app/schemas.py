@@ -573,6 +573,7 @@ class VideoOut(BaseModel):
     age_rating: str
     languages: List[str]
     poster_image_url: Optional[str] = None
+    duration_seconds: Optional[int] = None
     has_ads: bool
     monetization_type: str
     status: str
