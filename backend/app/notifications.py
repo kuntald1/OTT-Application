@@ -88,6 +88,124 @@ Thank you for subscribing to theomy!
         pass
 
 
+def send_withdrawal_paid_whatsapp(to_phone: str, amount_rupees) -> None:
+    """WhatsApp confirmation once an admin has actually sent a
+    withdrawal payment manually (bank transfer/UPI, since RazorpayX
+    payout automation isn't wired up yet). Same non-fatal pattern as
+    every other notification in this file.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Your withdrawal of ₹{amount_rupees} has been paid out. "
+        f"Please check your bank/UPI account. Thank you for creating on theomy!"
+    )
+    try:
+        client.messages.create(
+            from_=settings.TWILIO_FROM_NUMBER,
+            to=f"whatsapp:{to_number}",
+            body=body,
+        )
+    except Exception:
+        pass
+
+
+def send_withdrawal_paid_email(to_email: str, creator_name: str, amount_rupees) -> None:
+    """Withdrawal-paid confirmation email — same card-style HTML
+    template as the rest of this file.
+    """
+    subject = "Your theomy withdrawal has been paid"
+    text_body = f"""Hi {creator_name},
+
+Your withdrawal request of ₹{amount_rupees} has been paid out manually by our team.
+Please check your bank account / UPI for the transfer.
+
+Thank you for creating on theomy!
+"""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">Withdrawal paid</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Hi {creator_name}, your withdrawal has been paid out manually by our team. Please check your bank account or UPI for the transfer.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8);">
+              <tr><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); font-weight:700; color:#D4AF37;">Amount paid</td><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); text-align:right; font-weight:700; color:#D4AF37;">₹{amount_rupees}</td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_withdrawal_rejected_email(to_email: str, creator_name: str, amount_rupees, reason: str) -> None:
+    """Withdrawal-rejected notice — the amount is refunded to the
+    creator's available balance server-side (see admin_revenue.py); this
+    email exists so the creator isn't left wondering why the request
+    disappeared from "pending", and knows the balance is still theirs.
+    """
+    subject = "Your theomy withdrawal request needs attention"
+    text_body = f"""Hi {creator_name},
+
+Your withdrawal request of ₹{amount_rupees} was not approved.
+
+Reason: {reason}
+
+The amount has been added back to your available balance, and you're
+welcome to submit a new request once resolved.
+"""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">Withdrawal request update</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Hi {creator_name}, your withdrawal request of ₹{amount_rupees} wasn't approved. The amount has been added back to your available balance.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8);">
+              <tr><td style="padding:6px 0;">Reason</td><td style="padding:6px 0; text-align:right; font-weight:600;">{reason}</td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
 def send_video_purchase_whatsapp(to_phone: str, video_title: str, amount) -> None:
     """WhatsApp confirmation for a Pay-Per-Video purchase — same
     non-fatal, Twilio-optional pattern as send_payment_whatsapp above.

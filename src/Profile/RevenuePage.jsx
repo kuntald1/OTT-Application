@@ -102,12 +102,12 @@ export default function RevenuePage({ onBack }) {
         </p>
 
         <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.25)" }}>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Current revenue-share rate</p>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Platform default rate</p>
           <p className="mt-1 text-2xl font-semibold" style={{ color: COLORS.gold }}>
             {rate ? rate.rate_display : "Loading…"}
           </p>
           <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-            You earn this rate for every minute a viewer watches your content. Set by theomy, subject to change.
+            This is only a fallback — used for a video that has no custom Revenue-Share Tiers of its own. Any video with its own tiers (set at upload) earns at those rates instead, per minute watched.
           </p>
         </div>
 

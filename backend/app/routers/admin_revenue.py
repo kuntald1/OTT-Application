@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from app.deps import get_current_admin
 from app.models import (
     AdminUser, User, Video, VideoWatchRecord, WithdrawalRequest, WithdrawalStatus, CreatorEarnings,
 )
+from app.notifications import send_withdrawal_paid_email, send_withdrawal_paid_whatsapp, send_withdrawal_rejected_email
 from app.schemas import AdminWithdrawalOut, AdminWithdrawalActionRequest, AdminContentPerformanceOut
 
 router = APIRouter(prefix="/admin/revenue", tags=["admin-revenue"])
@@ -75,7 +77,6 @@ def approve_withdrawal(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Withdrawal is already {w.status.value}.")
     w.status = WithdrawalStatus.approved
     w.admin_note = payload.admin_note
-    from datetime import datetime, timezone
     w.processed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(w)
@@ -100,11 +101,19 @@ def mark_withdrawal_paid(
     w.status = WithdrawalStatus.paid
     if payload.admin_note:
         w.admin_note = payload.admin_note
-    from datetime import datetime, timezone
     w.processed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(w)
     creator = db.query(User).filter(User.id == w.creator_user_id).first()
+
+    # Notifications — best-effort, never block the response on these,
+    # same non-fatal pattern used everywhere else in this codebase.
+    amount_rupees = Decimal(w.amount_paisa) / 100
+    if creator:
+        if creator.phone:
+            send_withdrawal_paid_whatsapp(creator.phone, amount_rupees)
+        send_withdrawal_paid_email(creator.email, creator.name, amount_rupees)
+
     return _to_admin_withdrawal_out(w, creator)
 
 
@@ -133,11 +142,14 @@ def reject_withdrawal(
 
     w.status = WithdrawalStatus.rejected
     w.admin_note = payload.admin_note
-    from datetime import datetime, timezone
     w.processed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(w)
     creator = db.query(User).filter(User.id == w.creator_user_id).first()
+
+    if creator:
+        send_withdrawal_rejected_email(creator.email, creator.name, Decimal(w.amount_paisa) / 100, payload.admin_note)
+
     return _to_admin_withdrawal_out(w, creator)
 
 
