@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
+import { fetchPublishedVideos } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -103,9 +104,36 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
+  // Real, published videos — fetched from the actual backend, section
+  // "play" specifically. Rendered as its own row at the top, above the
+  // demo genre rows below, using the exact same GenreRow visual so it
+  // fits the page's existing look without a separate design.
+  const [realVideos, setRealVideos] = useState([]);
+  useEffect(() => {
+    fetchPublishedVideos("play")
+      .then((videos) => {
+        setRealVideos(
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+            isReal: true,
+            videoId: v.id,
+          }))
+        );
+      })
+      .catch(() => setRealVideos([]));
+  }, []);
+
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
       requestLogin();
+      return;
+    }
+    // Real videos skip the fake demo modal entirely and go to the real
+    // detail + player page instead.
+    if (card.isReal) {
+      onNavigate?.("videoDetail", { videoId: card.videoId });
       return;
     }
     modal.open(card);
@@ -114,6 +142,9 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {realVideos.length > 0 && (
+          <GenreRow category="Recently Uploaded" cards={realVideos} onSelect={handleSelectCard} />
+        )}
         {CATEGORIES.map((category) => {
           const cards = Array.from({ length: 6 }, (_, i) => buildVideoCard(category, i));
           return <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} />;
