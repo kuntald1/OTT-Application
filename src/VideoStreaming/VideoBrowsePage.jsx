@@ -632,8 +632,15 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>Cast</p>
                       <div className="flex flex-col gap-2.5">
                         {video.cast.map((c) => (
-                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="w-fit text-left text-sm font-medium hover:underline" style={{ color: GOLD }}>
-                            {c.person.name}{c.character_role ? <span style={{ color: T.textFainter }}> as {c.character_role}</span> : null}
+                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="flex w-fit items-center gap-2 text-left">
+                            {c.person.photo_url ? (
+                              <img src={c.person.photo_url} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
+                            ) : (
+                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs" style={{ color: T.textFainter }}>{c.person.name[0]}</span>
+                            )}
+                            <span className="text-sm font-medium hover:underline" style={{ color: GOLD }}>
+                              {c.person.name}{c.character_role ? <span style={{ color: T.textFainter }}> as {c.character_role}</span> : null}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -644,9 +651,16 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>Crew</p>
                       <div className="flex flex-col gap-2.5">
                         {video.crew.map((c) => (
-                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="w-fit text-left text-sm" style={{ color: T.textMuted }}>
-                            <span style={{ color: T.textFainter }}>{c.role}: </span>
-                            <span className="font-medium hover:underline" style={{ color: GOLD }}>{c.person.name}</span>
+                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="flex w-fit items-center gap-2 text-left">
+                            {c.person.photo_url ? (
+                              <img src={c.person.photo_url} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
+                            ) : (
+                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs" style={{ color: T.textFainter }}>{c.person.name[0]}</span>
+                            )}
+                            <span className="text-sm">
+                              <span style={{ color: T.textFainter }}>{c.role}: </span>
+                              <span className="font-medium hover:underline" style={{ color: GOLD }}>{c.person.name}</span>
+                            </span>
                           </button>
                         ))}
                       </div>
