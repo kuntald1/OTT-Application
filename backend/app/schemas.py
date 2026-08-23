@@ -453,6 +453,25 @@ class WatchHeartbeatRequest(BaseModel):
     # ever credits revenue when this beats the viewer's previous best
     # for this video (see VideoWatchRecord).
     session_seconds: int = Field(ge=0)
+    # Optional — when present, also refreshes this device's
+    # PlaybackSession.last_heartbeat_at so the screens-limit check keeps
+    # counting this device as active for as long as it keeps watching.
+    playback_session_token: Optional[str] = Field(default=None, max_length=100)
+
+
+class PlaybackSessionStartRequest(BaseModel):
+    session_token: str = Field(min_length=1, max_length=100)
+
+
+class PlaybackSessionStartResponse(BaseModel):
+    allowed: bool
+    active_screens: int
+    max_screens: int
+    reason: Optional[str] = None
+
+
+class PlaybackSessionEndRequest(BaseModel):
+    session_token: str = Field(min_length=1, max_length=100)
 
 
 class WatchHeartbeatResponse(BaseModel):

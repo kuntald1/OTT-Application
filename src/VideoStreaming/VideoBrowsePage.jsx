@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -498,6 +498,8 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likeBusy, setLikeBusy] = useState(false);
+  const [playStarting, setPlayStarting] = useState(false);
+  const [screenLimitError, setScreenLimitError] = useState("");
   const { isInList, toggleListItem, profile, requestLogin, isLoggedIn } = useApp();
   const saved = isInList(card.id);
 
@@ -577,19 +579,42 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   // backgrounded tab doesn't runaway-credit anything real).
   useEffect(() => {
     if (!playing || !canPlay) return;
+    const sessionToken = getPlaybackSessionToken();
     const playStartedAt = Date.now();
     const sendHeartbeat = () => {
       const elapsedSeconds = Math.round((Date.now() - playStartedAt) / 1000);
       if (elapsedSeconds > 0) {
-        sendWatchHeartbeat(card.videoId, elapsedSeconds).catch(() => {});
+        sendWatchHeartbeat(card.videoId, elapsedSeconds, sessionToken).catch(() => {});
       }
     };
     const interval = setInterval(sendHeartbeat, 20000);
     return () => {
       clearInterval(interval);
       sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
+      endPlaybackSession(sessionToken).catch(() => {}); // frees this device's screens-limit slot immediately
     };
   }, [playing, canPlay, card.videoId]);
+
+  // Screens-limit gate — checked right before playback actually starts,
+  // not just on page load. Blocks with a clear message instead of
+  // silently letting an over-the-limit device stream, which "screens"
+  // previously did nothing to prevent.
+  const handlePlayClick = async () => {
+    setScreenLimitError("");
+    setPlayStarting(true);
+    try {
+      const result = await startPlaybackSession(card.videoId, getPlaybackSessionToken());
+      if (result.allowed) {
+        setPlaying(true);
+      } else {
+        setScreenLimitError(result.reason || "Device limit reached for your plan.");
+      }
+    } catch (err) {
+      setScreenLimitError(err.message || "Couldn't start playback. Please try again.");
+    } finally {
+      setPlayStarting(false);
+    }
+  };
 
   const handleBuy = async () => {
     setBuyError("");
@@ -696,11 +721,12 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                     !playing ? (
                       <button
                         type="button"
-                        onClick={() => setPlaying(true)}
-                        className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                        onClick={handlePlayClick}
+                        disabled={playStarting}
+                        className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                         style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
                       >
-                        <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
+                        <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> {playStarting ? "Checking…" : "Play"}
                       </button>
                     ) : null
                   ) : video.access_reason === "login_required" ? (
@@ -772,6 +798,9 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                 </div>
                 {buyError && (
                   <p className="text-xs" style={{ color: "#f87171" }}>{buyError}</p>
+                )}
+                {screenLimitError && (
+                  <p className="text-xs" style={{ color: "#f87171" }}>{screenLimitError}</p>
                 )}
               </div>
 

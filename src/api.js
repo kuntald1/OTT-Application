@@ -370,12 +370,49 @@ export function fetchMyVideoPurchases() {
 // actually playing. session_seconds is cumulative WITHIN the current
 // continuous play session (resets on replay), never summed across
 // separate sessions — see VideoWatchRecord's docstring for why.
-export function sendWatchHeartbeat(videoId, sessionSeconds) {
+// playbackSessionToken (optional) also keeps this device's screens-
+// limit slot alive — see fetchPlaybackSessionStart below.
+export function sendWatchHeartbeat(videoId, sessionSeconds, playbackSessionToken) {
   return request(`/videos/${videoId}/watch-heartbeat`, {
     method: "POST",
     auth: true,
-    body: { session_seconds: sessionSeconds },
+    body: { session_seconds: sessionSeconds, playback_session_token: playbackSessionToken || null },
   });
+}
+
+// Screens-limit enforcement — one stable token per browser (see
+// getPlaybackSessionToken below), checked/registered right before
+// playback actually starts. allowed:false means this device would
+// exceed the plan's screens count; the player should show `reason`
+// instead of playing.
+export function startPlaybackSession(videoId, sessionToken) {
+  return request(`/videos/${videoId}/playback-session/start`, {
+    method: "POST",
+    auth: true,
+    body: { session_token: sessionToken },
+  });
+}
+
+export function endPlaybackSession(sessionToken) {
+  return request(`/videos/playback-session/end`, {
+    method: "POST",
+    auth: true,
+    body: { session_token: sessionToken },
+  });
+}
+
+const PLAYBACK_SESSION_KEY = "theomy_playback_session_token";
+
+// One stable id per browser — generated once, reused for every video
+// this browser ever plays, so the backend can tell "this device is
+// still watching" apart from "a different device started watching".
+export function getPlaybackSessionToken() {
+  let token = localStorage.getItem(PLAYBACK_SESSION_KEY);
+  if (!token) {
+    token = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    localStorage.setItem(PLAYBACK_SESSION_KEY, token);
+  }
+  return token;
 }
 
 // Creator-facing "Content performance analytics" — per-video viewers,

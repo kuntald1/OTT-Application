@@ -417,6 +417,35 @@ class VideoWatchRecord(Base):
     )
 
 
+class PlaybackSession(Base):
+    """One row per (user, browser/device) currently watching something —
+    the real enforcement behind the "screens" a subscription is priced
+    for. session_token is generated once per browser and persisted in
+    localStorage, so the same device reuses the same row across
+    different videos/visits rather than spawning a new one each time.
+
+    A session counts as ACTIVE only if last_heartbeat_at is recent
+    (see routers/playback_sessions.py's ACTIVE_WINDOW_SECONDS) — closing
+    a tab or losing connection lets the slot free itself automatically
+    within that window, without needing an explicit "log out this
+    device" action.
+    """
+    __tablename__ = "playback_sessions"
+    __table_args__ = (UniqueConstraint("user_id", "session_token", name="uq_user_session_token"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    session_token = Column(String(100), nullable=False, index=True)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=True)
+
+    last_heartbeat_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class RevenueLedgerEntry(Base):
     """One row per moment a heartbeat actually credited a creator —
     i.e. every time VideoWatchRecord's high-water-mark grew and

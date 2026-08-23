@@ -9,7 +9,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, Video, VideoStatus, VideoRevenueTier, VideoWatchRecord,
-    RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry,
+    RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry, PlaybackSession,
 )
 from app.routers.videos import _check_video_access
 from app.schemas import (
@@ -141,6 +141,22 @@ def watch_heartbeat(
 
         record.gross_revenue_paisa = new_gross_paisa
         record.max_session_seconds = payload.session_seconds
+
+    # Keeps this device's screens-limit slot alive for as long as it
+    # keeps sending heartbeats — a stopped/closed player naturally stops
+    # refreshing this and the session expires on its own (see
+    # playback_sessions.py's ACTIVE_WINDOW_SECONDS).
+    if payload.playback_session_token:
+        session = (
+            db.query(PlaybackSession)
+            .filter(
+                PlaybackSession.user_id == current_user.id,
+                PlaybackSession.session_token == payload.playback_session_token,
+            )
+            .first()
+        )
+        if session:
+            session.last_heartbeat_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(record)
