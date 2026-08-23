@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo } from "./adminApi";
+import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo, uploadAdminPersonPhoto } from "./adminApi";
 import AdminVideoEditForm from "./AdminVideoEditForm";
 
 const COLORS = {
@@ -26,6 +26,7 @@ export default function AdminVideoReviewPage() {
   const [videoActionError, setVideoActionError] = useState("");
   const [expandedPreviewId, setExpandedPreviewId] = useState(null);
   const [editingVideoId, setEditingVideoId] = useState(null);
+  const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
 
   const loadVideos = (statusFilter) => {
     setVideosLoading(true);
@@ -97,6 +98,20 @@ export default function AdminVideoReviewPage() {
     }
   };
 
+  const handlePersonPhotoSelect = async (personId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhotoFor(personId);
+    try {
+      await uploadAdminPersonPhoto(personId, file);
+      loadVideos(videoStatusFilter);
+    } catch (err) {
+      alert(err.message || "Couldn't upload photo. Please try again.");
+    } finally {
+      setUploadingPhotoFor(null);
+    }
+  };
+
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
   return (
@@ -144,6 +159,46 @@ export default function AdminVideoReviewPage() {
                     </p>
                     {v.description && (
                       <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>{v.description}</p>
+                    )}
+                    {(v.cast.length > 0 || v.crew.length > 0) && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        {v.cast.map((c) => (
+                          <div key={c.id} className="flex items-center gap-2">
+                            {c.person.photo_url ? (
+                              <img src={c.person.photo_url} alt="" className="h-5 w-5 flex-shrink-0 rounded-full object-cover" />
+                            ) : (
+                              <span className="h-5 w-5 flex-shrink-0 rounded-full" style={{ background: "rgba(255,255,255,0.08)" }} />
+                            )}
+                            <span className="text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
+                              {c.person.name}{c.character_role ? ` as ${c.character_role}` : ""}
+                            </span>
+                            {!c.person.photo_url && (
+                              <label className="cursor-pointer text-[11px] font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
+                                {uploadingPhotoFor === c.person.id ? "Uploading…" : "+ Photo"}
+                                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPhotoFor === c.person.id} onChange={(e) => handlePersonPhotoSelect(c.person.id, e)} />
+                              </label>
+                            )}
+                          </div>
+                        ))}
+                        {v.crew.map((c) => (
+                          <div key={c.id} className="flex items-center gap-2">
+                            {c.person.photo_url ? (
+                              <img src={c.person.photo_url} alt="" className="h-5 w-5 flex-shrink-0 rounded-full object-cover" />
+                            ) : (
+                              <span className="h-5 w-5 flex-shrink-0 rounded-full" style={{ background: "rgba(255,255,255,0.08)" }} />
+                            )}
+                            <span className="text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
+                              {c.role}: {c.person.name}
+                            </span>
+                            {!c.person.photo_url && (
+                              <label className="cursor-pointer text-[11px] font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
+                                {uploadingPhotoFor === c.person.id ? "Uploading…" : "+ Photo"}
+                                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPhotoFor === c.person.id} onChange={(e) => handlePersonPhotoSelect(c.person.id, e)} />
+                              </label>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                     {v.pricing && (
                       <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>Pay-Per-Video: ₹{v.pricing.price_inr} / ${v.pricing.price_usd}</p>

@@ -579,8 +579,12 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
       style={{ background: t.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
       onClick={onClose}
     >
+      <style>{`
+        .movix-real-modal-scroll::-webkit-scrollbar { display: none; }
+        .movix-real-modal-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
       <div
-        className="w-full max-w-2xl overflow-hidden rounded-2xl"
+        className="movix-real-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
         style={{
           background: t.modalSurface, maxHeight: "90vh", overflowY: "auto",
           transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
