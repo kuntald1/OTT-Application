@@ -319,6 +319,7 @@ class RevenueRateOut(BaseModel):
     rate_paisa_per_minute: int
     rate_rupees_per_minute: Decimal
     rate_display: str
+    platform_commission_percent: Decimal
 
     model_config = {"from_attributes": True}
 
@@ -426,6 +427,56 @@ class StripeConfirmRequest(BaseModel):
 class RewardConfigOut(BaseModel):
     subscription_reward_percent: Decimal
     ticket_reward_percent: Decimal
+
+
+class WatchHeartbeatRequest(BaseModel):
+    # Cumulative seconds watched in THIS single continuous play session —
+    # resets to 0 whenever the player restarts (new page load / re-open),
+    # never carried over between separate sessions. The backend only
+    # ever credits revenue when this beats the viewer's previous best
+    # for this video (see VideoWatchRecord).
+    session_seconds: int = Field(ge=0)
+
+
+class WatchHeartbeatResponse(BaseModel):
+    max_session_minutes: Decimal
+    credited_this_call_rupees: Decimal
+    total_creator_credited_rupees: Decimal
+
+
+class ContentPerformanceOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    unique_viewers: int
+    total_watch_minutes: Decimal
+    gross_revenue_rupees: Decimal
+    creator_earned_rupees: Decimal
+
+
+class AdminContentPerformanceOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    creator_name: str
+    unique_viewers: int
+    total_watch_minutes: Decimal
+    gross_revenue_rupees: Decimal
+    creator_earned_rupees: Decimal
+
+
+class AdminWithdrawalOut(BaseModel):
+    id: uuid.UUID
+    creator_user_id: uuid.UUID
+    creator_name: str
+    creator_email: EmailStr
+    amount_rupees: Decimal
+    status: str
+    admin_note: Optional[str] = None
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+
+
+class AdminWithdrawalActionRequest(BaseModel):
+    admin_note: Optional[str] = Field(default=None, max_length=500)
 
 
 class AdminLoginRequest(BaseModel):

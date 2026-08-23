@@ -366,6 +366,24 @@ export function fetchMyVideoPurchases() {
   return request(`/videos/purchases/mine`, { auth: true });
 }
 
+// Phase 3 — called periodically by the player while a video is
+// actually playing. session_seconds is cumulative WITHIN the current
+// continuous play session (resets on replay), never summed across
+// separate sessions — see VideoWatchRecord's docstring for why.
+export function sendWatchHeartbeat(videoId, sessionSeconds) {
+  return request(`/videos/${videoId}/watch-heartbeat`, {
+    method: "POST",
+    auth: true,
+    body: { session_seconds: sessionSeconds },
+  });
+}
+
+// Creator-facing "Content performance analytics" — per-video viewers,
+// watch minutes, and revenue for videos the current user uploaded.
+export function fetchMyContentPerformance() {
+  return request(`/videos/content-performance/mine`, { auth: true });
+}
+
 export function fetchPerson(personId) {
   return request(`/people/${personId}`);
 }

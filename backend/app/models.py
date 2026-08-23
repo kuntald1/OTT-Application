@@ -353,11 +353,63 @@ class RevenueRateConfig(Base):
     there's no floating-point ambiguity about the unit. 7 paisa/min is
     stored as 7; ₹1/min is stored as 100. Always divide by 100 to get
     rupees when displaying.
+
+    rate_paisa_per_minute is only the FALLBACK rate — used when a video
+    has no VideoRevenueTier rows of its own (uploader didn't set custom
+    tiers at upload time). A video with tiers always uses its own tiers
+    first (see routers/watch.py's _compute_gross_revenue_paisa).
+
+    platform_commission_percent is theomy's cut of whatever gross
+    revenue a view generates, taken BEFORE crediting the creator —
+    e.g. 20 means the creator keeps 80% of the tier-calculated amount.
+    Same admin-editable-via-SQL pattern as every other config table
+    here; no admin panel UI edits this yet.
     """
     __tablename__ = "revenue_rate_config"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     rate_paisa_per_minute = Column(Integer, nullable=False, default=7)
+    platform_commission_percent = Column(Numeric(5, 2), nullable=False, default=20)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class VideoWatchRecord(Base):
+    """Phase 3 — one row per (user, video) pair, tracking that viewer's
+    LONGEST single continuous watch session ever, in seconds. This is
+    the "max single-session view" rule confirmed earlier: revenue is
+    calculated from the longest session a viewer has ever watched, not
+    the sum of every session — re-watching the same video 10 times
+    doesn't 10x the creator's earnings, since that would reward
+    refresh-farming rather than genuine engagement.
+
+    gross_revenue_paisa is the tier-calculated amount (VideoRevenueTier,
+    or the RevenueRateConfig fallback) for max_session_seconds, computed
+    fresh every time max_session_seconds grows. creator_credited_paisa
+    is what's actually been added to CreatorEarnings so far — always
+    <= gross_revenue_paisa, since it's gross minus the platform's
+    commission (see RevenueRateConfig.platform_commission_percent).
+    Kept as two separate running totals (rather than recomputing from
+    scratch) so a heartbeat only ever credits the INCREMENTAL amount
+    when a session beats the previous best, never double-credits.
+    """
+    __tablename__ = "video_watch_records"
+    __table_args__ = (UniqueConstraint("user_id", "video_id", name="uq_user_video_watch_record"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+
+    max_session_seconds = Column(Integer, nullable=False, default=0)
+    gross_revenue_paisa = Column(Integer, nullable=False, default=0)
+    creator_credited_paisa = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -533,6 +533,30 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   // whose subscription expired no longer gets a working embed_url at
   // all, regardless of what the browser's login state says.
   const canPlay = video?.has_file && video?.has_access;
+
+  // Phase 3 — real watch-time tracking. The Bunny embed is a
+  // cross-origin iframe with no postMessage wiring here, so this
+  // approximates "watching" as wall-clock time elapsed since Play was
+  // pressed — reasonable given the embed doesn't expose real play/pause
+  // events to us, and heartbeats are cheap/idempotent (the backend only
+  // ever credits the INCREMENTAL amount when a session beats the
+  // viewer's previous best, so an inflated estimate from, say, a
+  // backgrounded tab doesn't runaway-credit anything real).
+  useEffect(() => {
+    if (!playing || !canPlay) return;
+    const playStartedAt = Date.now();
+    const sendHeartbeat = () => {
+      const elapsedSeconds = Math.round((Date.now() - playStartedAt) / 1000);
+      if (elapsedSeconds > 0) {
+        sendWatchHeartbeat(card.videoId, elapsedSeconds).catch(() => {});
+      }
+    };
+    const interval = setInterval(sendHeartbeat, 20000);
+    return () => {
+      clearInterval(interval);
+      sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
+    };
+  }, [playing, canPlay, card.videoId]);
 
   const handleBuy = async () => {
     setBuyError("");

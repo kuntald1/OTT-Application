@@ -212,3 +212,37 @@ export async function uploadAdminVideoPoster(videoId, file) {
   }
   return data;
 }
+
+// Revenue Sharing Management — withdrawal request review + payment
+// tracking, and platform-wide content performance analytics.
+export function fetchAdminWithdrawals(statusFilter) {
+  return request(`/admin/revenue/withdrawals${statusFilter ? `?status_filter=${statusFilter}` : ""}`, { auth: true });
+}
+
+export function approveWithdrawal(withdrawalId, adminNote) {
+  return request(`/admin/revenue/withdrawals/${withdrawalId}/approve`, {
+    method: "POST",
+    auth: true,
+    body: { admin_note: adminNote || null },
+  });
+}
+
+export function markWithdrawalPaid(withdrawalId, adminNote) {
+  return request(`/admin/revenue/withdrawals/${withdrawalId}/mark-paid`, {
+    method: "POST",
+    auth: true,
+    body: { admin_note: adminNote || null },
+  });
+}
+
+export function rejectWithdrawal(withdrawalId, adminNote) {
+  return request(`/admin/revenue/withdrawals/${withdrawalId}/reject`, {
+    method: "POST",
+    auth: true,
+    body: { admin_note: adminNote },
+  });
+}
+
+export function fetchAdminContentPerformance() {
+  return request(`/admin/revenue/content-performance`, { auth: true });
+}

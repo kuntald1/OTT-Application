@@ -10,7 +10,8 @@ from app.schemas import RevenueRateOut
 router = APIRouter(prefix="/revenue-rate", tags=["revenue"])
 
 
-def _to_out(rate_paisa: int) -> RevenueRateOut:
+def _to_out(config: RevenueRateConfig) -> RevenueRateOut:
+    rate_paisa = config.rate_paisa_per_minute
     rupees = Decimal(rate_paisa) / 100
     if rate_paisa % 100 == 0:
         display = f"₹{int(rupees)}/min"
@@ -20,6 +21,7 @@ def _to_out(rate_paisa: int) -> RevenueRateOut:
         rate_paisa_per_minute=rate_paisa,
         rate_rupees_per_minute=rupees,
         rate_display=display,
+        platform_commission_percent=config.platform_commission_percent,
     )
 
 
@@ -34,4 +36,4 @@ def get_revenue_rate(db: Session = Depends(get_db)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Revenue rate is not set up. Run the seed script or insert a row into revenue_rate_config.",
         )
-    return _to_out(config.rate_paisa_per_minute)
+    return _to_out(config)
