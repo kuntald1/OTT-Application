@@ -12,7 +12,7 @@ from app.deps import get_current_user
 from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
-    VideoCategory, VideoCast, VideoCrew, Person,
+    VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
@@ -42,7 +42,14 @@ def _require_creator_or_organiser(user: User) -> None:
 
 
 def _to_out(video: Video, db: Session) -> VideoOut:
-    uploader = db.query(User).filter(User.id == video.uploaded_by_user_id).first()
+    if video.uploaded_by_user_id:
+        uploader = db.query(User).filter(User.id == video.uploaded_by_user_id).first()
+        uploader_name = uploader.name if uploader else "Unknown"
+    elif video.uploaded_by_admin_id:
+        admin_uploader = db.query(AdminUser).filter(AdminUser.id == video.uploaded_by_admin_id).first()
+        uploader_name = f"{admin_uploader.name} (Admin)" if admin_uploader else "Unknown Admin"
+    else:
+        uploader_name = "Unknown"
     pricing_row = db.query(VideoPricing).filter(VideoPricing.video_id == video.id).first()
     tiers = (
         db.query(VideoRevenueTier)
@@ -67,7 +74,7 @@ def _to_out(video: Video, db: Session) -> VideoOut:
     )
     return VideoOut(
         id=video.id,
-        uploaded_by_name=uploader.name if uploader else "Unknown",
+        uploaded_by_name=uploader_name,
         title=video.title,
         description=video.description,
         section=video.section.value,
@@ -127,14 +134,17 @@ def _to_out(video: Video, db: Session) -> VideoOut:
     )
 
 
-@router.post("", response_model=VideoOut, status_code=status.HTTP_201_CREATED)
-def upload_video(
-    payload: VideoCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    _require_creator_or_organiser(current_user)
-
+def _create_video_core(
+    payload: VideoCreate, db: Session,
+    uploaded_by_user_id: str | None = None, uploaded_by_admin_id: str | None = None,
+    person_created_by_user_id: str | None = None, person_created_by_admin_id: str | None = None,
+    auto_publish: bool = False,
+) -> Video:
+    """Shared by both the Creator/Organiser upload endpoint and the Admin
+    'Add Video' endpoint, so the two paths can never silently drift apart
+    — exactly one of uploaded_by_user_id/uploaded_by_admin_id should be
+    set by the caller, matching Video's either/or ownership design.
+    """
     invalid_categories = [c for c in payload.categories if c not in ALLOWED_CATEGORIES]
     if invalid_categories:
         raise HTTPException(
@@ -146,7 +156,6 @@ def upload_video(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"age_rating must be one of: {', '.join(sorted(ALLOWED_AGE_RATINGS))}",
         )
-
     if payload.monetization_type == "pay_per_video":
         if payload.price_inr is None or payload.price_usd is None:
             raise HTTPException(
@@ -155,7 +164,8 @@ def upload_video(
             )
 
     video = Video(
-        uploaded_by_user_id=current_user.id,
+        uploaded_by_user_id=uploaded_by_user_id,
+        uploaded_by_admin_id=uploaded_by_admin_id,
         title=payload.title,
         description=payload.description,
         section=VideoSection(payload.section),
@@ -166,6 +176,10 @@ def upload_video(
         has_ads=payload.has_ads,
         monetization_type=VideoMonetization(payload.monetization_type),
     )
+    if auto_publish:
+        from datetime import datetime, timezone
+        video.status = VideoStatus.published
+        video.published_at = datetime.now(timezone.utc)
     db.add(video)
     db.flush()
 
@@ -178,7 +192,7 @@ def upload_video(
             birthplace=member.birthplace, about=member.about, early_life=member.early_life,
             personal_life=member.personal_life, debut_initial_years=member.debut_initial_years,
             breakthrough_beyond=member.breakthrough_beyond, recent_projects=member.recent_projects,
-            created_by_user_id=current_user.id,
+            created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
         )
         db.add(person)
         db.flush()
@@ -190,7 +204,7 @@ def upload_video(
             birthplace=member.birthplace, about=member.about, early_life=member.early_life,
             personal_life=member.personal_life, debut_initial_years=member.debut_initial_years,
             breakthrough_beyond=member.breakthrough_beyond, recent_projects=member.recent_projects,
-            created_by_user_id=current_user.id,
+            created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
         )
         db.add(person)
         db.flush()
@@ -209,7 +223,44 @@ def upload_video(
 
     db.commit()
     db.refresh(video)
+    return video
+
+
+@router.post("", response_model=VideoOut, status_code=status.HTTP_201_CREATED)
+def upload_video(
+    payload: VideoCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_creator_or_organiser(current_user)
+    video = _create_video_core(
+        payload, db,
+        uploaded_by_user_id=current_user.id, person_created_by_user_id=current_user.id,
+        auto_publish=False,
+    )
     return _to_out(video, db)
+
+
+async def _save_poster_file(video: Video, file: UploadFile, db: Session) -> Video:
+    if file.content_type not in ALLOWED_POSTER_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, or WEBP images are allowed.",
+        )
+    contents = await file.read()
+    if len(contents) > MAX_POSTER_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Poster image must be smaller than 5MB.")
+
+    POSTER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    stored_name = f"{uuid_module.uuid4()}{ext}"
+    with open(POSTER_UPLOAD_DIR / stored_name, "wb") as out:
+        out.write(contents)
+
+    video.poster_image_url = f"/api/uploads/video_posters/{stored_name}"
+    db.commit()
+    db.refresh(video)
+    return video
 
 
 @router.post("/{video_id}/upload-poster", response_model=VideoOut)
@@ -230,24 +281,7 @@ async def upload_video_poster(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
-    if file.content_type not in ALLOWED_POSTER_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPEG, PNG, or WEBP images are allowed.",
-        )
-    contents = await file.read()
-    if len(contents) > MAX_POSTER_BYTES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Poster image must be smaller than 5MB.")
-
-    POSTER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
-    stored_name = f"{uuid_module.uuid4()}{ext}"
-    with open(POSTER_UPLOAD_DIR / stored_name, "wb") as out:
-        out.write(contents)
-
-    video.poster_image_url = f"/api/uploads/video_posters/{stored_name}"
-    db.commit()
-    db.refresh(video)
+    video = await _save_poster_file(video, file, db)
     return _to_out(video, db)
 
 
@@ -289,6 +323,54 @@ ALLOWED_VIDEO_CONTENT_TYPES = {
 MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB — matches Nginx's client_max_body_size
 
 
+async def _upload_to_bunny(video: Video, file: UploadFile, db: Session) -> Video:
+    if video.bunny_video_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This video already has a file uploaded.")
+    if file.content_type not in ALLOWED_VIDEO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only MP4, MOV, MKV, WEBM, or AVI files are allowed.",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_VIDEO_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 2GB size limit.")
+    if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Video hosting isn't configured yet. Bunny Stream credentials are missing.",
+        )
+
+    async with httpx.AsyncClient(timeout=900.0) as client:  # 15 min — generous for 2GB files on modest upload speeds
+        create_resp = await client.post(
+            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos",
+            headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
+            json={"title": video.title},
+        )
+        if create_resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't create video on Bunny Stream: {create_resp.text}",
+            )
+        bunny_video_id = create_resp.json()["guid"]
+
+        upload_resp = await client.put(
+            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{bunny_video_id}",
+            headers={"AccessKey": settings.BUNNY_API_KEY},
+            content=contents,
+        )
+        if upload_resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't upload video file to Bunny Stream: {upload_resp.text}",
+            )
+
+    video.bunny_video_id = bunny_video_id
+    db.commit()
+    db.refresh(video)
+    return video
+
+
 @router.post("/{video_id}/upload-file", response_model=VideoOut)
 async def upload_video_file(
     video_id: str,
@@ -309,54 +391,6 @@ async def upload_video_file(
     video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    if video.bunny_video_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This video already has a file uploaded.")
 
-    if file.content_type not in ALLOWED_VIDEO_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only MP4, MOV, MKV, WEBM, or AVI files are allowed.",
-        )
-
-    contents = await file.read()
-    if len(contents) > MAX_VIDEO_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File exceeds the 500MB size limit.",
-        )
-    if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Video hosting isn't configured yet. Bunny Stream credentials are missing.",
-        )
-
-    async with httpx.AsyncClient(timeout=900.0) as client:  # 15 min — generous for 2GB files on modest upload speeds
-        # Step 1: create the video "slot" in the Bunny library
-        create_resp = await client.post(
-            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos",
-            headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
-            json={"title": video.title},
-        )
-        if create_resp.status_code not in (200, 201):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Couldn't create video on Bunny Stream: {create_resp.text}",
-            )
-        bunny_video_id = create_resp.json()["guid"]
-
-        # Step 2: upload the actual file bytes to that slot
-        upload_resp = await client.put(
-            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{bunny_video_id}",
-            headers={"AccessKey": settings.BUNNY_API_KEY},
-            content=contents,
-        )
-        if upload_resp.status_code not in (200, 201):
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Couldn't upload video file to Bunny Stream: {upload_resp.text}",
-            )
-
-    video.bunny_video_id = bunny_video_id
-    db.commit()
-    db.refresh(video)
+    video = await _upload_to_bunny(video, file, db)
     return _to_out(video, db)

@@ -1,5 +1,5 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -7,8 +7,8 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus
-from app.schemas import VideoOut, AdminVideoRejectRequest
-from app.routers.videos import _to_out
+from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate
+from app.routers.videos import _to_out, _create_video_core, _upload_to_bunny, _save_poster_file
 
 router = APIRouter(prefix="/admin/videos", tags=["admin-videos"])
 
@@ -144,3 +144,51 @@ async def delete_video(
     db.query(VideoRevenueTier).filter(VideoRevenueTier.video_id == video.id).delete()
     db.delete(video)
     db.commit()
+
+
+@router.post("", response_model=VideoOut, status_code=status.HTTP_201_CREATED)
+def create_video_as_admin(
+    payload: VideoCreate,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin 'Add Video' — reuses the exact same creation logic as the
+    Creator/Organiser upload path (_create_video_core), so the two can
+    never silently drift apart. Auto-publishes immediately, unlike
+    Creator submissions which start pending — the admin adding this IS
+    already the reviewer, so there's no one else to review it.
+    """
+    video = _create_video_core(
+        payload, db,
+        uploaded_by_admin_id=current_admin.id, person_created_by_admin_id=current_admin.id,
+        auto_publish=True,
+    )
+    return _to_out(video, db)
+
+
+@router.post("/{video_id}/upload-file", response_model=VideoOut)
+async def upload_video_file_as_admin(
+    video_id: str,
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_admin_id.isnot(None)).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = await _upload_to_bunny(video, file, db)
+    return _to_out(video, db)
+
+
+@router.post("/{video_id}/upload-poster", response_model=VideoOut)
+async def upload_video_poster_as_admin(
+    video_id: str,
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_admin_id.isnot(None)).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = await _save_poster_file(video, file, db)
+    return _to_out(video, db)

@@ -105,3 +105,52 @@ export async function deleteVideo(videoId) {
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete this video.");
   }
 }
+
+export function createAdminVideo(payload) {
+  return request("/admin/videos", {
+    method: "POST",
+    auth: true,
+    body: payload,
+  });
+}
+
+export function uploadAdminVideoFile(videoId, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const token = getAdminToken();
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE_URL}/admin/videos/${videoId}/upload-file`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload video file."));
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload. Please try again."));
+    xhr.send(formData);
+  });
+}
+
+export async function uploadAdminVideoPoster(videoId, file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/videos/${videoId}/upload-poster`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload poster. Please try again.");
+  }
+  return data;
+}

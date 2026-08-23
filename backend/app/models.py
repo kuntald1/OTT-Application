@@ -651,7 +651,14 @@ class Video(Base):
     __tablename__ = "videos"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    uploaded_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    # A video is uploaded by EITHER a Creator/Organiser account OR an
+    # admin directly — exactly one of these two is set, never both.
+    # Nullable because Admin accounts live in a completely separate
+    # table (admin_users) from regular users, by design (see AdminUser
+    # docstring) — a video can't have a single non-nullable FK that
+    # covers both possible uploader types.
+    uploaded_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    uploaded_by_admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True, index=True)
 
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -774,7 +781,10 @@ class Person(Base):
     debut_initial_years = Column(Text, nullable=True)
     breakthrough_beyond = Column(Text, nullable=True)
     recent_projects = Column(Text, nullable=True)
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # Same either/or ownership as Video — a Person profile created via
+    # the Admin "Add Video" flow has no regular user account behind it.
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_by_admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
