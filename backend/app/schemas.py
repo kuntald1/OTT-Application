@@ -126,8 +126,25 @@ class MenuOut(BaseModel):
     parent_menu_id: Optional[uuid.UUID] = None
     requires_auth: bool
     display_order: int
+    is_active: bool = True
 
     model_config = {"from_attributes": True}
+
+
+class AdminCategoryCreate(BaseModel):
+    """Admin creates a new Category sub-menu item. label and
+    category_param are kept in sync (same value) so a category always
+    matches exactly what shows in the nav dropdown AND what's offered
+    as a checkbox on the video upload form.
+    """
+    label: str = Field(min_length=1, max_length=100)
+    display_order: Optional[int] = None
+
+
+class AdminCategoryUpdate(BaseModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class SubscriptionPlanOut(BaseModel):
@@ -556,6 +573,35 @@ class AdminCreateRequest(BaseModel):
     role: str = Field(pattern="^(superadmin|admin)$", default="admin")
 
 
+class MyListItemIn(BaseModel):
+    item_id: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=255)
+    image_url: Optional[str] = Field(default=None, max_length=1000)
+    meta: Optional[str] = Field(default=None, max_length=255)
+    section: Optional[str] = Field(default=None, max_length=100)
+
+
+class MyListItemOut(BaseModel):
+    id: uuid.UUID
+    item_id: str
+    title: str
+    image_url: Optional[str] = None
+    meta: Optional[str] = None
+    section: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MyListToggleResponse(BaseModel):
+    saved: bool
+
+
+class VideoLikeToggleResponse(BaseModel):
+    liked: bool
+    likes_count: int
+
+
 class VideoRevenueTierIn(BaseModel):
     min_minutes: int = Field(ge=1)
     max_minutes: Optional[int] = Field(default=None, ge=1)
@@ -699,6 +745,16 @@ class VideoOut(BaseModel):
     # | "purchase_required" | None (None means access is already granted).
     has_access: bool = False
     access_reason: Optional[str] = None
+
+    # Real, persisted engagement — see VideoLike/MyListItem models.
+    # liked_by_me/in_my_list are only ever true for a logged-in viewer;
+    # both default False for a logged-out or unauthenticated view.
+    # in_my_list is looked up against the general MyListItem table
+    # (item_id == this video's id), the same table every other section
+    # of the site's "+" button already saves to.
+    likes_count: int = 0
+    liked_by_me: bool = False
+    in_my_list: bool = False
 
 
 class VideoPurchaseOut(BaseModel):

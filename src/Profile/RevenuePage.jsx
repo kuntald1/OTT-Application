@@ -44,23 +44,33 @@ export default function RevenuePage({ onBack }) {
   const [performance, setPerformance] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(true);
 
-  const loadAll = () => {
-    setSummaryLoading(true);
-    fetchRevenueSummary().then(setSummary).catch(() => setSummary(null)).finally(() => setSummaryLoading(false));
+  const loadAll = (silent = false) => {
+    if (!silent) setSummaryLoading(true);
+    fetchRevenueSummary().then(setSummary).catch(() => {}).finally(() => setSummaryLoading(false));
 
-    setHistoryLoading(true);
-    fetchWithdrawalHistory().then(setHistory).catch(() => setHistory([])).finally(() => setHistoryLoading(false));
+    if (!silent) setHistoryLoading(true);
+    fetchWithdrawalHistory().then(setHistory).catch(() => {}).finally(() => setHistoryLoading(false));
+
+    fetchMyContentPerformance().then(setPerformance).catch(() => {});
   };
 
   useEffect(() => {
     fetchRevenueRate().then(setRate).catch(() => setRate(null));
-    loadAll();
-
     setPerformanceLoading(true);
-    fetchMyContentPerformance()
-      .then(setPerformance)
-      .catch(() => setPerformance([]))
-      .finally(() => setPerformanceLoading(false));
+    loadAll(false);
+    setPerformanceLoading(false);
+
+    // Total Earned / Available / History / Content Performance are all
+    // live server state that changes as videos get watched elsewhere —
+    // poll every 20s and refresh on window focus so these numbers don't
+    // sit stale until the person manually reloads the page.
+    const interval = setInterval(() => loadAll(true), 20000);
+    const onFocus = () => loadAll(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -384,6 +384,31 @@ export function fetchMyContentPerformance() {
   return request(`/videos/content-performance/mine`, { auth: true });
 }
 
+// Real, backend-persisted My List — replaces the old in-memory-only
+// implementation that vanished on refresh/logout. Works uniformly for
+// real videos and demo cards alike (see MyListItem's model docstring).
+export function fetchMyList() {
+  return request(`/my-list`, { auth: true });
+}
+
+export function toggleMyListItem({ id, title, image, meta, section }) {
+  return request(`/my-list/toggle`, {
+    method: "POST",
+    auth: true,
+    body: { item_id: id, title, image_url: image || null, meta: meta || null, section: section || null },
+  });
+}
+
+export function removeMyListItem(itemId) {
+  return request(`/my-list/${itemId}`, { method: "DELETE", auth: true });
+}
+
+// Real like toggle for a video — replaces the previously decorative
+// thumbs-up button.
+export function toggleVideoLike(videoId) {
+  return request(`/videos/${videoId}/like/toggle`, { method: "POST", auth: true });
+}
+
 export function fetchPerson(personId) {
   return request(`/people/${personId}`);
 }
@@ -499,6 +524,21 @@ export function verifyRazorpayPayment({ paymentId, razorpayOrderId, razorpayPaym
 // dropdown) from the database instead of a hardcoded array.
 export function fetchMenus() {
   return request("/menus");
+}
+
+// The live category list — sourced from the same public Menu table
+// TopNav.jsx already uses for the site's Category dropdown, so this is
+// literally the same data, not a second source of truth. Used
+// everywhere a category picker/checkbox list needs to reflect whatever
+// an admin has configured under Admin > Categories, without a redeploy.
+export async function fetchCategoryOptions() {
+  const menus = await fetchMenus();
+  const parent = menus.find((m) => m.label === "Category" && !m.parent_menu_id);
+  if (!parent) return [];
+  return menus
+    .filter((m) => m.parent_menu_id === parent.id)
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((m) => m.category_param || m.label);
 }
 
 // Public, no auth — the plan catalog (Play/Archive/Both pricing, features)

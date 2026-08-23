@@ -907,6 +907,51 @@ class VideoCrew(Base):
     display_order = Column(Integer, nullable=False, default=0)
 
 
+class MyListItem(Base):
+    """A user's "My List" (saved-for-later) entries — deliberately NOT
+    a strict FK to Video, because My List is shared across every
+    section on theomy (Video Streaming, Movies, Theater, Archive), and
+    most of those sections are still demo/static content with no real
+    backend row behind them at all. Storing the exact card shape the
+    frontend already uses (id/title/image/meta/section) instead of a
+    video_id FK means this works identically for a real uploaded video
+    and a demo card, with no special-casing either — the previous
+    implementation kept this only in React state, so it vanished on
+    every refresh/logout despite the "+" button looking like it saved
+    something permanently.
+    """
+    __tablename__ = "my_list_items"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_my_list_item"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    item_id = Column(String(255), nullable=False)  # the frontend card's own id, real or demo
+    title = Column(String(255), nullable=False)
+    image_url = Column(String(1000), nullable=True)
+    meta = Column(String(255), nullable=True)
+    section = Column(String(100), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class VideoLike(Base):
+    """One row per (user, video) — existence means that user likes that
+    video. Same toggle-by-row-existence pattern as PostLike above. Real
+    videos only (unlike MyListItem) — the thumbs-up on demo cards stays
+    decorative since there's no real Video row to attach a like to.
+    """
+    __tablename__ = "video_likes"
+    __table_args__ = (UniqueConstraint("user_id", "video_id", name="uq_user_video_like"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class VideoPurchase(Base):
     """Phase 4 — one row per successful Pay-Per-Video purchase. A user
     only gets playback access to a pay_per_video Video once a row exists

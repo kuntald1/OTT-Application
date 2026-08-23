@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, Upload, X, Plus, Trash2, ChevronDown, Paperclip } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { submitEventEnquiry, fetchMyEventEnquiries } from "../api";
-import { CATEGORIES } from "../shared/categories";
+import { submitEventEnquiry, fetchMyEventEnquiries, fetchCategoryOptions } from "../api";
+import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const inputStyle = {
   width: "100%",
@@ -38,6 +38,13 @@ function makeEmptyTier() {
 }
 
 export default function EventEnquiryPage({ onBack }) {
+  const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
+
+  useEffect(() => {
+    fetchCategoryOptions().then((cats) => {
+      if (cats.length > 0) setCategories(cats);
+    }).catch(() => {});
+  }, []);
   const { profile } = useApp();
 
   const [form, setForm] = useState({

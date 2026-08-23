@@ -247,6 +247,37 @@ export function fetchAdminContentPerformance() {
   return request(`/admin/revenue/content-performance`, { auth: true });
 }
 
+// Category management — powers the Admin > Categories page. Every
+// change here immediately affects the public Category nav dropdown
+// (via GET /menus, already dynamic) AND the video upload form's
+// category checkboxes (via /videos.py's live ALLOWED_CATEGORIES query).
+export function fetchAdminCategories() {
+  return request(`/admin/categories`, { auth: true });
+}
+
+export function createAdminCategory(label) {
+  return request(`/admin/categories`, {
+    method: "POST",
+    auth: true,
+    body: { label },
+  });
+}
+
+export function updateAdminCategory(categoryId, updates) {
+  return request(`/admin/categories/${categoryId}`, {
+    method: "PUT",
+    auth: true,
+    body: updates,
+  });
+}
+
+export function deleteAdminCategory(categoryId) {
+  return request(`/admin/categories/${categoryId}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
 // Revenue Summary (platform-wide KPIs) + Revenue Share Report (per creator).
 export function fetchAdminRevenueSummary() {
   return request(`/admin/revenue/summary`, { auth: true });

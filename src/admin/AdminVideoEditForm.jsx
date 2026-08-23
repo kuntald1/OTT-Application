@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown } from "lucide-react";
 import { editVideo } from "./adminApi";
+import { fetchCategoryOptions } from "../api";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
-const CATEGORIES = [
+const FALLBACK_CATEGORIES = [
   "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
   "Classical Theatre", "Experimental Theatre", "Popular Shows",
 ];
@@ -89,6 +90,14 @@ function makeEmptyCrew() {
 }
 
 export default function AdminVideoEditForm({ video, onSave, onCancel }) {
+  const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
+
+  useEffect(() => {
+    fetchCategoryOptions().then((cats) => {
+      if (cats.length > 0) setCategories(cats);
+    }).catch(() => {});
+  }, []);
+
   const [form, setForm] = useState({
     title: video.title, description: video.description || "", section: video.section,
     categories: video.categories, release_year: String(video.release_year), age_rating: video.age_rating,

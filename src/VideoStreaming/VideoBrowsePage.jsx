@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -495,7 +495,10 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   const [playing, setPlaying] = useState(false);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState("");
-  const { isInList, toggleListItem, profile, requestLogin } = useApp();
+  const [liked, setLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
+  const [likeBusy, setLikeBusy] = useState(false);
+  const { isInList, toggleListItem, profile, requestLogin, isLoggedIn } = useApp();
   const saved = isInList(card.id);
 
   React.useEffect(() => {
@@ -520,12 +523,42 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   const loadVideo = () => {
     setLoading(true);
     fetchVideoById(card.videoId)
-      .then(setVideo)
+      .then((v) => {
+        setVideo(v);
+        setLiked(v.liked_by_me);
+        setLikesCount(v.likes_count);
+      })
       .catch(() => setVideo(null))
       .finally(() => setLoading(false));
   };
 
   useEffect(loadVideo, [card.videoId]);
+
+  const handleToggleLike = () => {
+    if (!isLoggedIn) {
+      requestLogin();
+      return;
+    }
+    if (likeBusy) return;
+    // Optimistic update — the toggle is idempotent server-side (same
+    // create/delete-row pattern as My List), so a failed request just
+    // reverts these two values back rather than leaving stale state.
+    const prevLiked = liked;
+    const prevCount = likesCount;
+    setLiked(!prevLiked);
+    setLikesCount(prevLiked ? prevCount - 1 : prevCount + 1);
+    setLikeBusy(true);
+    toggleVideoLike(card.videoId)
+      .then((res) => {
+        setLiked(res.liked);
+        setLikesCount(res.likes_count);
+      })
+      .catch(() => {
+        setLiked(prevLiked);
+        setLikesCount(prevCount);
+      })
+      .finally(() => setLikeBusy(false));
+  };
 
   // Real gating — has_access comes straight from the backend's actual
   // subscription/purchase check (_check_video_access), not just "is
@@ -705,11 +738,9 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                     </button>
                   )}
 
-                  {/* Real "Add to My List" — same toggleListItem/isInList
-                      mechanism the demo cards already use, genuinely
-                      functional, not decorative. Thumbs-up stays decorative
-                      on purpose, matching the demo modal's own thumbs-up,
-                      which has no real "liked" state either. */}
+                  {/* Real "Add to My List" AND real thumbs-up — both
+                      persisted server-side (MyListItem / VideoLike),
+                      not decorative. */}
                   <button
                     type="button"
                     onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Video Streaming" })}
@@ -723,8 +754,20 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                   >
                     {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                   </button>
-                  <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
-                    <ThumbsUp className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={handleToggleLike}
+                    disabled={likeBusy}
+                    aria-label={liked ? "Remove like" : "Like this video"}
+                    className="flex h-9 items-center gap-1.5 rounded-full border px-3 transition-colors disabled:cursor-not-allowed"
+                    style={{
+                      borderColor: liked ? COLORS.gold : "rgba(255,255,255,0.3)",
+                      color: liked ? COLORS.gold : "#fff",
+                      background: liked ? "rgba(212,175,55,0.12)" : "transparent",
+                    }}
+                  >
+                    <ThumbsUp className="h-4 w-4" style={liked ? { fill: COLORS.gold } : undefined} />
+                    {likesCount > 0 && <span className="text-xs font-medium">{likesCount}</span>}
                   </button>
                 </div>
                 {buyError && (

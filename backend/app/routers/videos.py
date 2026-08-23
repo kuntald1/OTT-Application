@@ -14,11 +14,11 @@ from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
-    Subscription, VideoPurchase, PaymentStatus,
+    Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
-    VideoCastOut, VideoCrewOut, PersonOut,
+    VideoCastOut, VideoCrewOut, PersonOut, VideoLikeToggleResponse,
 )
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -27,12 +27,23 @@ POSTER_UPLOAD_DIR = Path("uploads/video_posters")
 ALLOWED_POSTER_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_POSTER_BYTES = 5 * 1024 * 1024  # 5 MB
 
-# Same taxonomy as the site's Category menu and Event Enquiry form.
-ALLOWED_CATEGORIES = {
-    "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
-    "Classical Theatre", "Experimental Theatre", "Popular Shows",
-}
 ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+", "A"}
+
+
+def _get_allowed_categories(db: Session) -> set[str]:
+    """Live from the database (Menu rows under the "Category" parent,
+    admin-managed via /admin/categories) instead of a hardcoded set —
+    this is what makes "Category Dynamic" actually dynamic: an admin
+    adding/renaming/removing a category here changes what's valid on
+    the very next upload, no redeploy needed.
+    """
+    from app.models import Menu
+
+    parent = db.query(Menu).filter(Menu.label == "Category", Menu.parent_menu_id.is_(None)).first()
+    if not parent:
+        return set()
+    rows = db.query(Menu).filter(Menu.parent_menu_id == parent.id, Menu.is_active == True).all()  # noqa: E712
+    return {m.category_param or m.label for m in rows}
 
 
 def _require_creator_or_organiser(user: User) -> None:
@@ -179,6 +190,15 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         .all()
     )
     has_access, access_reason = _check_video_access(video, viewer, db)
+    likes_count = db.query(VideoLike).filter(VideoLike.video_id == video.id).count()
+    liked_by_me = bool(
+        viewer and db.query(VideoLike).filter(VideoLike.video_id == video.id, VideoLike.user_id == viewer.id).first()
+    )
+    in_my_list = bool(
+        viewer and db.query(MyListItem).filter(
+            MyListItem.user_id == viewer.id, MyListItem.item_id == str(video.id)
+        ).first()
+    )
     return VideoOut(
         id=video.id,
         uploaded_by_name=uploader_name,
@@ -241,15 +261,19 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         published_at=video.published_at,
         has_access=has_access,
         access_reason=access_reason,
+        likes_count=likes_count,
+        liked_by_me=liked_by_me,
+        in_my_list=in_my_list,
     )
 
 
-def _validate_video_payload(payload: VideoCreate) -> None:
-    invalid_categories = [c for c in payload.categories if c not in ALLOWED_CATEGORIES]
+def _validate_video_payload(payload: VideoCreate, db: Session) -> None:
+    allowed_categories = _get_allowed_categories(db)
+    invalid_categories = [c for c in payload.categories if c not in allowed_categories]
     if invalid_categories:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid categories: {', '.join(invalid_categories)}. Must be one of: {', '.join(sorted(ALLOWED_CATEGORIES))}",
+            detail=f"Invalid categories: {', '.join(invalid_categories)}. Must be one of: {', '.join(sorted(allowed_categories))}",
         )
     if payload.age_rating not in ALLOWED_AGE_RATINGS:
         raise HTTPException(
@@ -393,7 +417,7 @@ def _create_video_core(
     — exactly one of uploaded_by_user_id/uploaded_by_admin_id should be
     set by the caller, matching Video's either/or ownership design.
     """
-    _validate_video_payload(payload)
+    _validate_video_payload(payload, db)
 
     video = Video(uploaded_by_user_id=uploaded_by_user_id, uploaded_by_admin_id=uploaded_by_admin_id)
     _apply_video_fields(video, payload)
@@ -418,7 +442,7 @@ def _update_video_core(video: Video, payload: VideoCreate, db: Session) -> Video
     helpers as creation so there's only one place that knows how to
     correctly store categories/cast/crew/pricing/tiers.
     """
-    _validate_video_payload(payload)
+    _validate_video_payload(payload, db)
     _apply_video_fields(video, payload)
     _sync_categories(video, payload, db)
     _sync_cast_and_crew(video, payload, db, video.uploaded_by_user_id, video.uploaded_by_admin_id)
@@ -627,3 +651,34 @@ async def upload_video_file(
 
     video = await _upload_to_bunny(video, file, db)
     return _to_out(video, db)
+
+
+@router.post("/{video_id}/like/toggle", response_model=VideoLikeToggleResponse)
+def toggle_video_like(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Real thumbs-up toggle — replaces the previously purely decorative
+    button (see VideoBrowsePage.jsx's RealDetailModal). Same
+    toggle-by-row-existence pattern as community PostLike.
+    """
+    video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    existing = (
+        db.query(VideoLike)
+        .filter(VideoLike.video_id == video.id, VideoLike.user_id == current_user.id)
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        liked = False
+    else:
+        db.add(VideoLike(video_id=video.id, user_id=current_user.id))
+        liked = True
+    db.commit()
+
+    likes_count = db.query(VideoLike).filter(VideoLike.video_id == video.id).count()
+    return VideoLikeToggleResponse(liked=liked, likes_count=likes_count)

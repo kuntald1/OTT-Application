@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoFile, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos } from "../api";
-import { CATEGORIES } from "../shared/categories";
+import { uploadVideo, uploadVideoFile, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
+import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
 
@@ -92,6 +92,13 @@ function Dropdown({ label, value, options, onChange, placeholder, capitalizeOpti
 }
 
 export default function MyVideoListPage({ onBack }) {
+  const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
+
+  useEffect(() => {
+    fetchCategoryOptions().then((cats) => {
+      if (cats.length > 0) setCategories(cats);
+    }).catch(() => {});
+  }, []);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);

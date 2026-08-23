@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle } from "lucide-react";
 import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts } from "./adminApi";
-import { CATEGORIES } from "../shared/categories";
+import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
+import { fetchCategoryOptions } from "../api";
 
 const COLORS = {
   panel: "#150307",
@@ -102,6 +103,13 @@ export default function AdminAddVideoPage() {
   const [addedVideos, setAddedVideos] = useState([]);
   const [showUpload, setShowUpload] = useState(true);
   const [attributedUser, setAttributedUser] = useState(null);
+  const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
+
+  useEffect(() => {
+    fetchCategoryOptions().then((cats) => {
+      if (cats.length > 0) setCategories(cats);
+    }).catch(() => {});
+  }, []);
   const [creatorSearch, setCreatorSearch] = useState("");
   const [creatorResults, setCreatorResults] = useState([]);
   const [creatorDropdownOpen, setCreatorDropdownOpen] = useState(false);

@@ -182,6 +182,7 @@ def login_with_otp(payload: VerifyOtpLoginRequest, db: Session = Depends(get_db)
     db.commit()
     token = create_access_token(subject=str(user.id))
     return Token(access_token=token, user=UserOut.model_validate(user))
+@router.get("/me", response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
 

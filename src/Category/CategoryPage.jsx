@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Play, Ticket, Plus, Check, X, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { CATEGORIES } from "../shared/categories";
+import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
+import { fetchCategoryOptions } from "../api";
 import { SHOWS } from "../Theater/showsData";
 import { useApp } from "../context/AppContext";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
@@ -94,6 +95,13 @@ function toggleInSet(set, value) {
 
 export default function CategoryPage({ initialCategory, onNavigate }) {
   const [categoryFilter, setCategoryFilter] = useState(new Set(initialCategory ? [initialCategory] : []));
+  const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
+
+  useEffect(() => {
+    fetchCategoryOptions().then((cats) => {
+      if (cats.length > 0) setCategories(cats);
+    }).catch(() => {});
+  }, []);
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
