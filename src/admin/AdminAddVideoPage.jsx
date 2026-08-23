@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
+import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster } from "./adminApi";
+import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster, searchCreatorAccounts } from "./adminApi";
 import { CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
@@ -92,6 +92,11 @@ function Dropdown({ label, value, options, onChange, placeholder, capitalizeOpti
 export default function AdminAddVideoPage() {
   const [addedVideos, setAddedVideos] = useState([]);
   const [showUpload, setShowUpload] = useState(true);
+  const [attributedUser, setAttributedUser] = useState(null);
+  const [creatorSearch, setCreatorSearch] = useState("");
+  const [creatorResults, setCreatorResults] = useState([]);
+  const [creatorDropdownOpen, setCreatorDropdownOpen] = useState(false);
+  const [creatorSearching, setCreatorSearching] = useState(false);
 
   const [form, setForm] = useState({
     title: "", description: "", section: "play", categories: [], release_year: "", age_rating: "", languages: "",
@@ -109,6 +114,18 @@ export default function AdminAddVideoPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileUploadError, setFileUploadError] = useState("");
   const [uploadingPosterFor, setUploadingPosterFor] = useState(null);
+
+  useEffect(() => {
+    if (!creatorDropdownOpen) return;
+    setCreatorSearching(true);
+    const timer = setTimeout(() => {
+      searchCreatorAccounts(creatorSearch)
+        .then(setCreatorResults)
+        .catch(() => setCreatorResults([]))
+        .finally(() => setCreatorSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [creatorSearch, creatorDropdownOpen]);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   const toggleCategory = (cat) => setForm((f) => {
@@ -140,6 +157,8 @@ export default function AdminAddVideoPage() {
     setTiers([makeEmptyTier()]);
     setCast([]);
     setCrew([]);
+    setAttributedUser(null);
+    setCreatorSearch("");
   };
 
   const handleSubmit = async () => {
@@ -148,6 +167,7 @@ export default function AdminAddVideoPage() {
     setSubmitting(true);
     try {
       const payload = {
+        attributed_user_id: attributedUser ? attributedUser.id : null,
         title: form.title.trim(),
         description: form.description.trim() || null,
         section: form.section,
@@ -241,6 +261,65 @@ export default function AdminAddVideoPage() {
 
         {showUpload && (
           <div className="mb-8 flex flex-col gap-5 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}>
+            <div>
+              <label style={labelStyle}>Attribute to (optional)</label>
+              {attributedUser ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border px-4 py-2.5" style={{ borderColor: "rgba(212,175,55,0.3)", background: "rgba(212,175,55,0.08)" }}>
+                  <span className="flex items-center gap-2 text-sm" style={{ color: COLORS.cream }}>
+                    <UserCircle className="h-4 w-4" style={{ color: COLORS.gold }} />
+                    {attributedUser.name} <span className="text-xs capitalize" style={{ color: "rgba(245,235,221,0.5)" }}>({attributedUser.role.replace(/_/g, " ")})</span>
+                  </span>
+                  <button type="button" onClick={() => setAttributedUser(null)} className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/10" style={{ color: "rgba(245,235,221,0.6)" }}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center gap-2 rounded-lg border px-4 py-2.5" style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)" }}>
+                    <Search className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "rgba(245,235,221,0.4)" }} />
+                    <input
+                      type="text"
+                      placeholder="Search a Content Creator or Plays Organiser by name/email — leave blank to upload as yourself"
+                      value={creatorSearch}
+                      onFocus={() => setCreatorDropdownOpen(true)}
+                      onChange={(e) => { setCreatorSearch(e.target.value); setCreatorDropdownOpen(true); }}
+                      className="w-full bg-transparent text-sm outline-none"
+                      style={{ color: COLORS.cream }}
+                    />
+                  </div>
+                  {creatorDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setCreatorDropdownOpen(false)} />
+                      <div className="absolute left-0 top-full z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.25)" }}>
+                        {creatorSearching ? (
+                          <p className="px-4 py-3 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Searching…</p>
+                        ) : creatorResults.length === 0 ? (
+                          <p className="px-4 py-3 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No matching Creator/Organiser accounts.</p>
+                        ) : (
+                          creatorResults.map((u) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => { setAttributedUser(u); setCreatorDropdownOpen(false); setCreatorSearch(""); }}
+                              className="flex w-full flex-col items-start px-4 py-2.5 text-left hover:bg-white/10"
+                            >
+                              <span className="text-sm" style={{ color: COLORS.cream }}>{u.name}</span>
+                              <span className="text-xs capitalize" style={{ color: "rgba(245,235,221,0.5)" }}>{u.email} · {u.role.replace(/_/g, " ")}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                {attributedUser ? "This video will show as uploaded by the selected account." : "Leaving this blank uploads and credits the video to your own admin account."}
+              </p>
+            </div>
+
+            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+
             <div className="flex flex-col gap-4">
               <div>
                 <label style={labelStyle}>Title *</label>

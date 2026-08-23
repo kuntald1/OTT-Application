@@ -586,3 +586,22 @@ class VideoOut(BaseModel):
 
 class AdminVideoRejectRequest(BaseModel):
     admin_note: str = Field(min_length=1, max_length=500)
+
+
+class CreatorAccountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+
+    model_config = {"from_attributes": True}
+
+
+class AdminVideoCreate(VideoCreate):
+    # If set, the video is attributed to this existing Content Creator or
+    # Plays Organiser account instead of the admin who's adding it — for
+    # cases like migrating a creator's back-catalog or helping a
+    # less tech-savvy creator upload on their behalf. Must reference an
+    # account with role content_creator or plays_organiser; validated
+    # server-side, not just trusted from the request.
+    attributed_user_id: Optional[uuid.UUID] = None

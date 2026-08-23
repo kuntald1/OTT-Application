@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus
-from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate
+from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole
+from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut
 from app.routers.videos import _to_out, _create_video_core, _upload_to_bunny, _save_poster_file
 
 router = APIRouter(prefix="/admin/videos", tags=["admin-videos"])
@@ -146,9 +146,26 @@ async def delete_video(
     db.commit()
 
 
+@router.get("/creators", response_model=list[CreatorAccountOut])
+def search_creator_accounts(
+    search: str = "",
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """For the 'Add Video' attribution picker — only Content Creator and
+    Plays Organiser accounts are eligible, matching who's normally
+    allowed to upload videos themselves.
+    """
+    query = db.query(User).filter(User.role.in_([UserRole.content_creator, UserRole.plays_organiser]))
+    if search.strip():
+        like = f"%{search.strip()}%"
+        query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)))
+    return query.order_by(User.name.asc()).limit(20).all()
+
+
 @router.post("", response_model=VideoOut, status_code=status.HTTP_201_CREATED)
 def create_video_as_admin(
-    payload: VideoCreate,
+    payload: AdminVideoCreate,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -156,13 +173,32 @@ def create_video_as_admin(
     Creator/Organiser upload path (_create_video_core), so the two can
     never silently drift apart. Auto-publishes immediately, unlike
     Creator submissions which start pending — the admin adding this IS
-    already the reviewer, so there's no one else to review it.
+    already the reviewer, so there's no one else to review it. This
+    holds true even when attributed_user_id is set: the admin is still
+    the one physically creating this entry right now, just crediting it
+    to the correct account.
     """
-    video = _create_video_core(
-        payload, db,
-        uploaded_by_admin_id=current_admin.id, person_created_by_admin_id=current_admin.id,
-        auto_publish=True,
-    )
+    if payload.attributed_user_id:
+        attributed_user = db.query(User).filter(
+            User.id == payload.attributed_user_id,
+            User.role.in_([UserRole.content_creator, UserRole.plays_organiser]),
+        ).first()
+        if not attributed_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="attributed_user_id must reference an existing Content Creator or Plays Organiser account.",
+            )
+        video = _create_video_core(
+            payload, db,
+            uploaded_by_user_id=attributed_user.id, person_created_by_user_id=attributed_user.id,
+            auto_publish=True,
+        )
+    else:
+        video = _create_video_core(
+            payload, db,
+            uploaded_by_admin_id=current_admin.id, person_created_by_admin_id=current_admin.id,
+            auto_publish=True,
+        )
     return _to_out(video, db)
 
 

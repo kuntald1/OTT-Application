@@ -114,6 +114,11 @@ export function createAdminVideo(payload) {
   });
 }
 
+export function searchCreatorAccounts(search = "") {
+  const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+  return request(`/admin/videos/creators${query}`, { auth: true });
+}
+
 export function uploadAdminVideoFile(videoId, file, onProgress) {
   return new Promise((resolve, reject) => {
     const token = getAdminToken();
