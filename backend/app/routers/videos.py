@@ -366,6 +366,20 @@ def list_published_videos(
     return [_to_out(v, db) for v in videos]
 
 
+@router.get("/{video_id}", response_model=VideoOut)
+def get_published_video(video_id: str, db: Session = Depends(get_db)):
+    """Public single-video fetch — powers the real video detail/player
+    page. Only ever returns a published video, same visibility rule as
+    the list endpoint above — a pending/rejected/disabled video's ID
+    simply 404s here, it doesn't leak details to anyone who guesses the
+    URL.
+    """
+    video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _to_out(video, db)
+
+
 ALLOWED_VIDEO_CONTENT_TYPES = {
     "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/x-msvideo",
 }

@@ -27,6 +27,8 @@ import MyVideoListPage from './Profile/MyVideoListPage'
 import RevenuePage from './Profile/RevenuePage'
 import EventEnquiryPage from './Profile/EventEnquiryPage'
 import AdminApp from './admin/AdminApp'
+import VideoDetailPage from './VideoDetailPage'
+import PersonProfilePage from './People/PersonProfilePage'
 
 // Route state is { view, params }. navigate(view, params) pushes the
 // CURRENT route onto a history stack before switching, so goBack() can pop
@@ -87,6 +89,14 @@ export default function App() {
   }
 
   const openPerson = (personId) => navigate('actor', { personId })
+
+  // Real videos and their real cast/crew Person profiles are
+  // deliberately SEPARATE routes from the site's existing demo 'actor'
+  // route above — 'actor' shows the fictional ActorProfilePage bios,
+  // while these two show genuine data from uploaded videos via the real
+  // backend (GET /api/videos/{id}, GET /api/people/{id}).
+  const openVideo = (videoId) => navigate('videoDetail', { videoId })
+  const openRealPerson = (personId) => navigate('personProfile', { personId })
 
   // Reset-password is rendered standalone, outside AppProvider's normal
   // "force login modal open" behavior — someone arriving from the email
@@ -155,6 +165,10 @@ export default function App() {
           <CategoryPage initialCategory={route.params.category} onNavigate={navigate} />
         ) : route.view === 'actor' ? (
           <ActorProfilePage personId={route.params.personId} onBack={goBack} />
+        ) : route.view === 'videoDetail' ? (
+          <VideoDetailPage videoId={route.params.videoId} onBack={goBack} onViewPerson={openRealPerson} />
+        ) : route.view === 'personProfile' ? (
+          <PersonProfilePage personId={route.params.personId} onBack={goBack} />
         ) : route.view === 'help' ? (
           <HelpCenterPage onBack={goBack} />
         ) : route.view === 'myVideos' ? (

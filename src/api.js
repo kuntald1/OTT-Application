@@ -324,6 +324,14 @@ export function fetchMyVideos() {
   return request("/videos/mine", { auth: true });
 }
 
+export function fetchPublishedVideos(section) {
+  return request(`/videos${section ? `?section=${section}` : ""}`);
+}
+
+export function fetchVideoById(videoId) {
+  return request(`/videos/${videoId}`);
+}
+
 export function fetchPerson(personId) {
   return request(`/people/${personId}`);
 }
