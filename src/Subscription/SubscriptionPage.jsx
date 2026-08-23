@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt } from "lucide-react";
+import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession, fetchMyVideoPurchases } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -69,6 +69,12 @@ export default function SubscriptionPage({ onBack }) {
   const [payments, setPayments] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(true);
 
+  // Which account sub-tab is showing — "subscriptions" (existing plan
+  // history) or "payPerVideo" (new — individual video purchases).
+  const [accountTab, setAccountTab] = useState("subscriptions");
+  const [videoPurchases, setVideoPurchases] = useState([]);
+  const [videoPurchasesLoading, setVideoPurchasesLoading] = useState(true);
+
   const loadHistoryAndPayments = () => {
     setHistoryLoading(true);
     fetchSubscriptionHistory()
@@ -81,6 +87,12 @@ export default function SubscriptionPage({ onBack }) {
       .then(setPayments)
       .catch(() => setPayments([]))
       .finally(() => setPaymentsLoading(false));
+
+    setVideoPurchasesLoading(true);
+    fetchMyVideoPurchases()
+      .then(setVideoPurchases)
+      .catch(() => setVideoPurchases([]))
+      .finally(() => setVideoPurchasesLoading(false));
   };
 
   useEffect(() => {
@@ -393,6 +405,32 @@ export default function SubscriptionPage({ onBack }) {
               <h2 className="mt-1 text-2xl font-semibold" style={{ color: COLORS.cream }}>Subscription &amp; payment history</h2>
             </div>
 
+            <div className="mb-6 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAccountTab("subscriptions")}
+                className="rounded-full px-5 py-2 text-sm font-medium transition-colors"
+                style={{
+                  background: accountTab === "subscriptions" ? CTA_GRADIENT : "rgba(255,255,255,0.06)",
+                  color: accountTab === "subscriptions" ? CTA_TEXT_COLOR : "rgba(245,235,221,0.7)",
+                }}
+              >
+                Subscriptions
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountTab("payPerVideo")}
+                className="rounded-full px-5 py-2 text-sm font-medium transition-colors"
+                style={{
+                  background: accountTab === "payPerVideo" ? CTA_GRADIENT : "rgba(255,255,255,0.06)",
+                  color: accountTab === "payPerVideo" ? CTA_TEXT_COLOR : "rgba(245,235,221,0.7)",
+                }}
+              >
+                Pay-Per-Video
+              </button>
+            </div>
+
+            {accountTab === "subscriptions" ? (
             <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
               <h3 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
                 <Calendar className="h-4 w-4" style={{ color: COLORS.gold }} /> Your subscriptions
@@ -525,6 +563,57 @@ export default function SubscriptionPage({ onBack }) {
                 </>
               )}
             </div>
+            ) : (
+              <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                <h3 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+                  <Film className="h-4 w-4" style={{ color: COLORS.gold }} /> Your Pay-Per-Video purchases
+                </h3>
+
+                {videoPurchasesLoading ? (
+                  <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+                ) : videoPurchases.length === 0 ? (
+                  <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No Pay-Per-Video purchases yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {videoPurchases.map((vp) => (
+                      <div
+                        key={vp.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{vp.video_title}</p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                            <Receipt className="h-3 w-3 flex-shrink-0" style={{ color: COLORS.gold }} />
+                            Paid {vp.currency === "USD" ? "$" : "₹"}{vp.amount} via {vp.gateway} · {formatDate(vp.created_at)}
+                          </p>
+                          {vp.gateway_payment_id && (
+                            <p className="mt-1 font-mono text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                              Transaction ID: {vp.gateway_payment_id}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className="rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
+                          style={{
+                            background:
+                              vp.status === "paid" ? "rgba(111,207,151,0.15)"
+                              : vp.status === "failed" ? "rgba(248,113,113,0.15)"
+                              : "rgba(255,255,255,0.08)",
+                            color:
+                              vp.status === "paid" ? "#6FCF97"
+                              : vp.status === "failed" ? "#f87171"
+                              : "rgba(245,235,221,0.6)",
+                          }}
+                        >
+                          {vp.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>

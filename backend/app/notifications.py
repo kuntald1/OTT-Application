@@ -88,6 +88,81 @@ Thank you for subscribing to theomy!
         pass
 
 
+def send_video_purchase_whatsapp(to_phone: str, video_title: str, amount) -> None:
+    """WhatsApp confirmation for a Pay-Per-Video purchase — same
+    non-fatal, Twilio-optional pattern as send_payment_whatsapp above.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Your payment of ₹{amount} for \"{video_title}\" was successful. "
+        f"You now have permanent access to watch it anytime. Thank you for your purchase!"
+    )
+    try:
+        client.messages.create(
+            from_=settings.TWILIO_FROM_NUMBER,
+            to=f"whatsapp:{to_number}",
+            body=body,
+        )
+    except Exception:
+        pass
+
+
+def send_video_purchase_email(to_email: str, video_title: str, amount, points_earned: int = 0) -> None:
+    """Pay-Per-Video purchase confirmation email — same card-style HTML
+    template as send_payment_email, adapted for a single-video purchase
+    instead of a subscription plan.
+    """
+    subject = f"Your purchase of \"{video_title}\" is confirmed — theomy"
+    text_body = f"""Hi,
+
+Your payment was successful and you now have permanent access to watch
+"{video_title}" on theomy.
+
+Amount paid: ₹{amount}
+{f"Reward points earned: {points_earned}" if points_earned else ""}
+
+Thank you for your purchase!
+"""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">Purchase confirmed</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Your payment was successful — you now have permanent access to watch this title anytime.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8);">
+              <tr><td style="padding:6px 0;">Video</td><td style="padding:6px 0; text-align:right; font-weight:600;">{video_title}</td></tr>
+              {f'<tr><td style="padding:6px 0;">Reward points earned</td><td style="padding:6px 0; text-align:right;">{points_earned}</td></tr>' if points_earned else ""}
+              <tr><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); font-weight:700; color:#D4AF37;">Total paid</td><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); text-align:right; font-weight:700; color:#D4AF37;">₹{amount}</td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
 def send_event_enquiry_acknowledgement(to_email: str, org_name: str, event_title: str) -> None:
     """Sends the "we received your enquiry" acknowledgement email after a
     successful Event Listing Enquiry submission. Non-fatal on failure —

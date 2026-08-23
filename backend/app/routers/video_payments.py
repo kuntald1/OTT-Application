@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+from decimal import Decimal, ROUND_HALF_UP
 
 import razorpay
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,10 +11,13 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, Video, VideoStatus, VideoMonetization, VideoPricing,
-    VideoPurchase, PaymentStatus, PaymentGateway,
+    VideoPurchase, PaymentStatus, PaymentGateway, RewardConfig,
 )
+from app.notifications import send_video_purchase_whatsapp, send_video_purchase_email
 from app.routers.videos import _has_active_subscription_any
-from app.schemas import CreateVideoOrderResponse, VerifyVideoPaymentRequest, VideoPurchaseOut
+from app.schemas import (
+    CreateVideoOrderResponse, VerifyVideoPaymentRequest, VideoPurchaseOut, VideoPurchaseDetailOut,
+)
 
 router = APIRouter(prefix="/videos", tags=["video-payments"])
 
@@ -127,6 +131,70 @@ def verify_video_purchase_payment(
 
     purchase.status = PaymentStatus.paid
     purchase.gateway_payment_id = payload.razorpay_payment_id
+
+    # Reward points — reuses the same subscription_reward_percent rate as
+    # regular subscription payments (RewardConfig has no separate
+    # pay-per-video rate; treating a video purchase the same as any other
+    # successful payment is the simplest correct behaviour, and matches
+    # what the person already sees for subscriptions). Same
+    # never-block-a-successful-payment reasoning as payments.py: missing
+    # config means 0 points awarded, logged loudly, never a 500.
+    video = db.query(Video).filter(Video.id == purchase.video_id).first()
+    reward_config = db.query(RewardConfig).first()
+    if reward_config:
+        earn_percent = reward_config.subscription_reward_percent
+        points_earned = int((purchase.amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    else:
+        points_earned = 0
+        print(
+            f"WARNING: reward_config table is empty — video purchase {purchase.id} for user "
+            f"{current_user.id} earned 0 reward points instead of the intended rate. "
+            f"Fix: docker compose exec theomy-backend python -m app.seed_data"
+        )
+    current_user.reward_points_balance = (current_user.reward_points_balance or 0) + points_earned
+
     db.commit()
     db.refresh(purchase)
+
+    # Notifications — best-effort, never block the response on these,
+    # same pattern as the subscription payment flow.
+    if current_user.phone:
+        send_video_purchase_whatsapp(current_user.phone, video.title if video else "your video", purchase.amount)
+    send_video_purchase_email(
+        current_user.email, video.title if video else "your video", purchase.amount, points_earned,
+    )
+
     return purchase
+
+
+@router.get("/purchases/mine", response_model=list[VideoPurchaseDetailOut])
+def list_my_video_purchases(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Powers the account page's "Pay-Per-Video" history tab — every
+    purchase attempt (paid, failed, or still created), most recent
+    first, same shape as /payments for the subscription side.
+    """
+    rows = (
+        db.query(VideoPurchase, Video)
+        .join(Video, Video.id == VideoPurchase.video_id)
+        .filter(VideoPurchase.user_id == current_user.id)
+        .order_by(VideoPurchase.created_at.desc())
+        .all()
+    )
+    return [
+        VideoPurchaseDetailOut(
+            id=purchase.id,
+            video_id=video.id,
+            video_title=video.title,
+            video_poster_url=video.poster_image_url,
+            amount=purchase.amount,
+            currency=purchase.currency,
+            gateway=purchase.gateway,
+            gateway_payment_id=purchase.gateway_payment_id,
+            status=purchase.status,
+            created_at=purchase.created_at,
+        )
+        for purchase, video in rows
+    ]

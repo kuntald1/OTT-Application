@@ -613,6 +613,23 @@ class VideoPurchaseOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VideoPurchaseDetailOut(BaseModel):
+    """Same as VideoPurchaseOut but with the video's title/poster joined
+    in — what the account page's "Pay-Per-Video" history tab actually
+    needs to render a real entry per purchase, not just raw IDs.
+    """
+    id: uuid.UUID
+    video_id: uuid.UUID
+    video_title: str
+    video_poster_url: Optional[str] = None
+    amount: Decimal
+    currency: str
+    gateway: PaymentGateway
+    gateway_payment_id: Optional[str] = None
+    status: PaymentStatus
+    created_at: datetime
+
+
 class CreateVideoOrderResponse(BaseModel):
     purchase_id: uuid.UUID
     razorpay_order_id: str

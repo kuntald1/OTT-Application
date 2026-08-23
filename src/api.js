@@ -360,6 +360,12 @@ export function verifyVideoPurchasePayment({ purchaseId, razorpayOrderId, razorp
   });
 }
 
+// Pay-Per-Video purchase history — powers the "Pay-Per-Video" tab next
+// to "Subscription & payment history" on the account page.
+export function fetchMyVideoPurchases() {
+  return request(`/videos/purchases/mine`, { auth: true });
+}
+
 export function fetchPerson(personId) {
   return request(`/people/${personId}`);
 }
