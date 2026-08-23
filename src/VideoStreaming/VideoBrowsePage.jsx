@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos } from "../api";
+import { fetchPublishedVideos, fetchVideoById } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -130,12 +130,9 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
       requestLogin();
       return;
     }
-    // Real videos skip the fake demo modal entirely and go to the real
-    // detail + player page instead.
-    if (card.isReal) {
-      onNavigate?.("videoDetail", { videoId: card.videoId });
-      return;
-    }
+    // Both real and demo cards use the same modal mechanism — which
+    // component actually renders inside it (RealDetailModal vs the
+    // existing demo DetailModal) is decided by card.isReal below.
     modal.open(card);
   };
 
@@ -168,7 +165,11 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
         </p>
       </footer>
 
-      {modal.item && <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
+      {modal.item && modal.item.isReal ? (
+        <RealDetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} />
+      ) : modal.item ? (
+        <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />
+      ) : null}
     </div>
   );
 }
@@ -481,6 +482,144 @@ function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RealDetailModal({ card, closing, onClose, onNavigate }) {
+  const [video, setVideo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [entered, setEntered] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const shown = entered && !closing;
+
+  useEffect(() => {
+    fetchVideoById(card.videoId)
+      .then(setVideo)
+      .catch(() => setVideo(null))
+      .finally(() => setLoading(false));
+  }, [card.videoId]);
+
+  const isPayPerVideo = video?.monetization_type === "pay_per_video";
+  const canPlay = video?.has_file && !isPayPerVideo;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: T.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
+      onClick={onClose}
+    >
+      <div
+        className="movix-video-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
+        style={{
+          background: T.modalSurface, maxHeight: "90vh", overflowY: "auto",
+          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative aspect-video w-full" style={{ background: "#000" }}>
+          {playing && canPlay ? (
+            <iframe
+              src={video.embed_url}
+              loading="lazy"
+              style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
+              allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
+              allowFullScreen
+            />
+          ) : (
+            <>
+              {(card.poster) && <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+              <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
+              <h2 className="absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ color: T.text }}>{card.title}</h2>
+            </>
+          )}
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-6">
+          {loading ? (
+            <p className="text-sm" style={{ color: T.textFaint }}>Loading…</p>
+          ) : !video ? (
+            <p className="text-sm" style={{ color: T.textFaint }}>Couldn't load this video.</p>
+          ) : (
+            <>
+              <div className="mb-4 flex items-center gap-3">
+                {!video.has_file ? (
+                  <p className="text-sm" style={{ color: T.textFaint }}>This video is still processing — check back soon.</p>
+                ) : isPayPerVideo ? (
+                  <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)", color: T.textMuted }}>
+                    Pay-Per-Video — ₹{video.pricing?.price_inr} / ${video.pricing?.price_usd}. Purchase flow coming soon.
+                  </div>
+                ) : !playing ? (
+                  <button
+                    type="button"
+                    onClick={() => setPlaying(true)}
+                    className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                    style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                  >
+                    <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: T.textMuted }}>
+                <span>{video.release_year}</span>
+                <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: GOLD, color: GOLD }}>{video.age_rating}</span>
+                {video.categories.map((cat) => (
+                  <span key={cat} className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: GOLD }}>{cat}</span>
+                ))}
+              </div>
+
+              {video.description && <p className="mb-4 text-sm leading-relaxed" style={{ color: T.textMuted }}>{video.description}</p>}
+
+              {video.languages.length > 0 && (
+                <p className="mb-4 text-xs" style={{ color: T.textFainter }}>
+                  <span style={{ color: T.textFaint }}>Available in: </span>{video.languages.join(", ")}
+                </p>
+              )}
+
+              {(video.cast.length > 0 || video.crew.length > 0) && (
+                <div className="mt-6 grid gap-6 border-t pt-6 sm:grid-cols-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                  {video.cast.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>Cast</p>
+                      <div className="flex flex-col gap-2.5">
+                        {video.cast.map((c) => (
+                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="w-fit text-left text-sm font-medium hover:underline" style={{ color: GOLD }}>
+                            {c.person.name}{c.character_role ? <span style={{ color: T.textFainter }}> as {c.character_role}</span> : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {video.crew.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>Crew</p>
+                      <div className="flex flex-col gap-2.5">
+                        {video.crew.map((c) => (
+                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="w-fit text-left text-sm" style={{ color: T.textMuted }}>
+                            <span style={{ color: T.textFainter }}>{c.role}: </span>
+                            <span className="font-medium hover:underline" style={{ color: GOLD }}>{c.person.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
