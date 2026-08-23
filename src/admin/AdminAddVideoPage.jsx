@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle } from "lucide-react";
-import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster, searchCreatorAccounts } from "./adminApi";
 import { CATEGORIES } from "../shared/categories";
+
+const COLORS = {
+  panel: "#150307",
+  cream: "#f5ebdd",
+  gold: "#D4AF37",
+  black: "#0a0104",
+  blackSoft: "#150307",
+};
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
 
@@ -252,8 +259,8 @@ export default function AdminAddVideoPage() {
           <button
             type="button"
             onClick={() => { setShowUpload((v) => !v); setError(""); }}
-            className="flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold hover:opacity-90"
-            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+            className="flex items-center gap-1.5 rounded-full border px-5 py-2 text-sm font-semibold hover:bg-white/5"
+            style={{ borderColor: "rgba(212,175,55,0.4)", color: COLORS.gold }}
           >
             <Video className="h-4 w-4" /> {showUpload ? "Cancel" : "Add video"}
           </button>
@@ -384,7 +391,7 @@ export default function AdminAddVideoPage() {
                     {form.has_ads ? <Megaphone className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
                     {form.has_ads ? "Ad Present" : "Ad Free"}
                   </span>
-                  <div className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5" style={{ background: form.has_ads ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}>
+                  <div className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5" style={{ background: form.has_ads ? COLORS.gold : "rgba(255,255,255,0.15)" }}>
                     <div className="h-4 w-4 rounded-full bg-white transition-transform" style={{ transform: form.has_ads ? "translateX(16px)" : "translateX(0)" }} />
                   </div>
                 </button>
@@ -547,10 +554,10 @@ export default function AdminAddVideoPage() {
               type="button"
               disabled={!canSubmit || submitting}
               onClick={handleSubmit}
-              className="rounded-full px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              className="rounded-full px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: COLORS.gold }}
             >
-              {submitting ? "Submitting…" : "Submit for review"}
+              {submitting ? "Publishing…" : "Publish video"}
             </button>
           </div>
         )}
@@ -672,7 +679,7 @@ export default function AdminAddVideoPage() {
                             <span>{uploadProgress}%</span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }} />
+                            <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: COLORS.gold }} />
                           </div>
                         </div>
                       ) : (
