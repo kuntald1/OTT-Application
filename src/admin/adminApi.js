@@ -143,6 +143,22 @@ export async function deleteVideo(videoId) {
   }
 }
 
+export async function uploadAdminPersonPhoto(personId, file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/admin/videos/people/${personId}/upload-photo`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload photo. Please try again.");
+  }
+  return data;
+}
+
 export function createAdminVideo(payload) {
   return request("/admin/videos", {
     method: "POST",

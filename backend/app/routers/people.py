@@ -27,22 +27,7 @@ def get_person(person_id: str, db: Session = Depends(get_db)):
     return person
 
 
-@router.post("/{person_id}/upload-photo", response_model=PersonOut)
-async def upload_person_photo(
-    person_id: str,
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    person = db.query(Person).filter(Person.id == person_id).first()
-    if not person:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found")
-    if person.created_by_user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the account that created this profile can update its photo.",
-        )
-
+async def _save_person_photo(person: Person, file: UploadFile, db: Session) -> Person:
     if file.content_type not in ALLOWED_PHOTO_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only JPEG, PNG, or WEBP images are allowed.")
     contents = await file.read()
@@ -59,3 +44,21 @@ async def upload_person_photo(
     db.commit()
     db.refresh(person)
     return person
+
+
+@router.post("/{person_id}/upload-photo", response_model=PersonOut)
+async def upload_person_photo(
+    person_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    person = db.query(Person).filter(Person.id == person_id).first()
+    if not person:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found")
+    if person.created_by_user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the account that created this profile can update its photo.",
+        )
+    return await _save_person_photo(person, file, db)

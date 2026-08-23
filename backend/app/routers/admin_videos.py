@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole
-from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut
+from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person
+from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
 from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _save_poster_file
+from app.routers.people import _save_person_photo
 from app.notifications import (
     send_video_approved_whatsapp, send_video_approved_email,
     send_video_rejected_whatsapp, send_video_rejected_email,
@@ -281,3 +282,25 @@ async def upload_video_poster_as_admin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _save_poster_file(video, file, db)
     return _to_out(video, db)
+
+
+@router.post("/people/{person_id}/upload-photo", response_model=PersonOut)
+async def upload_person_photo_as_admin(
+    person_id: str,
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin-scoped photo upload for cast/crew Person profiles — needed
+    because the regular /api/people/{id}/upload-photo endpoint checks
+    ownership against the users table via get_current_user, which an
+    admin token can never satisfy (admin tokens only resolve against
+    admin_users, by design — see AdminUser model docstring). Any admin
+    can upload a photo for any person, matching the same broad scope as
+    the other admin video actions (approve/reject/disable/delete don't
+    check per-admin ownership either).
+    """
+    person = db.query(Person).filter(Person.id == person_id).first()
+    if not person:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found")
+    return await _save_person_photo(person, file, db)

@@ -493,6 +493,8 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [entered, setEntered] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const { isInList, toggleListItem } = useApp();
+  const saved = isInList(card.id);
 
   React.useEffect(() => {
     const raf = requestAnimationFrame(() => setEntered(true));
@@ -571,6 +573,28 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                     <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
                   </button>
                 ) : null}
+
+                {/* Real "Add to My List" — same toggleListItem/isInList
+                    mechanism the demo cards already use, genuinely
+                    functional, not decorative. Thumbs-up stays decorative
+                    on purpose, matching the demo modal's own thumbs-up,
+                    which has no real "liked" state either. */}
+                <button
+                  type="button"
+                  onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Video Streaming" })}
+                  aria-label={saved ? "Remove from My List" : "Add to My List"}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
+                  style={{
+                    borderColor: saved ? COLORS.gold : "rgba(255,255,255,0.3)",
+                    color: saved ? COLORS.gold : "#fff",
+                    background: saved ? "rgba(212,175,55,0.12)" : "transparent",
+                  }}
+                >
+                  {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </button>
+                <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
+                  <ThumbsUp className="h-4 w-4" />
+                </button>
               </div>
 
               <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: T.textMuted }}>

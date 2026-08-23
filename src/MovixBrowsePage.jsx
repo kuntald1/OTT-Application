@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "./theme";
 import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
+import { fetchPublishedVideos, fetchVideoById } from "./api";
 
 import filmsPoster from "./assets/posters/films.jpg";
 import seriesPoster from "./assets/posters/series.jpg";
@@ -123,11 +124,36 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
+  // Real, published videos with section "archive" — fetched from the
+  // actual backend, shown as their own row at the top using the same
+  // poster-card GenreRow visual as the demo rows below.
+  const [realVideos, setRealVideos] = useState([]);
+  useEffect(() => {
+    fetchPublishedVideos("archive")
+      .then((videos) => {
+        setRealVideos(
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            category: v.categories[0] || "",
+            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+            year: v.release_year,
+            isReal: true,
+            videoId: v.id,
+          }))
+        );
+      })
+      .catch(() => setRealVideos([]));
+  }, []);
+
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
       requestLogin();
       return;
     }
+    // Both real and demo cards use the same modal mechanism — which
+    // component renders inside (RealDetailModal vs the demo DetailModal)
+    // is decided by card.isReal at render time below.
     modal.open(card);
   };
 
@@ -143,6 +169,9 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       }}
     >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {realVideos.length > 0 && (
+          <GenreRow category="Recently Uploaded" cards={realVideos} onSelect={handleSelectCard} t={t} />
+        )}
         {CATEGORIES.map((category) => {
           const cards = Array.from({ length: 6 }, (_, i) => buildCard(category, i));
           return <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} t={t} />;
@@ -185,7 +214,11 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
         </p>
       </footer>
 
-      {modal.item && <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} t={t} isLight={isLight} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
+      {modal.item && modal.item.isReal ? (
+        <RealDetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} />
+      ) : modal.item ? (
+        <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} t={t} isLight={isLight} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />
+      ) : null}
     </div>
   );
 }
@@ -311,7 +344,7 @@ function GenreRow({ category, cards, onSelect, t }) {
               </div>
               <p className="mt-2.5 truncate text-sm font-medium transition-colors duration-200" style={{ color: t.text }}>{card.title}</p>
               <p className="text-xs" style={{ color: t.textFaint }}>
-                {card.year} · {formatDuration(card.durationMin)}
+                {card.year}{card.durationMin ? ` · ${formatDuration(card.durationMin)}` : ""}
               </p>
             </button>
           ))}
@@ -509,6 +542,186 @@ function DetailModal({ card, closing, onClose, t, isLight, onOpenPerson, onNavig
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RealDetailModal({ card, closing, onClose, onNavigate }) {
+  const t = THEMES.dark; // Archive is always rendered with theme="dark" in production (see App.jsx)
+  const [video, setVideo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [entered, setEntered] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const { isInList, toggleListItem } = useApp();
+  const saved = isInList(card.id);
+
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const shown = entered && !closing;
+
+  useEffect(() => {
+    fetchVideoById(card.videoId)
+      .then(setVideo)
+      .catch(() => setVideo(null))
+      .finally(() => setLoading(false));
+  }, [card.videoId]);
+
+  const isPayPerVideo = video?.monetization_type === "pay_per_video";
+  const canPlay = video?.has_file && !isPayPerVideo;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: t.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl overflow-hidden rounded-2xl"
+        style={{
+          background: t.modalSurface, maxHeight: "90vh", overflowY: "auto",
+          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
+          opacity: shown ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative aspect-video w-full" style={{ background: "#000" }}>
+          {playing && canPlay ? (
+            <iframe
+              src={video.embed_url}
+              loading="lazy"
+              style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
+              allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
+              allowFullScreen
+            />
+          ) : (
+            <>
+              {card.poster && <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+              <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${t.modalSurface}FF 100%)` }} />
+              <h2 className="absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ fontFamily: "Georgia, 'Times New Roman', serif", color: t.text }}>{card.title}</h2>
+            </>
+          )}
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-6">
+          {loading ? (
+            <p className="text-sm" style={{ color: t.textFaint }}>Loading…</p>
+          ) : !video ? (
+            <p className="text-sm" style={{ color: t.textFaint }}>Couldn't load this video.</p>
+          ) : (
+            <>
+              <div className="mb-4 flex items-center gap-3">
+                {!video.has_file ? (
+                  <p className="text-sm" style={{ color: t.textFaint }}>This video is still processing — check back soon.</p>
+                ) : isPayPerVideo ? (
+                  <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)", color: t.textMuted }}>
+                    Pay-Per-Video — ₹{video.pricing?.price_inr} / ${video.pricing?.price_usd}. Purchase flow coming soon.
+                  </div>
+                ) : !playing ? (
+                  <button
+                    type="button"
+                    onClick={() => setPlaying(true)}
+                    className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
+                    style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+                  >
+                    <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Movies" })}
+                  aria-label={saved ? "Remove from My List" : "Add to My List"}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
+                  style={{
+                    borderColor: saved ? COLORS.gold : "rgba(255,255,255,0.3)",
+                    color: saved ? COLORS.gold : "#fff",
+                    background: saved ? "rgba(212,175,55,0.12)" : "transparent",
+                  }}
+                >
+                  {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </button>
+                <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
+                  <ThumbsUp className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: t.textMuted }}>
+                <span>{video.release_year}</span>
+                <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: COLORS.gold, color: COLORS.gold }}>{video.age_rating}</span>
+                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: COLORS.gold }}>{video.categories[0]}</span>
+              </div>
+
+              <div className="grid gap-6 sm:grid-cols-3">
+                <p className="text-sm leading-relaxed sm:col-span-2" style={{ color: t.textMuted }}>{video.description}</p>
+                <div className="flex flex-col gap-3 text-xs">
+                  {video.categories.length > 0 && (
+                    <div>
+                      <p className="mb-1" style={{ color: t.textFainter }}>GENRES</p>
+                      <p style={{ color: t.textMuted }}>{video.categories.join(", ")}</p>
+                    </div>
+                  )}
+                  {video.languages.length > 0 && (
+                    <div>
+                      <p className="mb-1" style={{ color: t.textFainter }}>AVAILABLE IN</p>
+                      <p style={{ color: t.textMuted }}>{video.languages.join(", ")}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {(video.cast.length > 0 || video.crew.length > 0) && (
+                <div className="mt-6 grid gap-6 border-t pt-6 sm:grid-cols-2" style={{ borderColor: t.border }}>
+                  {video.cast.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: t.textFainter }}>Cast</p>
+                      <div className="flex flex-col gap-2.5">
+                        {video.cast.map((c) => (
+                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="flex w-fit items-center gap-2 text-left">
+                            {c.person.photo_url ? (
+                              <img src={c.person.photo_url} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
+                            ) : (
+                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs" style={{ color: t.textFainter }}>{c.person.name[0]}</span>
+                            )}
+                            <span className="text-sm font-medium hover:underline" style={{ color: COLORS.gold }}>
+                              {c.person.name}{c.character_role ? <span style={{ color: t.textFainter }}> as {c.character_role}</span> : null}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {video.crew.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: t.textFainter }}>Crew</p>
+                      <div className="flex flex-col gap-2.5">
+                        {video.crew.map((c) => (
+                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="flex w-fit items-center gap-2 text-left">
+                            {c.person.photo_url ? (
+                              <img src={c.person.photo_url} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
+                            ) : (
+                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs" style={{ color: t.textFainter }}>{c.person.name[0]}</span>
+                            )}
+                            <span className="text-sm">
+                              <span style={{ color: t.textFainter }}>{c.role}: </span>
+                              <span className="font-medium hover:underline" style={{ color: COLORS.gold }}>{c.person.name}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
