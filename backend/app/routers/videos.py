@@ -164,53 +164,87 @@ def _sync_cast_and_crew(
     video: Video, payload: VideoCreate, db: Session,
     person_created_by_user_id: str | None = None, person_created_by_admin_id: str | None = None,
 ) -> None:
-    """Replaces ALL cast/crew for this video with what's in the payload.
-    Deletes the old Person rows too — safe because there's no
-    search/reuse step yet (see Person model docstring), so every Person
-    is only ever linked to exactly one VideoCast/VideoCrew row right now.
-
-    Deletion order matters: VideoCast/VideoCrew hold a foreign key
-    POINTING AT Person, so the referencing row must be deleted before
-    the Person it references — deleting Person first violates
-    referential integrity and raises an unhandled database error
-    (surfaces as a bare 500), which is exactly what was happening here.
+    """Reconciles cast/crew with what's in the payload — critical
+    difference from a naive delete-and-recreate: when an incoming entry
+    carries a person_id matching an existing cast/crew member on THIS
+    video, that Person's text fields get UPDATED IN PLACE rather than
+    deleted and rebuilt from scratch. This preserves photo_url (and any
+    other fields not included in the edit form) across edits — the
+    previous delete-everything approach silently wiped every uploaded
+    photo on every single edit save, even ones that never touched
+    cast/crew at all. Only genuinely new entries (no person_id, or one
+    that doesn't match anything on this video) get a fresh Person row;
+    only entries actually removed from the submission get deleted.
     """
-    old_cast = db.query(VideoCast).filter(VideoCast.video_id == video.id).all()
-    old_crew = db.query(VideoCrew).filter(VideoCrew.video_id == video.id).all()
-    old_cast_person_ids = [c.person_id for c in old_cast]
-    old_crew_person_ids = [c.person_id for c in old_crew]
-    for c in old_cast:
-        db.delete(c)
-    for c in old_crew:
-        db.delete(c)
-    db.flush()
-    for person_id in old_cast_person_ids + old_crew_person_ids:
-        db.query(Person).filter(Person.id == person_id).delete()
-    db.flush()
+    existing_cast = {c.person_id: c for c in db.query(VideoCast).filter(VideoCast.video_id == video.id).all()}
+    existing_crew = {c.person_id: c for c in db.query(VideoCrew).filter(VideoCrew.video_id == video.id).all()}
 
+    def _apply_person_fields(person: Person, member) -> None:
+        person.name = member.name
+        person.occupation = member.occupation
+        person.date_of_birth = member.date_of_birth
+        person.birthplace = member.birthplace
+        person.about = member.about
+        person.early_life = member.early_life
+        person.personal_life = member.personal_life
+        person.debut_initial_years = member.debut_initial_years
+        person.breakthrough_beyond = member.breakthrough_beyond
+        person.recent_projects = member.recent_projects
+
+    kept_cast_person_ids = set()
     for i, member in enumerate(payload.cast):
+        if member.person_id and member.person_id in existing_cast:
+            person = db.query(Person).filter(Person.id == member.person_id).first()
+            if person:
+                _apply_person_fields(person, member)
+                vc = existing_cast[member.person_id]
+                vc.character_role = member.character_role
+                vc.display_order = i
+                kept_cast_person_ids.add(member.person_id)
+                continue
         person = Person(
-            name=member.name, occupation=member.occupation, date_of_birth=member.date_of_birth,
-            birthplace=member.birthplace, about=member.about, early_life=member.early_life,
-            personal_life=member.personal_life, debut_initial_years=member.debut_initial_years,
-            breakthrough_beyond=member.breakthrough_beyond, recent_projects=member.recent_projects,
             created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
         )
+        _apply_person_fields(person, member)
         db.add(person)
         db.flush()
         db.add(VideoCast(video_id=video.id, person_id=person.id, character_role=member.character_role, display_order=i))
 
+    for old_person_id, vc in existing_cast.items():
+        if old_person_id not in kept_cast_person_ids:
+            db.delete(vc)
+    db.flush()
+    for old_person_id in existing_cast:
+        if old_person_id not in kept_cast_person_ids:
+            db.query(Person).filter(Person.id == old_person_id).delete()
+
+    kept_crew_person_ids = set()
     for i, member in enumerate(payload.crew):
+        if member.person_id and member.person_id in existing_crew:
+            person = db.query(Person).filter(Person.id == member.person_id).first()
+            if person:
+                _apply_person_fields(person, member)
+                vc = existing_crew[member.person_id]
+                vc.role = member.role
+                vc.display_order = i
+                kept_crew_person_ids.add(member.person_id)
+                continue
         person = Person(
-            name=member.name, occupation=member.occupation, date_of_birth=member.date_of_birth,
-            birthplace=member.birthplace, about=member.about, early_life=member.early_life,
-            personal_life=member.personal_life, debut_initial_years=member.debut_initial_years,
-            breakthrough_beyond=member.breakthrough_beyond, recent_projects=member.recent_projects,
             created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
         )
+        _apply_person_fields(person, member)
         db.add(person)
         db.flush()
         db.add(VideoCrew(video_id=video.id, person_id=person.id, role=member.role, display_order=i))
+
+    for old_person_id, vc in existing_crew.items():
+        if old_person_id not in kept_crew_person_ids:
+            db.delete(vc)
+    db.flush()
+    for old_person_id in existing_crew:
+        if old_person_id not in kept_crew_person_ids:
+            db.query(Person).filter(Person.id == old_person_id).delete()
+    db.flush()
 
 
 def _sync_pricing_and_tiers(video: Video, payload: VideoCreate, db: Session) -> None:

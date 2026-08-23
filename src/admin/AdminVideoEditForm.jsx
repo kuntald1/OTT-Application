@@ -57,7 +57,7 @@ function tierRowsFromVideo(video) {
 }
 function castRowsFromVideo(video) {
   return video.cast.map((c) => ({
-    key: c.id, name: c.person.name, character_role: c.character_role || "", showBio: false,
+    key: c.id, person_id: c.person.id, name: c.person.name, character_role: c.character_role || "", showBio: false,
     occupation: c.person.occupation || "", date_of_birth: c.person.date_of_birth ? c.person.date_of_birth.slice(0, 10) : "",
     birthplace: c.person.birthplace || "", about: c.person.about || "", early_life: c.person.early_life || "",
     personal_life: c.person.personal_life || "", debut_initial_years: c.person.debut_initial_years || "",
@@ -66,7 +66,7 @@ function castRowsFromVideo(video) {
 }
 function crewRowsFromVideo(video) {
   return video.crew.map((c) => ({
-    key: c.id, role: c.role, name: c.person.name, showBio: false,
+    key: c.id, person_id: c.person.id, role: c.role, name: c.person.name, showBio: false,
     occupation: c.person.occupation || "", date_of_birth: c.person.date_of_birth ? c.person.date_of_birth.slice(0, 10) : "",
     birthplace: c.person.birthplace || "", about: c.person.about || "", early_life: c.person.early_life || "",
     personal_life: c.person.personal_life || "", debut_initial_years: c.person.debut_initial_years || "",
@@ -75,14 +75,14 @@ function crewRowsFromVideo(video) {
 }
 function makeEmptyCast() {
   return {
-    key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false,
+    key: Math.random().toString(36).slice(2), person_id: null, name: "", character_role: "", showBio: false,
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
   };
 }
 function makeEmptyCrew() {
   return {
-    key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false,
+    key: Math.random().toString(36).slice(2), person_id: null, role: "", name: "", showBio: false,
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
   };
@@ -139,6 +139,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel }) {
         price_inr: isPayPerVideo ? Number(form.price_inr) : null, price_usd: isPayPerVideo ? Number(form.price_usd) : null,
         revenue_tiers: tiers.map((t) => ({ min_minutes: Number(t.min_minutes), max_minutes: t.max_minutes === "" ? null : Number(t.max_minutes), rate_per_minute_inr: Number(t.rate_per_minute_inr) })),
         cast: cast.filter((c) => c.name.trim()).map((c) => ({
+          person_id: c.person_id || null,
           name: c.name.trim(), character_role: c.character_role.trim() || null,
           occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
           about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
@@ -146,6 +147,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel }) {
           recent_projects: c.recent_projects.trim() || null,
         })),
         crew: crew.filter((c) => c.role.trim() && c.name.trim()).map((c) => ({
+          person_id: c.person_id || null,
           role: c.role.trim(), name: c.name.trim(),
           occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
           about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,

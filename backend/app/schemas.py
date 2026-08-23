@@ -491,8 +491,13 @@ class PersonOut(BaseModel):
 
 
 class VideoCastIn(BaseModel):
-    # Always creates a fresh Person for now — no search/reuse step yet
-    # (documented limitation, see Person model docstring).
+    # person_id, when provided and matching an existing cast member on
+    # this same video, tells the backend to UPDATE that Person's fields
+    # in place rather than delete-and-recreate — critical for edits,
+    # since recreating would wipe photo_url every time, even for an edit
+    # that never touched cast/crew at all. Creation always sends None
+    # here (there's nothing existing yet to match against).
+    person_id: Optional[uuid.UUID] = None
     name: str = Field(min_length=1, max_length=255)
     character_role: Optional[str] = Field(default=None, max_length=255)
     occupation: Optional[str] = Field(default=None, max_length=255)
@@ -513,6 +518,7 @@ class VideoCastOut(BaseModel):
 
 
 class VideoCrewIn(BaseModel):
+    person_id: Optional[uuid.UUID] = None
     role: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=255)
     occupation: Optional[str] = Field(default=None, max_length=255)
