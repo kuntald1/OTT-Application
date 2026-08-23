@@ -1,20 +1,25 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock } from "lucide-react";
+import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory } from "../api";
+import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance } from "../api";
 
 // ---------------------------------------------------------------------------
 // Revenue — Content Creator / Plays Organiser only.
 //
-// REAL, from the database: the per-minute rate, the creator's total
-// earned / available balance (from creator_earnings — seeded manually via
-// SQL for now, since theomy has no real watch-time tracking pipeline yet),
-// and withdrawal requests (fully real — submitting one actually reserves
-// funds and creates a row, visible in History with its status).
+// Everything here is now REAL: the per-minute fallback rate, total
+// earned / available balance (from creator_earnings, credited live by
+// the watch-heartbeat engine — see routers/watch.py), withdrawal
+// requests, and per-video content performance (unique viewers, watch
+// minutes, gross revenue, and what's actually been credited after
+// theomy's commission — see VideoWatchRecord). Revenue for a given
+// view is calculated from THAT video's own Revenue-Share Tiers (set at
+// upload, up to 5 bands) using a graduated calculation — the same
+// shape as a progressive tax bracket — not a flat platform-wide rate;
+// the rate box below is only the fallback used for older videos with
+// no tiers of their own.
 //
-// Withdrawal status changes (pending → approved/rejected/paid) will be
-// made from the future admin panel at theomy.com/admin — for now, status
-// only changes if updated directly in the database.
+// Withdrawal status changes (pending → approved/rejected/paid) are made
+// from the admin panel's Revenue Sharing tab.
 // ---------------------------------------------------------------------------
 
 const STATUS_STYLES = {
@@ -36,6 +41,9 @@ export default function RevenuePage({ onBack }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const [performance, setPerformance] = useState([]);
+  const [performanceLoading, setPerformanceLoading] = useState(true);
+
   const loadAll = () => {
     setSummaryLoading(true);
     fetchRevenueSummary().then(setSummary).catch(() => setSummary(null)).finally(() => setSummaryLoading(false));
@@ -47,6 +55,12 @@ export default function RevenuePage({ onBack }) {
   useEffect(() => {
     fetchRevenueRate().then(setRate).catch(() => setRate(null));
     loadAll();
+
+    setPerformanceLoading(true);
+    fetchMyContentPerformance()
+      .then(setPerformance)
+      .catch(() => setPerformance([]))
+      .finally(() => setPerformanceLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -198,9 +212,41 @@ export default function RevenuePage({ onBack }) {
           </div>
         )}
 
-        <p className="mt-8 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-          Per-video view counts and content performance analytics aren't available yet — theomy doesn't have real video watch-time tracking. Earnings shown above come from your account balance directly.
-        </p>
+        <div className="mt-8">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: "rgba(245,235,221,0.7)" }}>
+            <Film className="h-4 w-4" style={{ color: COLORS.gold }} /> Content performance
+          </h3>
+          {performanceLoading ? (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+          ) : performance.length === 0 ? (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+              No views tracked yet — figures appear here as people watch your uploads, calculated from each video's own Revenue-Share Tiers.
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: COLORS.blackSoft }}>
+                    <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Video</th>
+                    <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Viewers</th>
+                    <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Watch Minutes</th>
+                    <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>You Earned</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {performance.map((row) => (
+                    <tr key={row.video_id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                      <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.title}</td>
+                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.unique_viewers}</td>
+                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.total_watch_minutes}</td>
+                      <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
