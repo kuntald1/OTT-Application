@@ -369,6 +369,6 @@ export function suggestVideoMetadata(title, description) {
   });
 }
 
-export function fetchAnalyticsInsights() {
-  return request(`/admin/ai/analytics-insights`, { auth: true });
+export function fetchAnalyticsInsights(force = false) {
+  return request(`/admin/ai/analytics-insights${force ? "?force=true" : ""}`, { auth: true });
 }

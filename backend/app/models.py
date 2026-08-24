@@ -1024,6 +1024,25 @@ class VideoEmbedding(Base):
     )
 
 
+class AnalyticsInsightCache(Base):
+    """Single-row cache for the AI Insights box on the admin Analytics
+    tab. Without this, every time an admin opens/refreshes that tab
+    triggers a real Claude API call — real cost for something that
+    doesn't need to be regenerated every single view, since the
+    underlying revenue/performance numbers don't change second to
+    second. See routers/admin_ai.py for the freshness-window logic
+    (only regenerates if the cache is older than INSIGHT_CACHE_HOURS,
+    or an admin explicitly forces a refresh).
+    """
+    __tablename__ = "analytics_insight_cache"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    insights = Column(Text, nullable=False)
+    generated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class Ad(Base):
     """A reusable ad definition — just a name and a VAST tag URL (from
     Google Ad Manager, or any VAST-compliant ad network). theomy doesn't

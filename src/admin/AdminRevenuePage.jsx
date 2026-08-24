@@ -53,6 +53,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [insights, setInsights] = useState("");
   const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightsMeta, setInsightsMeta] = useState(null);
 
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
@@ -103,6 +104,17 @@ export default function AdminRevenuePage({ currentAdmin }) {
       .finally(() => setSummaryLoading(false));
   }, [tab]);
 
+  const loadInsights = (force = false) => {
+    setInsightsLoading(true);
+    fetchAnalyticsInsights(force)
+      .then((res) => {
+        setInsights(res.insights);
+        setInsightsMeta({ generatedAt: res.generated_at, cached: res.cached });
+      })
+      .catch(() => setInsights(""))
+      .finally(() => setInsightsLoading(false));
+  };
+
   useEffect(() => {
     if (tab !== "analytics") return;
     setAnalyticsLoading(true);
@@ -117,11 +129,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
       })
       .finally(() => setAnalyticsLoading(false));
 
-    setInsightsLoading(true);
-    fetchAnalyticsInsights()
-      .then((res) => setInsights(res.insights))
-      .catch(() => setInsights(""))
-      .finally(() => setInsightsLoading(false));
+    loadInsights(false);
   }, [tab]);
 
   useEffect(() => {
@@ -467,13 +475,33 @@ export default function AdminRevenuePage({ currentAdmin }) {
       {tab === "analytics" && (
         <div>
           <div className="mb-6 rounded-xl p-4" style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.2)" }}>
-            <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.gold }}>
-              <Sparkles className="h-4 w-4" /> AI Insights
-            </h3>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.gold }}>
+                <Sparkles className="h-4 w-4" /> AI Insights
+              </h3>
+              <button
+                type="button"
+                onClick={() => loadInsights(true)}
+                disabled={insightsLoading}
+                className="text-xs font-medium underline disabled:opacity-50"
+                style={{ color: "rgba(212,175,55,0.7)" }}
+              >
+                Regenerate
+              </button>
+            </div>
             {insightsLoading ? (
               <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Analyzing performance…</p>
             ) : insights ? (
-              <p className="text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.85)" }}>{insights}</p>
+              <>
+                <p className="text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.85)" }}>{insights}</p>
+                {insightsMeta?.generatedAt && (
+                  <p className="mt-2 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                    {insightsMeta.cached ? "Cached — " : "Freshly generated — "}
+                    {new Date(insightsMeta.generatedAt).toLocaleString("en-IN")}
+                    {insightsMeta.cached && " (regenerates automatically every 6 hours, or click Regenerate to force it now)"}
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
                 No insights available — check that ANTHROPIC_API_KEY is configured on the server.

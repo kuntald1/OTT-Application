@@ -185,6 +185,8 @@ class AIMetadataSuggestResponse(BaseModel):
 
 class AIInsightsResponse(BaseModel):
     insights: str
+    generated_at: datetime
+    cached: bool
 
 
 class AdminCategoryCreate(BaseModel):

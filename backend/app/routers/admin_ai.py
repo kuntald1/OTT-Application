@@ -1,13 +1,21 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.ai_services import call_claude, call_claude_json, AIServiceError
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Menu
+from app.models import AdminUser, Menu, AnalyticsInsightCache
 from app.schemas import AIMetadataSuggestRequest, AIMetadataSuggestResponse, AIInsightsResponse
 
 router = APIRouter(prefix="/admin/ai", tags=["admin-ai"])
+
+# How long a cached insight stays "fresh" before the next tab visit
+# triggers a real Claude call again — this is the actual cost control:
+# without it, every open of the Analytics tab is a paid API call for
+# numbers that don't meaningfully change minute to minute.
+INSIGHT_CACHE_HOURS = 6
 
 
 def _get_live_categories(db: Session) -> list[str]:
@@ -70,23 +78,40 @@ def suggest_video_metadata(
 
 @router.get("/analytics-insights", response_model=AIInsightsResponse)
 def get_analytics_insights(
+    force: bool = False,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Content optimization, the analytics-based half — Claude reads
     the same Revenue Summary + per-video performance numbers already
     shown on the admin Revenue page and writes a short, plain-language
-    read of what they mean (which content to promote, what's
-    underperforming, etc.) — no numbers are invented; Claude only sees
+    read of what they mean. No numbers are invented; Claude only sees
     the real aggregates computed here.
+
+    Cached for INSIGHT_CACHE_HOURS — repeatedly opening/refreshing the
+    Analytics tab reuses the same cached text instead of triggering a
+    real (paid) Claude call every time. Pass force=true to bypass the
+    cache and regenerate immediately (an explicit "Regenerate" button
+    on the frontend, not something that happens on a normal page load).
     """
+    cache = db.query(AnalyticsInsightCache).order_by(AnalyticsInsightCache.generated_at.desc()).first()
+    if cache and not force:
+        age = datetime.now(timezone.utc) - cache.generated_at.replace(tzinfo=timezone.utc)
+        if age < timedelta(hours=INSIGHT_CACHE_HOURS):
+            return AIInsightsResponse(insights=cache.insights, generated_at=cache.generated_at, cached=True)
+
     from app.routers.admin_revenue import get_revenue_summary, get_all_content_performance
 
     summary = get_revenue_summary(current_admin=current_admin, db=db)
     performance = get_all_content_performance(current_admin=current_admin, db=db)
 
     if not performance:
-        return AIInsightsResponse(insights="Not enough data yet — insights will appear once videos have real views.")
+        now = datetime.now(timezone.utc)
+        return AIInsightsResponse(
+            insights="Not enough data yet — insights will appear once videos have real views.",
+            generated_at=now,
+            cached=False,
+        )
 
     performance_lines = "\n".join(
         f"- {p.title} (by {p.creator_name}): {p.unique_viewers} viewers, "
@@ -112,8 +137,22 @@ def get_analytics_insights(
     )
 
     try:
-        insights = call_claude(system_prompt, user_prompt, max_tokens=400)
+        insights_text = call_claude(system_prompt, user_prompt, max_tokens=400).strip()
     except AIServiceError as e:
+        # If Claude fails but we have an old cache (even if stale),
+        # serve that rather than a hard error — a slightly-outdated
+        # insight beats none.
+        if cache:
+            return AIInsightsResponse(insights=cache.insights, generated_at=cache.generated_at, cached=True)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
-    return AIInsightsResponse(insights=insights.strip())
+    now = datetime.now(timezone.utc)
+    if cache:
+        cache.insights = insights_text
+        cache.generated_at = now
+    else:
+        cache = AnalyticsInsightCache(insights=insights_text, generated_at=now)
+        db.add(cache)
+    db.commit()
+
+    return AIInsightsResponse(insights=insights_text, generated_at=now, cached=False)

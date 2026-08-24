@@ -60,11 +60,6 @@ const TITLE_POOL = [
   "Campfire Crackle Ambience", "Street Magic Reactions",
 ];
 
-const CATEGORIES = [
-  "Drama", "Comedy", "Musical Theatre",
-  "Classical Theatre", "Experimental Theatre", "Popular Shows",
-];
-
 function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
@@ -77,52 +72,36 @@ function formatDuration(min) {
   return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
-const CERTS = ["UA13+", "UA16+"];
-
-function buildVideoCard(category, i) {
-  const title = TITLE_POOL[hashStr(category + i) % TITLE_POOL.length];
-  const h = hashStr(category + "::" + title + i);
-  const durationMin = 60 + (h % 90); // 1h to 2h30m — feature-length, not short-form clips
-  const seed = `video-${category}-${i}`;
-  return {
-    id: seed,
-    title,
-    category,
-    poster: POSTER_POOL[h % POSTER_POOL.length],
-    duration: formatDuration(durationMin),
-    year: 2023 + (h % 3),
-    rating: (7 + ((h % 28) / 10)).toFixed(1),
-    cert: CERTS[h % CERTS.length],
-    genres: [category, CATEGORIES[(h >>> 3) % CATEGORIES.length]].filter((g, idx, arr) => arr.indexOf(g) === idx),
-    description: "Uploaded to theomy. Original poster art — no real footage behind this demo card.",
-    cast: pickCast(seed, 3),
-    crew: pickCrew(seed),
-  };
-}
-
 export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
-  // Real, published videos — fetched from the actual backend, section
-  // "play" specifically. Rendered as its own row at the top, above the
-  // demo genre rows below, using the exact same GenreRow visual so it
-  // fits the page's existing look without a separate design.
-  const [realVideos, setRealVideos] = useState([]);
+  // Real, published videos — grouped by their ACTUAL category (from
+  // the backend, video.categories), not a hardcoded string. This is
+  // what makes each row's heading dynamic — it's exactly whatever the
+  // video is tagged with right now, matching Admin > Categories. A
+  // video with multiple categories appears in each of its rows.
+  const [realVideosByCategory, setRealVideosByCategory] = useState({});
   useEffect(() => {
     fetchPublishedVideos("play")
       .then((videos) => {
-        setRealVideos(
-          videos.map((v) => ({
+        const grouped = {};
+        videos.forEach((v) => {
+          const card = {
             id: v.id,
             title: v.title,
             poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
             isReal: true,
             videoId: v.id,
-          }))
-        );
+          };
+          (v.categories || []).forEach((cat) => {
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(card);
+          });
+        });
+        setRealVideosByCategory(grouped);
       })
-      .catch(() => setRealVideos([]));
+      .catch(() => setRealVideosByCategory({}));
   }, []);
 
   // "Continue Watching" — real, from WatchProgress, not a demo. Only
@@ -194,13 +173,9 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
         {recommended.length > 0 && (
           <GenreRow category="Recommended for You" cards={recommended} onSelect={handleSelectCard} />
         )}
-        {realVideos.length > 0 && (
-          <GenreRow category="Bengali Theatre" cards={realVideos} onSelect={handleSelectCard} />
-        )}
-        {CATEGORIES.map((category) => {
-          const cards = Array.from({ length: 6 }, (_, i) => buildVideoCard(category, i));
-          return <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} />;
-        })}
+        {Object.entries(realVideosByCategory).map(([category, cards]) => (
+          <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} />
+        ))}
       </main>
 
       {/* ---------------- Footer ---------------- */}
