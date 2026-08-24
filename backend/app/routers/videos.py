@@ -15,10 +15,11 @@ from app.models import (
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
     Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
+    Ad, AdCuePoint,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
-    VideoCastOut, VideoCrewOut, PersonOut, VideoLikeToggleResponse,
+    VideoCastOut, VideoCrewOut, PersonOut, VideoLikeToggleResponse, PlayerAdCuePointOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -219,6 +220,24 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
             )
             if not near_end:
                 resume_seconds = progress.position_seconds
+
+    # Ad cue points — only when the viewer genuinely has playback access
+    # (no point exposing VAST tags to someone who can't watch anyway)
+    # AND the video's own has_ads is still True. Toggling has_ads off
+    # hides cue points without deleting them (see AdCuePoint docstring).
+    ad_cue_points: list[PlayerAdCuePointOut] = []
+    if has_access and video.has_ads:
+        cue_rows = (
+            db.query(AdCuePoint, Ad)
+            .join(Ad, Ad.id == AdCuePoint.ad_id)
+            .filter(AdCuePoint.video_id == video.id, Ad.is_active == True)  # noqa: E712
+            .order_by(AdCuePoint.offset_seconds.asc())
+            .all()
+        )
+        ad_cue_points = [
+            PlayerAdCuePointOut(offset_seconds=cue.offset_seconds, vast_tag_url=ad.vast_tag_url)
+            for cue, ad in cue_rows
+        ]
     return VideoOut(
         id=video.id,
         uploaded_by_name=uploader_name,
@@ -286,6 +305,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         liked_by_me=liked_by_me,
         in_my_list=in_my_list,
         resume_position_seconds=resume_seconds,
+        ad_cue_points=ad_cue_points,
     )
 
 

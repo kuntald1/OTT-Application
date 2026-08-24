@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -7,6 +7,7 @@ import AdminAddVideoPage from "./AdminAddVideoPage";
 import AdminEventEnquiriesPage from "./AdminEventEnquiriesPage";
 import AdminRevenuePage from "./AdminRevenuePage";
 import AdminCategoriesPage from "./AdminCategoriesPage";
+import AdminAdsPage from "./AdminAdsPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -30,6 +31,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
     { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
+    { id: "ads", label: "Ad Library", icon: Megaphone, visible: isSuperadmin },
     { id: "admins", label: "Admin Accounts", icon: Users, visible: isSuperadmin },
   ];
 
@@ -93,6 +95,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}
           {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "categories" && isSuperadmin && <AdminCategoriesPage />}
+          {activePage === "ads" && isSuperadmin && <AdminAdsPage />}
           {activePage === "admins" && isSuperadmin && <AdminAccountsPage currentAdmin={currentAdmin} />}
         </div>
       </main>

@@ -1000,6 +1000,46 @@ class MyListItem(Base):
     )
 
 
+class Ad(Base):
+    """A reusable ad definition — just a name and a VAST tag URL (from
+    Google Ad Manager, or any VAST-compliant ad network). theomy doesn't
+    host ad creatives itself; the VAST tag is what the player's Google
+    IMA SDK integration actually requests at playback time to get the
+    real ad creative, tracking pixels, and skip-button rules. One Ad
+    can be reused as a cue point across many videos.
+    """
+    __tablename__ = "ads"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(200), nullable=False)
+    vast_tag_url = Column(String(2000), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class AdCuePoint(Base):
+    """Where a given Ad plays within a specific video. offset_seconds=0
+    is a pre-roll (plays before the content starts); any positive value
+    is a mid-roll at that point in the video. Only ever takes effect
+    when the video's own has_ads is True — toggling has_ads off hides
+    every cue point for that video without deleting them, so re-
+    enabling ads later doesn't require re-entering the schedule.
+    """
+    __tablename__ = "ad_cue_points"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    ad_id = Column(UUID(as_uuid=True), ForeignKey("ads.id"), nullable=False)
+    offset_seconds = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class VideoLike(Base):
     """One row per (user, video) — existence means that user likes that
     video. Same toggle-by-row-existence pattern as PostLike above. Real

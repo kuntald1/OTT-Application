@@ -131,6 +131,46 @@ class MenuOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AdOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    vast_tag_url: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    vast_tag_url: str = Field(min_length=1, max_length=2000)
+
+
+class AdUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    vast_tag_url: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    is_active: Optional[bool] = None
+
+
+class AdCuePointOut(BaseModel):
+    id: uuid.UUID
+    ad_id: uuid.UUID
+    ad_name: str
+    offset_seconds: int
+
+
+class AdCuePointCreate(BaseModel):
+    ad_id: uuid.UUID
+    offset_seconds: int = Field(ge=0)
+
+
+# Minimal shape exposed to the PLAYER on a video it's actually loading —
+# just enough to schedule Google IMA SDK ad requests (offset + VAST tag),
+# nothing about the underlying Ad's internal id/name.
+class PlayerAdCuePointOut(BaseModel):
+    offset_seconds: int
+    vast_tag_url: str
+
+
 class AdminCategoryCreate(BaseModel):
     """Admin creates a new Category sub-menu item. label and
     category_param are kept in sync (same value) so a category always
@@ -809,6 +849,13 @@ class VideoOut(BaseModel):
     # small number instead of correctly continuing forward from where
     # playback actually resumed.
     resume_position_seconds: int = 0
+
+    # Only populated when has_access is True AND the video's own
+    # has_ads is True — empty otherwise (ad-free video, no access yet,
+    # or logged out). The player's Google IMA SDK integration schedules
+    # one ad request per entry: offset_seconds=0 is pre-roll, anything
+    # higher is a mid-roll at that point in the content.
+    ad_cue_points: list[PlayerAdCuePointOut] = []
 
 
 class VideoPurchaseOut(BaseModel):

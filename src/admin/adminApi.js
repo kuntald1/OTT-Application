@@ -255,6 +255,52 @@ export function fetchAdminCategories() {
   return request(`/admin/categories`, { auth: true });
 }
 
+// Ad library (VAST tags, Google Ad Manager / third-party) + per-video
+// cue point management. Powers the Admin > Ads page and the "Has Ads"
+// section in the video upload/edit forms.
+export function fetchAdminAds() {
+  return request(`/admin/ads`, { auth: true });
+}
+
+export function createAdminAd(name, vastTagUrl) {
+  return request(`/admin/ads`, {
+    method: "POST",
+    auth: true,
+    body: { name, vast_tag_url: vastTagUrl },
+  });
+}
+
+export function updateAdminAd(adId, updates) {
+  return request(`/admin/ads/${adId}`, {
+    method: "PUT",
+    auth: true,
+    body: updates,
+  });
+}
+
+export function deleteAdminAd(adId) {
+  return request(`/admin/ads/${adId}`, { method: "DELETE", auth: true });
+}
+
+export function fetchAdminVideoCuePoints(videoId) {
+  return request(`/admin/ads/videos/${videoId}/cue-points`, { auth: true });
+}
+
+export function addAdminVideoCuePoint(videoId, adId, offsetSeconds) {
+  return request(`/admin/ads/videos/${videoId}/cue-points`, {
+    method: "POST",
+    auth: true,
+    body: { ad_id: adId, offset_seconds: offsetSeconds },
+  });
+}
+
+export function deleteAdminVideoCuePoint(videoId, cuePointId) {
+  return request(`/admin/ads/videos/${videoId}/cue-points/${cuePointId}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
 export function createAdminCategory(label) {
   return request(`/admin/categories`, {
     method: "POST",

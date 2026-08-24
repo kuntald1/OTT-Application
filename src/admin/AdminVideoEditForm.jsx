@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown } from "lucide-react";
-import { editVideo } from "./adminApi";
+import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint } from "./adminApi";
 import { fetchCategoryOptions } from "../api";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
@@ -220,6 +220,8 @@ export default function AdminVideoEditForm({ video, onSave, onCancel }) {
           </button>
         </div>
       </div>
+
+      {form.has_ads && <AdCuePointManager videoId={video.id} />}
       <div>
         <label style={labelStyle}>Monetization</label>
         <div className="flex gap-2">
@@ -322,6 +324,144 @@ export default function AdminVideoEditForm({ video, onSave, onCancel }) {
         </button>
         <button type="button" onClick={onCancel} className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
       </div>
+    </div>
+  );
+}
+
+// Ad schedule for THIS video — which Ad (from the shared library, see
+// Admin > Ad Library) plays at which offset. offset_seconds=0 is a
+// pre-roll; anything higher is a mid-roll at that second in the
+// content. Only ever takes effect in the player while this video's
+// "Ad Present" toggle above is on.
+function AdCuePointManager({ videoId }) {
+  const [ads, setAds] = useState([]);
+  const [cuePoints, setCuePoints] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [selectedAdId, setSelectedAdId] = useState("");
+  const [offsetInput, setOffsetInput] = useState("0");
+  const [adding, setAdding] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    Promise.all([fetchAdminAds(), fetchAdminVideoCuePoints(videoId)])
+      .then(([allAds, cues]) => {
+        setAds(allAds.filter((a) => a.is_active));
+        setCuePoints(cues);
+      })
+      .catch(() => {
+        setAds([]);
+        setCuePoints([]);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, [videoId]);
+
+  const handleAddCue = async () => {
+    if (!selectedAdId) return;
+    const offset = Number(offsetInput);
+    if (Number.isNaN(offset) || offset < 0) return;
+    setError("");
+    setAdding(true);
+    try {
+      await addAdminVideoCuePoint(videoId, selectedAdId, offset);
+      setOffsetInput("0");
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't add cue point.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleDeleteCue = async (cueId) => {
+    setBusyId(cueId);
+    setError("");
+    try {
+      await deleteAdminVideoCuePoint(videoId, cueId);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't remove cue point.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg p-3" style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.2)" }}>
+      <p style={labelStyle}>Ad schedule</p>
+      <p className="mb-2 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+        0 seconds = pre-roll (plays before the video starts). Any other value = mid-roll at that point.
+      </p>
+
+      {loading ? (
+        <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+      ) : (
+        <>
+          {cuePoints.length > 0 && (
+            <div className="mb-3 flex flex-col gap-1.5">
+              {cuePoints.map((cue) => (
+                <div key={cue.id} className="flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs" style={{ background: "rgba(245,235,221,0.05)" }}>
+                  <span style={{ color: COLORS.cream }}>
+                    <strong style={{ color: COLORS.gold }}>{cue.offset_seconds === 0 ? "Pre-roll" : `${cue.offset_seconds}s`}</strong> — {cue.ad_name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCue(cue.id)}
+                    disabled={busyId === cue.id}
+                    className="text-red-400 disabled:opacity-50"
+                    aria-label="Remove cue point"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ads.length === 0 ? (
+            <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+              No ads in the library yet — add one under Admin &gt; Ad Library first.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedAdId}
+                onChange={(e) => setSelectedAdId(e.target.value)}
+                className="rounded-md border px-2 py-1.5 text-xs"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              >
+                <option value="">Select ad…</option>
+                {ads.map((ad) => (
+                  <option key={ad.id} value={ad.id}>{ad.name}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="0"
+                value={offsetInput}
+                onChange={(e) => setOffsetInput(e.target.value)}
+                placeholder="Seconds (0 = start)"
+                className="w-32 rounded-md border px-2 py-1.5 text-xs"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+              <button
+                type="button"
+                onClick={handleAddCue}
+                disabled={adding || !selectedAdId}
+                className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}
+              >
+                <Plus className="h-3 w-3" /> Add
+              </button>
+            </div>
+          )}
+          {error && <p className="mt-2 text-xs" style={{ color: "#f87171" }}>{error}</p>}
+        </>
+      )}
     </div>
   );
 }
