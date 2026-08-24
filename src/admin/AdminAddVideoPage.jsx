@@ -12,7 +12,7 @@ const COLORS = {
   blackSoft: "#150307",
 };
 
-const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
+const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
 const inputStyle = {
   width: "100%",

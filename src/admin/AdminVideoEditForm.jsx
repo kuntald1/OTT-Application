@@ -9,7 +9,7 @@ const FALLBACK_CATEGORIES = [
   "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
   "Classical Theatre", "Experimental Theatre", "Popular Shows",
 ];
-const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
+const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
 const inputStyle = {
   width: "100%", borderRadius: 8, border: "1px solid rgba(245,235,221,0.15)",
@@ -434,9 +434,9 @@ function AdCuePointManager({ videoId }) {
                 className="rounded-md border px-2 py-1.5 text-xs"
                 style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
               >
-                <option value="">Select ad…</option>
+                <option value="" style={{ background: COLORS.panel, color: COLORS.cream }}>Select ad…</option>
                 {ads.map((ad) => (
-                  <option key={ad.id} value={ad.id}>{ad.name}</option>
+                  <option key={ad.id} value={ad.id} style={{ background: COLORS.panel, color: COLORS.cream }}>{ad.name}</option>
                 ))}
               </select>
               <input

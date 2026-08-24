@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
@@ -529,6 +529,190 @@ function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// AdEnabledVideoPlayer — the real Google IMA SDK integration for videos
+// with ad cue points. Deliberately ONLY used when video.ad_cue_points
+// is non-empty; every ad-free video keeps using the existing Bunny
+// iframe embed below, completely untouched. This was necessary because
+// Bunny's iframe is cross-origin with no postMessage control — IMA SDK
+// needs a real <video> element it can pause/resume itself, so this
+// plays the direct HLS stream (video.playback_url) via hls.js instead.
+//
+// offset_seconds=0 cue points are requested immediately as a pre-roll
+// (adDisplayContainer.initialize() runs on the same user gesture as
+// pressing Play, which browsers require for ad playback). Any
+// offset_seconds>0 cue point is a mid-roll — content playback is
+// paused via a timeupdate listener once it crosses that point, a new
+// ad is requested for just that VAST tag, and content resumes after.
+// This is a manual sequential-ad approach (not a VMAP ad-pod), which
+// matches what the Ad Library actually stores (a plain VAST tag URL
+// per cue point, not a VMAP playlist).
+//
+// UNTESTED against a live ad account by design — I have no way to run
+// a real ad auction from here. Verify with a real VAST tag after
+// deploying.
+// ---------------------------------------------------------------------------
+function loadScriptOnce(src, isLoadedCheck) {
+  return new Promise((resolve, reject) => {
+    if (isLoadedCheck()) return resolve();
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function AdEnabledVideoPlayer({ video, poster }) {
+  const videoRef = useRef(null);
+  const adContainerRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const [adPlaying, setAdPlaying] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const state = useRef({ playedOffsets: new Set() }).current;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function setup() {
+      try {
+        await Promise.all([
+          loadScriptOnce("https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js", () => !!window.Hls),
+          loadScriptOnce("https://imasdk.googleapis.com/js/sdkloader/ima3.js", () => !!(window.google && window.google.ima)),
+        ]);
+        if (cancelled) return;
+
+        const videoEl = videoRef.current;
+        const wrapperEl = wrapperRef.current;
+        if (!videoEl || !wrapperEl) return;
+
+        // Content playback — native HLS on Safari, hls.js everywhere else.
+        if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+          videoEl.src = video.playback_url;
+        } else if (window.Hls && window.Hls.isSupported()) {
+          const hls = new window.Hls();
+          hls.loadSource(video.playback_url);
+          hls.attachMedia(videoEl);
+          state.hls = hls;
+        } else {
+          setLoadError("This browser can't play this video's format.");
+          return;
+        }
+
+        const google = window.google;
+        const adDisplayContainer = new google.ima.AdDisplayContainer(adContainerRef.current, videoEl);
+        const adsLoader = new google.ima.AdsLoader(adDisplayContainer);
+        state.adsLoader = adsLoader;
+
+        const playContentDirectly = () => {
+          setAdPlaying(false);
+          videoEl.play().catch(() => {});
+        };
+
+        const requestAd = (vastTagUrl) => {
+          const req = new google.ima.AdsRequest();
+          req.adTagUrl = vastTagUrl;
+          req.linearAdSlotWidth = wrapperEl.clientWidth;
+          req.linearAdSlotHeight = wrapperEl.clientHeight;
+          adsLoader.requestAds(req);
+        };
+
+        adsLoader.addEventListener(
+          google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
+          (adsManagerLoadedEvent) => {
+            const settings = new google.ima.AdsRenderingSettings();
+            settings.restoreCustomPlaybackStateOnAdBreakComplete = true;
+            const adsManager = adsManagerLoadedEvent.getAdsManager(videoEl, settings);
+            state.adsManager = adsManager;
+
+            adsManager.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, () => {
+              try { adsManager.destroy(); } catch (e) {}
+              playContentDirectly();
+            });
+            adsManager.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => {
+              setAdPlaying(true);
+              videoEl.pause();
+            });
+            adsManager.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, playContentDirectly);
+            adsManager.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, () => setAdPlaying(false));
+
+            try {
+              adsManager.init(wrapperEl.clientWidth, wrapperEl.clientHeight, google.ima.ViewMode.NORMAL);
+              adsManager.start();
+            } catch (e) {
+              playContentDirectly();
+            }
+          },
+          false
+        );
+        adsLoader.addEventListener(
+          google.ima.AdErrorEvent.Type.AD_ERROR,
+          playContentDirectly, // no ad available / VAST failure — never block the viewer from watching
+          false
+        );
+
+        const cuePoints = video.ad_cue_points || [];
+        const preRoll = cuePoints.find((c) => c.offset_seconds === 0);
+        if (preRoll) {
+          adDisplayContainer.initialize();
+          state.playedOffsets.add(0);
+          requestAd(preRoll.vast_tag_url);
+        } else {
+          videoEl.play().catch(() => {});
+        }
+
+        const midRolls = cuePoints.filter((c) => c.offset_seconds > 0);
+        if (midRolls.length > 0) {
+          const onTimeUpdate = () => {
+            for (const cue of midRolls) {
+              if (!state.playedOffsets.has(cue.offset_seconds) && videoEl.currentTime >= cue.offset_seconds) {
+                state.playedOffsets.add(cue.offset_seconds);
+                videoEl.pause();
+                adDisplayContainer.initialize();
+                requestAd(cue.vast_tag_url);
+              }
+            }
+          };
+          videoEl.addEventListener("timeupdate", onTimeUpdate);
+          state.onTimeUpdate = onTimeUpdate;
+        }
+      } catch (e) {
+        setLoadError("Ad playback couldn't load — playing the video without ads.");
+        videoRef.current?.play().catch(() => {});
+      }
+    }
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      if (state.hls) { try { state.hls.destroy(); } catch (e) {} }
+      if (state.adsManager) { try { state.adsManager.destroy(); } catch (e) {} }
+      if (state.adsLoader) { try { state.adsLoader.destroy(); } catch (e) {} }
+      if (videoRef.current && state.onTimeUpdate) videoRef.current.removeEventListener("timeupdate", state.onTimeUpdate);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.id]);
+
+  return (
+    <div ref={wrapperRef} className="absolute inset-0">
+      <video ref={videoRef} poster={poster} className="h-full w-full" playsInline controls={!adPlaying} />
+      <div ref={adContainerRef} className="absolute inset-0" style={{ pointerEvents: adPlaying ? "auto" : "none" }} />
+      {loadError && (
+        <p className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-red-400">{loadError}</p>
+      )}
+    </div>
+  );
+}
+
+
 function RealDetailModal({ card, closing, onClose, onNavigate }) {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -735,13 +919,17 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
       >
         <div className="relative aspect-video w-full" style={{ background: "#000" }}>
           {playing && canPlay ? (
-            <iframe
-              src={video.embed_url}
-              loading="lazy"
-              style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
-              allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
-              allowFullScreen
-            />
+            video.ad_cue_points && video.ad_cue_points.length > 0 ? (
+              <AdEnabledVideoPlayer video={video} poster={card.poster} />
+            ) : (
+              <iframe
+                src={video.embed_url}
+                loading="lazy"
+                style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
+                allowFullScreen
+              />
+            )
           ) : (
             <>
               {(card.poster) && <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />}

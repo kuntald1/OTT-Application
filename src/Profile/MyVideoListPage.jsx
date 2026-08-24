@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { uploadVideo, uploadVideoFile, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
-const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+", "A"];
+const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
 const inputStyle = {
   width: "100%",

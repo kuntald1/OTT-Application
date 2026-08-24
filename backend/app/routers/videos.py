@@ -28,7 +28,7 @@ POSTER_UPLOAD_DIR = Path("uploads/video_posters")
 ALLOWED_POSTER_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_POSTER_BYTES = 5 * 1024 * 1024  # 5 MB
 
-ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+", "A"}
+ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+"}
 
 
 def _get_allowed_categories(db: Session) -> set[str]:
