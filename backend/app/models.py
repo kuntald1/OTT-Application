@@ -900,11 +900,21 @@ class VideoCategory(Base):
     limitation. Video.category (singular) stays populated with
     categories[0] for backward compatibility, but this table is the
     real source of truth going forward.
+
+    menu_id links this row to the actual Menu category row (see
+    routers/admin_menus.py) — this is what makes a category rename
+    propagate live to every video already tagged with it, instead of
+    the video staying frozen on the name it had at upload time.
+    `category` (plain text) is kept as a fallback display value for
+    rows created before this link existed, or if the linked Menu row
+    is later deleted; _to_out prefers the live Menu name via menu_id
+    whenever it's present and still resolves.
     """
     __tablename__ = "video_categories"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    menu_id = Column(UUID(as_uuid=True), ForeignKey("menus.id"), nullable=True, index=True)
     category = Column(String(100), nullable=False)
 
 

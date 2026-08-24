@@ -15,7 +15,7 @@ from app.models import (
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
     Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
-    Ad, AdCuePoint,
+    Ad, AdCuePoint, Menu,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
@@ -183,9 +183,21 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         .order_by(VideoRevenueTier.min_minutes.asc())
         .all()
     )
-    categories = (
+    category_rows = (
         db.query(VideoCategory).filter(VideoCategory.video_id == video.id).all()
     )
+    # Prefer the LIVE Menu name via menu_id (propagates renames to
+    # already-tagged videos automatically) — falls back to the frozen
+    # `category` string for old rows with no menu_id, or if the linked
+    # Menu row was since deleted.
+    menu_ids = [c.menu_id for c in category_rows if c.menu_id]
+    live_names = {}
+    if menu_ids:
+        live_names = {
+            m.id: (m.category_param or m.label)
+            for m in db.query(Menu).filter(Menu.id.in_(menu_ids)).all()
+        }
+    categories = category_rows
     cast = (
         db.query(VideoCast)
         .filter(VideoCast.video_id == video.id)
@@ -252,7 +264,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         title=video.title,
         description=video.description,
         section=video.section.value,
-        categories=[c.category for c in categories] or [video.category],
+        categories=[live_names.get(c.menu_id, c.category) for c in categories] or [video.category],
         release_year=video.release_year,
         age_rating=video.age_rating.value,
         languages=[l.strip() for l in video.languages.split(",")] if video.languages else [],
@@ -340,8 +352,20 @@ def _validate_video_payload(payload: VideoCreate, db: Session) -> None:
 
 def _sync_categories(video: Video, payload: VideoCreate, db: Session) -> None:
     db.query(VideoCategory).filter(VideoCategory.video_id == video.id).delete()
+    # Resolve each selected category string to its live Menu row (the
+    # allowed-categories list the upload form offers IS this table, see
+    # _get_allowed_categories), so a later rename propagates to this
+    # video automatically instead of freezing the name at upload time.
+    parent = db.query(Menu).filter(Menu.label == "Category", Menu.parent_menu_id.is_(None)).first()
     for cat in payload.categories:
-        db.add(VideoCategory(video_id=video.id, category=cat))
+        menu_row = None
+        if parent:
+            menu_row = (
+                db.query(Menu)
+                .filter(Menu.parent_menu_id == parent.id, Menu.category_param == cat)
+                .first()
+            )
+        db.add(VideoCategory(video_id=video.id, category=cat, menu_id=menu_row.id if menu_row else None))
 
 
 def _sync_cast_and_crew(
