@@ -642,6 +642,8 @@ export function redirectToFacebookLogin() {
 // Real search — title, description, category, cast, and crew name.
 // Plain SQL text matching, not AI — see routers/videos.py's
 // search_videos for why a name search shouldn't be semantic.
-export function searchVideos(q) {
-  return request(`/videos/search?q=${encodeURIComponent(q)}`, { auth: true });
+export function searchVideos(q, section) {
+  const params = new URLSearchParams({ q });
+  if (section) params.set("section", section);
+  return request(`/videos/search?${params.toString()}`, { auth: true });
 }

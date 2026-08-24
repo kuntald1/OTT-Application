@@ -12,7 +12,7 @@ import { searchVideos } from "../api";
 // screens-limit, purchase flow), not a separate/simpler page.
 // ---------------------------------------------------------------------------
 
-export default function SearchResultsPage({ query, onBack, onNavigate }) {
+export default function SearchResultsPage({ query, section, onBack, onNavigate }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,11 +23,11 @@ export default function SearchResultsPage({ query, onBack, onNavigate }) {
       return;
     }
     setLoading(true);
-    searchVideos(query)
+    searchVideos(query, section)
       .then(setResults)
       .catch(() => setResults([]))
       .finally(() => setLoading(false));
-  }, [query]);
+  }, [query, section]);
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
@@ -63,7 +63,7 @@ export default function SearchResultsPage({ query, onBack, onNavigate }) {
               <button
                 key={v.id}
                 type="button"
-                onClick={() => onNavigate?.("hero", { openVideoId: v.id })}
+                onClick={() => onNavigate?.(section === "archive" ? "accordion" : "hero", { openVideoId: v.id })}
                 className="group text-left"
               >
                 <div className="aspect-[2/3] w-full overflow-hidden rounded-lg" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.08)" }}>

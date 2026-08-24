@@ -625,6 +625,7 @@ def list_published_videos(
 @router.get("/search", response_model=list[VideoOut])
 def search_videos(
     q: str,
+    section: str | None = None,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
@@ -635,48 +636,52 @@ def search_videos(
     Smirnov, not someone else vaguely similar. Declared before
     GET /{video_id} so "/videos/search" isn't swallowed by that path
     parameter.
+
+    section (play/archive), when given, scopes results to that section
+    only — searching while on the Play tab shouldn't surface Archive
+    content and vice versa.
     """
     q = q.strip()
     if not q:
         return []
     pattern = f"%{q}%"
 
+    section_enum = None
+    if section:
+        if section not in ("play", "archive"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
+        section_enum = VideoSection(section)
+
+    def _scoped(query):
+        query = query.filter(Video.status == VideoStatus.published)
+        if section_enum:
+            query = query.filter(Video.section == section_enum)
+        return query
+
     matching_ids: set = set()
 
-    title_desc_matches = (
-        db.query(Video.id)
-        .filter(
-            Video.status == VideoStatus.published,
-            (Video.title.ilike(pattern)) | (Video.description.ilike(pattern)),
-        )
-        .all()
-    )
+    title_desc_matches = _scoped(
+        db.query(Video.id).filter((Video.title.ilike(pattern)) | (Video.description.ilike(pattern)))
+    ).all()
     matching_ids.update(vid for (vid,) in title_desc_matches)
 
-    category_matches = (
-        db.query(VideoCategory.video_id)
-        .join(Video, Video.id == VideoCategory.video_id)
-        .filter(Video.status == VideoStatus.published, VideoCategory.category.ilike(pattern))
-        .all()
-    )
+    category_matches = _scoped(
+        db.query(VideoCategory.video_id).join(Video, Video.id == VideoCategory.video_id)
+    ).filter(VideoCategory.category.ilike(pattern)).all()
     matching_ids.update(vid for (vid,) in category_matches)
 
-    cast_matches = (
+    cast_matches = _scoped(
         db.query(VideoCast.video_id)
         .join(Person, Person.id == VideoCast.person_id)
         .join(Video, Video.id == VideoCast.video_id)
-        .filter(Video.status == VideoStatus.published, Person.name.ilike(pattern))
-        .all()
-    )
+    ).filter(Person.name.ilike(pattern)).all()
     matching_ids.update(vid for (vid,) in cast_matches)
 
-    crew_matches = (
+    crew_matches = _scoped(
         db.query(VideoCrew.video_id)
         .join(Person, Person.id == VideoCrew.person_id)
         .join(Video, Video.id == VideoCrew.video_id)
-        .filter(Video.status == VideoStatus.published, Person.name.ilike(pattern))
-        .all()
-    )
+    ).filter(Person.name.ilike(pattern)).all()
     matching_ids.update(vid for (vid,) in crew_matches)
 
     if not matching_ids:

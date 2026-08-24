@@ -118,11 +118,30 @@ function formatDuration(min) {
   return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
-export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNavigate }) {
+export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNavigate, openVideoId }) {
   const t = THEMES[theme] ?? THEMES.dark;
   const isLight = theme === "light";
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
+
+  // Auto-opens a specific video's real detail modal when arriving here
+  // with openVideoId set (from search results) — same pattern as
+  // VideoStreaming/VideoBrowsePage.jsx.
+  useEffect(() => {
+    if (!openVideoId) return;
+    fetchVideoById(openVideoId)
+      .then((v) => {
+        modal.open({
+          id: v.id,
+          title: v.title,
+          poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+          isReal: true,
+          videoId: v.id,
+        });
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openVideoId]);
 
   // Real, published videos with section "archive" — fetched from the
   // actual backend, shown as their own row at the top using the same

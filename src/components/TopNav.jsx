@@ -37,7 +37,7 @@ const LOGIN_VIDEOS = Object.keys(loginVideoModules).sort().map((key) => loginVid
 // { category: "Drama" } for a Category dropdown item.
 // ---------------------------------------------------------------------------
 
-export default function TopNav({ query, onQueryChange, onNavigate, activeView }) {
+export default function TopNav({ query, onQueryChange, onNavigate, activeView, currentSection }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [localQuery, setLocalQuery] = useState(query ?? "");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -186,8 +186,12 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
               value={localQuery}
               onChange={(e) => updateQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && localQuery.trim()) {
-                  onNavigate?.("search", { q: localQuery.trim() });
+                if (e.key !== "Enter") return;
+                const trimmed = localQuery.trim();
+                if (trimmed) {
+                  onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
+                } else {
+                  onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
                 }
               }}
               placeholder="Search"
@@ -196,7 +200,14 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
             />
             <button
               type="button"
-              onClick={() => { if (localQuery.trim()) onNavigate?.("search", { q: localQuery.trim() }); }}
+              onClick={() => {
+                const trimmed = localQuery.trim();
+                if (trimmed) {
+                  onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
+                } else {
+                  onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
+                }
+              }}
               className="flex items-center justify-center px-3 py-1.5 text-white sm:px-4"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >

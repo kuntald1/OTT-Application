@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AppProvider } from './context/AppContext'
 import TopNav from './components/TopNav'
 import MovixHero from './VideoStreaming/MovixHero'
@@ -73,6 +73,17 @@ export default function App() {
   }
   const [history, setHistory] = useState([])
 
+  // Which section (play/archive) the person was last actually browsing
+  // — used so the search box scopes results correctly and a blank
+  // search returns to the right tab, even while sitting on the search
+  // results page itself (where route.view is "search", not "hero"/
+  // "archive", so activeView alone can't answer this).
+  const [lastSection, setLastSection] = useState('play')
+  useEffect(() => {
+    if (route.view === 'hero') setLastSection('play')
+    else if (route.view === 'accordion') setLastSection('archive')
+  }, [route.view])
+
   const navigate = (view, params = {}) => {
     setHistory((h) => [...h, route])
     setRoute({ view, params })
@@ -137,7 +148,7 @@ export default function App() {
   return (
     <AppProvider>
       <div style={{ position: 'relative' }}>
-        <TopNav onNavigate={navigate} activeView={route.view} />
+        <TopNav onNavigate={navigate} activeView={route.view} currentSection={lastSection} />
 
         {route.view === 'hero' ? (
           <div>
@@ -145,11 +156,11 @@ export default function App() {
             <VideoBrowsePage onOpenPerson={openPerson} onNavigate={navigate} openVideoId={route.params.openVideoId} />
           </div>
         ) : route.view === 'search' ? (
-          <SearchResultsPage query={route.params.q} onBack={goBack} onNavigate={navigate} />
+          <SearchResultsPage query={route.params.q} section={route.params.section} onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'accordion' ? (
           <div>
             <MovixGenreAccordion onSelectGenre={(id) => console.log('selected:', id)} />
-            <MovixBrowsePage theme="dark" onOpenPerson={openPerson} onNavigate={navigate} />
+            <MovixBrowsePage theme="dark" onOpenPerson={openPerson} onNavigate={navigate} openVideoId={route.params.openVideoId} />
           </div>
         ) : route.view === 'theater' ? (
           <div>
