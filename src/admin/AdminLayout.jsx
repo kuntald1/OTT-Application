@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -8,6 +8,8 @@ import AdminEventEnquiriesPage from "./AdminEventEnquiriesPage";
 import AdminRevenuePage from "./AdminRevenuePage";
 import AdminCategoriesPage from "./AdminCategoriesPage";
 import AdminAdsPage from "./AdminAdsPage";
+import AdminUsersPage from "./AdminUsersPage";
+import AdminLiveStreamsPage from "./AdminLiveStreamsPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -32,6 +34,8 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
     { id: "ads", label: "Ad Library", icon: Megaphone, visible: isSuperadmin },
+    { id: "live", label: "Live Streaming", icon: Radio, visible: true },
+    { id: "users", label: "User Management", icon: UserCog, visible: true },
     { id: "admins", label: "Admin Accounts", icon: Users, visible: isSuperadmin },
   ];
 
@@ -96,6 +100,8 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "categories" && isSuperadmin && <AdminCategoriesPage />}
           {activePage === "ads" && isSuperadmin && <AdminAdsPage />}
+          {activePage === "live" && <AdminLiveStreamsPage currentAdmin={currentAdmin} />}
+          {activePage === "users" && <AdminUsersPage currentAdmin={currentAdmin} />}
           {activePage === "admins" && isSuperadmin && <AdminAccountsPage currentAdmin={currentAdmin} />}
         </div>
       </main>

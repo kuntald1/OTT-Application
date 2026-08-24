@@ -386,3 +386,55 @@ export function updateAIConfig(insightCacheHours) {
     body: { insight_cache_hours: insightCacheHours },
   });
 }
+
+// User Management — regular platform accounts (User/Content Creator/
+// Plays Organiser), separate from Admin Accounts.
+export function fetchAdminUsers(search) {
+  return request(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`, { auth: true });
+}
+
+export function setUserPassword(userId, newPassword) {
+  return request(`/admin/users/${userId}/password`, {
+    method: "PUT",
+    auth: true,
+    body: { new_password: newPassword },
+  });
+}
+
+export function setUserLiveStreaming(userId, enabled) {
+  return request(`/admin/users/${userId}/live-streaming`, {
+    method: "PUT",
+    auth: true,
+    body: { enabled },
+  });
+}
+
+export function setUserActive(userId, enabled) {
+  return request(`/admin/users/${userId}/active`, {
+    method: "PUT",
+    auth: true,
+    body: { enabled },
+  });
+}
+
+// Live Streaming (admin side) — create as admin, list all (any status),
+// end/delete any stream.
+export function createAdminLiveStream(title, description, section) {
+  return request(`/admin/videos/live`, {
+    method: "POST",
+    auth: true,
+    body: { title, description: description || null, section },
+  });
+}
+
+export function fetchAdminLiveStreams() {
+  return request(`/admin/videos/live`, { auth: true });
+}
+
+export function endAdminLiveStream(liveStreamId) {
+  return request(`/admin/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
+}
+
+export function deleteAdminLiveStream(liveStreamId) {
+  return request(`/admin/videos/live/${liveStreamId}`, { method: "DELETE", auth: true });
+}
