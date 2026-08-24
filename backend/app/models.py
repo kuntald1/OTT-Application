@@ -1000,6 +1000,30 @@ class MyListItem(Base):
     )
 
 
+class VideoEmbedding(Base):
+    """One row per video — a Voyage AI embedding vector computed from
+    the video's title + description + categories + cast/crew names,
+    powering "More like this" and "Recommended for you" via cosine
+    similarity. Stored as a plain JSON array of floats rather than
+    using the pgvector Postgres extension — theomy's catalog is small
+    enough that computing similarity in Python at request time is fine,
+    and this avoids depending on a Postgres extension that may not be
+    installed. Recomputed whenever a video is published/approved, or
+    on demand via the admin "Recompute" action.
+    """
+    __tablename__ = "video_embeddings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, unique=True, index=True)
+    vector_json = Column(Text, nullable=False)  # JSON-encoded list[float]
+    model = Column(String(50), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class Ad(Base):
     """A reusable ad definition — just a name and a VAST tag URL (from
     Google Ad Manager, or any VAST-compliant ad network). theomy doesn't

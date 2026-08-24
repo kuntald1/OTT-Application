@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle } from "lucide-react";
-import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts } from "./adminApi";
+import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle, Sparkles } from "lucide-react";
+import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata } from "./adminApi";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions } from "../api";
 
@@ -124,6 +124,9 @@ export default function AdminAddVideoPage() {
   const [crew, setCrew] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [aiError, setAiError] = useState("");
 
   const [uploadingFileFor, setUploadingFileFor] = useState(null);
   const [hoveredVideoId, setHoveredVideoId] = useState(null);
@@ -146,6 +149,32 @@ export default function AdminAddVideoPage() {
   }, [creatorSearch, creatorDropdownOpen]);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const handleAiSuggest = async () => {
+    if (!form.title.trim()) return;
+    setAiError("");
+    setAiSuggesting(true);
+    try {
+      const result = await suggestVideoMetadata(form.title, form.description);
+      setAiSuggestion(result);
+    } catch (err) {
+      setAiError(err.message || "Couldn't get AI suggestions. Please try again.");
+    } finally {
+      setAiSuggesting(false);
+    }
+  };
+
+  const applyAiSuggestion = () => {
+    if (!aiSuggestion) return;
+    setForm((f) => ({
+      ...f,
+      title: aiSuggestion.suggested_title,
+      description: aiSuggestion.suggested_description,
+      categories: aiSuggestion.suggested_categories,
+    }));
+    setAiSuggestion(null);
+  };
+
   const toggleCategory = (cat) => setForm((f) => {
     const has = f.categories.includes(cat);
     if (has) return { ...f, categories: f.categories.filter((c) => c !== cat) };
@@ -388,6 +417,18 @@ export default function AdminAddVideoPage() {
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
             <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Content</p>
+                <button
+                  type="button"
+                  onClick={handleAiSuggest}
+                  disabled={!form.title.trim() || aiSuggesting}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> {aiSuggesting ? "Thinking…" : "Suggest with AI"}
+                </button>
+              </div>
               <div>
                 <label style={labelStyle}>Title *</label>
                 <input type="text" value={form.title} onChange={update("title")} style={inputStyle} />
@@ -396,6 +437,44 @@ export default function AdminAddVideoPage() {
                 <label style={labelStyle}>Description</label>
                 <textarea rows={3} value={form.description} onChange={update("description")} style={{ ...inputStyle, resize: "vertical" }} />
               </div>
+
+              {aiError && <p className="text-xs" style={{ color: "#f87171" }}>{aiError}</p>}
+
+              {aiSuggestion && (
+                <div className="rounded-lg p-3" style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.2)" }}>
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold" style={{ color: COLORS.gold }}>
+                    <Sparkles className="h-3.5 w-3.5" /> AI suggestion
+                  </p>
+                  <p className="mb-1 text-sm font-medium" style={{ color: COLORS.cream }}>{aiSuggestion.suggested_title}</p>
+                  <p className="mb-2 text-xs" style={{ color: "rgba(245,235,221,0.7)" }}>{aiSuggestion.suggested_description}</p>
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {aiSuggestion.suggested_categories.map((cat) => (
+                      <span key={cat} className="rounded-full px-2 py-0.5 text-[11px]" style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}>{cat}</span>
+                    ))}
+                  </div>
+                  {aiSuggestion.reasoning && (
+                    <p className="mb-2 text-[11px] italic" style={{ color: "rgba(245,235,221,0.5)" }}>{aiSuggestion.reasoning}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={applyAiSuggestion}
+                      className="rounded-md px-3 py-1.5 text-xs font-medium"
+                      style={{ background: COLORS.gold, color: "#0a0104" }}
+                    >
+                      Use this
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiSuggestion(null)}
+                      className="rounded-md px-3 py-1.5 text-xs font-medium"
+                      style={{ color: "rgba(245,235,221,0.5)" }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />

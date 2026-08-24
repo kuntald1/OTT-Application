@@ -611,6 +611,18 @@ export async function fetchCategoryOptions() {
     .map((m) => m.category_param || m.label);
 }
 
+// AI recommendations — "More like this" (content similarity via
+// Voyage AI embeddings) and "Recommended for you" (personalized,
+// blends content similarity with real watch/like history + a
+// popularity fallback for viewers with no history yet).
+export function fetchMoreLikeThis(videoId) {
+  return request(`/videos/${videoId}/recommendations`, { auth: true });
+}
+
+export function fetchRecommendedForMe() {
+  return request(`/videos/recommendations/for-me`, { auth: true });
+}
+
 // Public, no auth — the plan catalog (Play/Archive/Both pricing, features)
 // from the database instead of a hardcoded array.
 export function fetchSubscriptionPlans() {

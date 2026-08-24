@@ -171,6 +171,22 @@ class PlayerAdCuePointOut(BaseModel):
     vast_tag_url: str
 
 
+class AIMetadataSuggestRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+
+
+class AIMetadataSuggestResponse(BaseModel):
+    suggested_title: str
+    suggested_description: str
+    suggested_categories: list[str]
+    reasoning: str
+
+
+class AIInsightsResponse(BaseModel):
+    insights: str
+
+
 class AdminCategoryCreate(BaseModel):
     """Admin creates a new Category sub-menu item. label and
     category_param are kept in sync (same value) so a category always

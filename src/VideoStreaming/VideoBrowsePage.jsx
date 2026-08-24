@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -150,6 +150,30 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
   };
   useEffect(loadContinueWatching, [isLoggedIn]);
 
+  // "Recommended for you" — real AI recommendations (Voyage AI content
+  // similarity blended with actual watch/like history, see
+  // routers/recommendations.py). Only fetched when logged in.
+  const [recommended, setRecommended] = useState([]);
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setRecommended([]);
+      return;
+    }
+    fetchRecommendedForMe()
+      .then((videos) => {
+        setRecommended(
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+            isReal: true,
+            videoId: v.id,
+          }))
+        );
+      })
+      .catch(() => setRecommended([]));
+  }, [isLoggedIn]);
+
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
       requestLogin();
@@ -166,6 +190,9 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
         {continueWatching.length > 0 && (
           <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
+        )}
+        {recommended.length > 0 && (
+          <GenreRow category="Recommended for You" cards={recommended} onSelect={handleSelectCard} />
         )}
         {realVideos.length > 0 && (
           <GenreRow category="Bengali Theatre" cards={realVideos} onSelect={handleSelectCard} />
@@ -199,6 +226,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
           closing={modal.closing}
           onClose={() => { modal.close(); loadContinueWatching(); }}
           onNavigate={onNavigate}
+          onSelectRelated={(relatedCard) => modal.open(relatedCard)}
         />
       ) : modal.item ? (
         <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />
@@ -713,7 +741,7 @@ function AdEnabledVideoPlayer({ video, poster }) {
 }
 
 
-function RealDetailModal({ card, closing, onClose, onNavigate }) {
+function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }) {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [entered, setEntered] = useState(false);
@@ -747,6 +775,8 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
     document.body.appendChild(script);
   }, []);
 
+  const [moreLikeThis, setMoreLikeThis] = useState([]);
+
   const loadVideo = () => {
     setLoading(true);
     fetchVideoById(card.videoId)
@@ -757,6 +787,20 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
       })
       .catch(() => setVideo(null))
       .finally(() => setLoading(false));
+
+    fetchMoreLikeThis(card.videoId)
+      .then((videos) => {
+        setMoreLikeThis(
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+            isReal: true,
+            videoId: v.id,
+          }))
+        );
+      })
+      .catch(() => setMoreLikeThis([]));
   };
 
   useEffect(loadVideo, [card.videoId]);
@@ -1106,6 +1150,27 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {moreLikeThis.length > 0 && (
+                <div className="mt-6 border-t pt-6" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>More Like This</p>
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                    {moreLikeThis.map((rc) => (
+                      <button
+                        key={rc.id}
+                        type="button"
+                        onClick={() => onSelectRelated?.(rc)}
+                        className="group overflow-hidden rounded-lg text-left transition-transform hover:-translate-y-1"
+                      >
+                        <div className="aspect-[2/3] w-full overflow-hidden rounded-lg" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}>
+                          <img src={rc.poster} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                        </div>
+                        <p className="mt-1.5 truncate text-xs font-medium" style={{ color: T.textMuted }}>{rc.title}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </>

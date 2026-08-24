@@ -9,6 +9,7 @@ from app.deps import get_current_admin
 from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person
 from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
 from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _save_poster_file
+from app.routers.recommendations import compute_and_store_embedding
 from app.routers.people import _save_person_photo
 from app.notifications import (
     send_video_approved_whatsapp, send_video_approved_email,
@@ -96,6 +97,7 @@ def approve_video(
     video.admin_note = None
     db.commit()
     db.refresh(video)
+    compute_and_store_embedding(video, db)  # best-effort — see its docstring
     _notify_video_uploader(video, db, "approved")
     return _to_out(video, db)
 
@@ -195,6 +197,29 @@ async def delete_video(
     db.commit()
 
 
+@router.post("/{video_id}/recompute-embedding", response_model=dict)
+def recompute_video_embedding(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Manual retry for a video whose embedding failed to generate at
+    publish time (e.g. VOYAGE_API_KEY wasn't configured yet, or Voyage
+    AI was briefly down). Safe to call anytime — recomputes from
+    scratch using the video's current title/description/categories.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    success = compute_and_store_embedding(video, db)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Couldn't compute embedding — check VOYAGE_API_KEY is configured and Voyage AI is reachable.",
+        )
+    return {"success": True}
+
+
 @router.get("/creators", response_model=list[CreatorAccountOut])
 def search_creator_accounts(
     search: str = "",
@@ -248,6 +273,7 @@ def create_video_as_admin(
             uploaded_by_admin_id=current_admin.id, person_created_by_admin_id=current_admin.id,
             auto_publish=True,
         )
+    compute_and_store_embedding(video, db)  # best-effort — auto-published, so this is "on publish" too
     return _to_out(video, db)
 
 

@@ -61,5 +61,16 @@ class Settings:
     TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
     TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
 
+    # Anthropic — Claude API, used for upload-time title/description/
+    # category suggestions and admin analytics AI insights.
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
+
+    # Voyage AI — embeddings for the "More like this" / "Recommended for
+    # you" content-similarity engine. Same model choice as the ACE CMS's
+    # CV-matching pipeline.
+    VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY", "")
+    VOYAGE_MODEL = os.getenv("VOYAGE_MODEL", "voyage-4-lite")
+
 
 settings = Settings()

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, IndianRupee, Users, Film as FilmIcon, Award } from "lucide-react";
+import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, IndianRupee, Users, Film as FilmIcon, Award, Sparkles } from "lucide-react";
 import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
   fetchAdminContentPerformance, fetchAdminRevenueConfig, updateAdminRevenueConfig,
   fetchRevenueByDay, fetchRevenueByCountry, fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
+  fetchAnalyticsInsights,
 } from "./adminApi";
 
 const COLORS = {
@@ -50,6 +51,8 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [insights, setInsights] = useState("");
+  const [insightsLoading, setInsightsLoading] = useState(true);
 
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
@@ -113,6 +116,12 @@ export default function AdminRevenuePage({ currentAdmin }) {
         setRevenueByCountry([]);
       })
       .finally(() => setAnalyticsLoading(false));
+
+    setInsightsLoading(true);
+    fetchAnalyticsInsights()
+      .then((res) => setInsights(res.insights))
+      .catch(() => setInsights(""))
+      .finally(() => setInsightsLoading(false));
   }, [tab]);
 
   useEffect(() => {
@@ -457,6 +466,21 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
       {tab === "analytics" && (
         <div>
+          <div className="mb-6 rounded-xl p-4" style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.2)" }}>
+            <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.gold }}>
+              <Sparkles className="h-4 w-4" /> AI Insights
+            </h3>
+            {insightsLoading ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Analyzing performance…</p>
+            ) : insights ? (
+              <p className="text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.85)" }}>{insights}</p>
+            ) : (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+                No insights available — check that ANTHROPIC_API_KEY is configured on the server.
+              </p>
+            )}
+          </div>
+
           <p className="mb-5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
             Built from real crediting events (RevenueLedgerEntry) — not estimates. "Country" is each viewer's registered
             account country, not IP-based geolocation (theomy doesn't track that). Device, traffic-source, and

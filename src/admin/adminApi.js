@@ -357,3 +357,18 @@ export function fetchRevenueByDay(days = 30) {
 export function fetchRevenueByCountry() {
   return request(`/admin/revenue/analytics/by-country`, { auth: true });
 }
+
+// AI content optimization — Claude-powered title/description/category
+// suggestions at upload time, and a plain-language read of the
+// Analytics numbers on the Revenue page.
+export function suggestVideoMetadata(title, description) {
+  return request(`/admin/ai/suggest-metadata`, {
+    method: "POST",
+    auth: true,
+    body: { title, description },
+  });
+}
+
+export function fetchAnalyticsInsights() {
+  return request(`/admin/ai/analytics-insights`, { auth: true });
+}
