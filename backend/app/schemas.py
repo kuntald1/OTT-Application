@@ -446,6 +446,32 @@ class RewardConfigOut(BaseModel):
     ticket_reward_percent: Decimal
 
 
+class WatchProgressUpdate(BaseModel):
+    position_seconds: int = Field(ge=0)
+
+
+class ContinueWatchingOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    position_seconds: int
+    duration_seconds: Optional[int] = None
+    progress_percent: Optional[int] = None
+    updated_at: datetime
+
+
+class WatchHistoryOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    position_seconds: int
+    duration_seconds: Optional[int] = None
+    finished: bool
+    updated_at: datetime
+
+
 class WatchHeartbeatRequest(BaseModel):
     # Cumulative seconds watched in THIS single continuous play session —
     # resets to 0 whenever the player restarts (new page load / re-open),
@@ -774,6 +800,15 @@ class VideoOut(BaseModel):
     likes_count: int = 0
     liked_by_me: bool = False
     in_my_list: bool = False
+
+    # The resume offset baked into embed_url's t= param above (0 if no
+    # resume point, or the video is essentially finished). The frontend
+    # needs this as a base to ADD to its own elapsed-since-play-pressed
+    # counter when saving progress — otherwise a resumed session's
+    # first heartbeat would overwrite position_seconds back down to a
+    # small number instead of correctly continuing forward from where
+    # playback actually resumed.
+    resume_position_seconds: int = 0
 
 
 class VideoPurchaseOut(BaseModel):

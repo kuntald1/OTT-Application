@@ -379,6 +379,14 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
               </button>
               <button
                 type="button"
+                onClick={() => { onNavigate?.("history"); setMenuOpen(false); }}
+                className="rounded-full px-4 py-2.5 text-sm font-medium"
+                style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+              >
+                Watch History
+              </button>
+              <button
+                type="button"
                 onClick={() => { onNavigate?.("subscription"); setMenuOpen(false); }}
                 className="rounded-full px-4 py-2.5 text-sm font-medium"
                 style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
@@ -925,6 +933,14 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout }) 
           style={{ color: COLORS.gold }}
         >
           Manage Profile
+        </button>
+        <button
+          type="button"
+          onClick={() => { onNavigate?.("history"); onClose(); }}
+          className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+          style={{ color: COLORS.gold }}
+        >
+          Watch History
         </button>
         <button
           type="button"

@@ -380,6 +380,28 @@ export function sendWatchHeartbeat(videoId, sessionSeconds, playbackSessionToken
   });
 }
 
+// "Continue Watching" / History — saves where the viewer left off,
+// approximated as wall-clock elapsed time since Play was pressed (same
+// honest caveat as the revenue heartbeat; no real player-position API
+// available through the Bunny embed). Called on the same interval as
+// the revenue heartbeat, piggybacking the existing timer rather than
+// adding a second one.
+export function saveWatchProgress(videoId, positionSeconds) {
+  return request(`/videos/${videoId}/progress`, {
+    method: "POST",
+    auth: true,
+    body: { position_seconds: positionSeconds },
+  });
+}
+
+export function fetchContinueWatching() {
+  return request(`/videos/continue-watching/mine`, { auth: true });
+}
+
+export function fetchWatchHistory() {
+  return request(`/videos/history/mine`, { auth: true });
+}
+
 // Screens-limit enforcement — one stable token per browser (see
 // getPlaybackSessionToken below), checked/registered right before
 // playback actually starts. allowed:false means this device would

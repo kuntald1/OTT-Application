@@ -417,6 +417,42 @@ class VideoWatchRecord(Base):
     )
 
 
+class WatchProgress(Base):
+    """One row per (user, video) — where they last left off. This is
+    the real data behind "Continue Watching" and "History".
+
+    position_seconds is an APPROXIMATION, not a precise player
+    timestamp — the Bunny embed is a cross-origin iframe with no
+    postMessage wiring here (same honest limitation as the
+    watch-heartbeat revenue engine, see routers/watch.py), so this is
+    wall-clock elapsed time since Play was pressed, saved periodically.
+    It's accurate for straight-through watching, less so if someone
+    pauses for a long time without closing the player or seeks around.
+
+    Resuming uses Bunny Stream's embed URL `t=<seconds>` start-time
+    parameter — see routers/videos.py's _to_out, which appends it to
+    embed_url whenever this row exists and playback isn't essentially
+    finished.
+    """
+    __tablename__ = "watch_progress"
+    __table_args__ = (UniqueConstraint("user_id", "video_id", name="uq_user_video_watch_progress"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    position_seconds = Column(Integer, nullable=False, default=0)
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class PlaybackSession(Base):
     """One row per (user, browser/device) currently watching something —
     the real enforcement behind the "screens" a subscription is priced

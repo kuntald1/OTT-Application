@@ -25,6 +25,7 @@ import ResetPasswordPage from './Auth/ResetPasswordPage'
 import StripeSuccessPage from './Subscription/StripeSuccessPage'
 import MyVideoListPage from './Profile/MyVideoListPage'
 import RevenuePage from './Profile/RevenuePage'
+import HistoryPage from './Profile/HistoryPage'
 import EventEnquiryPage from './Profile/EventEnquiryPage'
 import AdminApp from './admin/AdminApp'
 import VideoDetailPage from './VideoDetailPage'
@@ -175,6 +176,8 @@ export default function App() {
           <MyVideoListPage onBack={goBack} />
         ) : route.view === 'revenue' ? (
           <RevenuePage onBack={goBack} />
+        ) : route.view === 'history' ? (
+          <HistoryPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'eventEnquiry' ? (
           <EventEnquiryPage onBack={goBack} />
         ) : route.view === 'manageProfile' ? (

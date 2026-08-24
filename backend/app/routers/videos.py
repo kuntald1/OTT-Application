@@ -14,7 +14,7 @@ from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
-    Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem,
+    Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
@@ -199,6 +199,26 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
             MyListItem.user_id == viewer.id, MyListItem.item_id == str(video.id)
         ).first()
     )
+
+    # Resume-from-last-position — see WatchProgress's docstring for the
+    # honest caveat (wall-clock approximation, not a precise player
+    # timestamp). Skipped when the video is essentially finished (within
+    # 15s of its known duration) so a completed watch restarts from the
+    # top instead of the last couple seconds.
+    resume_seconds = 0
+    if viewer and video.bunny_video_id:
+        progress = (
+            db.query(WatchProgress)
+            .filter(WatchProgress.user_id == viewer.id, WatchProgress.video_id == video.id)
+            .first()
+        )
+        if progress and progress.position_seconds > 5:
+            near_end = (
+                video.duration_seconds is not None
+                and progress.position_seconds >= video.duration_seconds - 15
+            )
+            if not near_end:
+                resume_seconds = progress.position_seconds
     return VideoOut(
         id=video.id,
         uploaded_by_name=uploader_name,
@@ -247,6 +267,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         ),
         embed_url=(
             f"https://player.mediadelivery.net/embed/{settings.BUNNY_LIBRARY_ID}/{video.bunny_video_id}"
+            + (f"?t={resume_seconds}" if resume_seconds else "")
             if video.bunny_video_id and has_access else None
         ),
         thumbnail_url=(
@@ -264,6 +285,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         likes_count=likes_count,
         liked_by_me=liked_by_me,
         in_my_list=in_my_list,
+        resume_position_seconds=resume_seconds,
     )
 
 

@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -125,6 +125,31 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
       .catch(() => setRealVideos([]));
   }, []);
 
+  // "Continue Watching" — real, from WatchProgress, not a demo. Only
+  // fetched when logged in (the endpoint requires auth anyway).
+  const [continueWatching, setContinueWatching] = useState([]);
+  const loadContinueWatching = () => {
+    if (!isLoggedIn) {
+      setContinueWatching([]);
+      return;
+    }
+    fetchContinueWatching()
+      .then((items) => {
+        setContinueWatching(
+          items.map((v) => ({
+            id: v.video_id,
+            title: v.title,
+            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.video_id) % POSTER_POOL.length],
+            isReal: true,
+            videoId: v.video_id,
+            progressPercent: v.progress_percent,
+          }))
+        );
+      })
+      .catch(() => setContinueWatching([]));
+  };
+  useEffect(loadContinueWatching, [isLoggedIn]);
+
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
       requestLogin();
@@ -139,6 +164,9 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {continueWatching.length > 0 && (
+          <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
+        )}
         {realVideos.length > 0 && (
           <GenreRow category="Bengali Theatre" cards={realVideos} onSelect={handleSelectCard} />
         )}
@@ -166,7 +194,12 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
       </footer>
 
       {modal.item && modal.item.isReal ? (
-        <RealDetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} />
+        <RealDetailModal
+          card={modal.item}
+          closing={modal.closing}
+          onClose={() => { modal.close(); loadContinueWatching(); }}
+          onNavigate={onNavigate}
+        />
       ) : modal.item ? (
         <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />
       ) : null}
@@ -284,6 +317,14 @@ function GenreRow({ category, cards, onSelect }) {
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                {typeof card.progressPercent === "number" && (
+                  <div className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
+                    <div
+                      className="h-full"
+                      style={{ width: `${card.progressPercent}%`, background: COLORS.gold }}
+                    />
+                  </div>
+                )}
               </div>
             </button>
           ))}
@@ -580,11 +621,18 @@ function RealDetailModal({ card, closing, onClose, onNavigate }) {
   useEffect(() => {
     if (!playing || !canPlay) return;
     const sessionToken = getPlaybackSessionToken();
+    const resumeOffsetSeconds = video?.resume_position_seconds || 0;
     const playStartedAt = Date.now();
     const sendHeartbeat = () => {
       const elapsedSeconds = Math.round((Date.now() - playStartedAt) / 1000);
       if (elapsedSeconds > 0) {
+        // Revenue heartbeat stays session-relative by design (see
+        // VideoWatchRecord's "max single-session view" rule) — it
+        // should NOT include the resume offset. Progress-saving is
+        // different: it needs the video's ABSOLUTE position, so the
+        // resume offset (where this session started from) is added.
         sendWatchHeartbeat(card.videoId, elapsedSeconds, sessionToken).catch(() => {});
+        saveWatchProgress(card.videoId, resumeOffsetSeconds + elapsedSeconds).catch(() => {});
       }
     };
     const interval = setInterval(sendHeartbeat, 20000);
