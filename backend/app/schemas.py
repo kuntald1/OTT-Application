@@ -189,6 +189,16 @@ class AIInsightsResponse(BaseModel):
     cached: bool
 
 
+class AIConfigOut(BaseModel):
+    insight_cache_hours: int
+
+    model_config = {"from_attributes": True}
+
+
+class AIConfigUpdate(BaseModel):
+    insight_cache_hours: int = Field(ge=1, le=168)  # 1 hour to 1 week
+
+
 class AdminCategoryCreate(BaseModel):
     """Admin creates a new Category sub-menu item. label and
     category_param are kept in sync (same value) so a category always

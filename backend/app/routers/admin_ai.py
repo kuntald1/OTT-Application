@@ -5,17 +5,18 @@ from sqlalchemy.orm import Session
 
 from app.ai_services import call_claude, call_claude_json, AIServiceError
 from app.database import get_db
-from app.deps import get_current_admin
-from app.models import AdminUser, Menu, AnalyticsInsightCache
-from app.schemas import AIMetadataSuggestRequest, AIMetadataSuggestResponse, AIInsightsResponse
+from app.deps import get_current_admin, get_current_superadmin
+from app.models import AdminUser, Menu, AnalyticsInsightCache, AIConfig
+from app.schemas import (
+    AIMetadataSuggestRequest, AIMetadataSuggestResponse, AIInsightsResponse, AIConfigOut, AIConfigUpdate,
+)
 
 router = APIRouter(prefix="/admin/ai", tags=["admin-ai"])
 
-# How long a cached insight stays "fresh" before the next tab visit
-# triggers a real Claude call again — this is the actual cost control:
-# without it, every open of the Analytics tab is a paid API call for
-# numbers that don't meaningfully change minute to minute.
-INSIGHT_CACHE_HOURS = 6
+
+def _get_insight_cache_hours(db: Session) -> int:
+    config = db.query(AIConfig).first()
+    return config.insight_cache_hours if config else 6
 
 
 def _get_live_categories(db: Session) -> list[str]:
@@ -88,16 +89,18 @@ def get_analytics_insights(
     read of what they mean. No numbers are invented; Claude only sees
     the real aggregates computed here.
 
-    Cached for INSIGHT_CACHE_HOURS — repeatedly opening/refreshing the
-    Analytics tab reuses the same cached text instead of triggering a
-    real (paid) Claude call every time. Pass force=true to bypass the
-    cache and regenerate immediately (an explicit "Regenerate" button
-    on the frontend, not something that happens on a normal page load).
+    Cached for however long is set in AIConfig.insight_cache_hours
+    (admin-editable — see GET/PUT /admin/ai/config below, default 6) —
+    repeatedly opening/refreshing the Analytics tab reuses the same
+    cached text instead of triggering a real (paid) Claude call every
+    time. Pass force=true to bypass the cache and regenerate
+    immediately (an explicit "Regenerate" button on the frontend, not
+    something that happens on a normal page load).
     """
     cache = db.query(AnalyticsInsightCache).order_by(AnalyticsInsightCache.generated_at.desc()).first()
     if cache and not force:
         age = datetime.now(timezone.utc) - cache.generated_at.replace(tzinfo=timezone.utc)
-        if age < timedelta(hours=INSIGHT_CACHE_HOURS):
+        if age < timedelta(hours=_get_insight_cache_hours(db)):
             return AIInsightsResponse(insights=cache.insights, generated_at=cache.generated_at, cached=True)
 
     from app.routers.admin_revenue import get_revenue_summary, get_all_content_performance
@@ -156,3 +159,41 @@ def get_analytics_insights(
     db.commit()
 
     return AIInsightsResponse(insights=insights_text, generated_at=now, cached=False)
+
+
+@router.get("/config", response_model=AIConfigOut)
+def get_ai_config(
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Read-only for any admin — same GET/PUT split as
+    /admin/revenue/config, where reading is fine for any admin but
+    only a superadmin can change a value that affects real API cost.
+    """
+    config = db.query(AIConfig).first()
+    if not config:
+        config = AIConfig()
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+    return config
+
+
+@router.put("/config", response_model=AIConfigOut)
+def update_ai_config(
+    payload: AIConfigUpdate,
+    current_admin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """The AI Insights cache-duration editor — superadmin only, same
+    restriction as the platform revenue rate, since this setting
+    directly trades off real Claude API cost against freshness.
+    """
+    config = db.query(AIConfig).first()
+    if not config:
+        config = AIConfig()
+        db.add(config)
+    config.insight_cache_hours = payload.insight_cache_hours
+    db.commit()
+    db.refresh(config)
+    return config

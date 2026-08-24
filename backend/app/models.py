@@ -1043,6 +1043,23 @@ class AnalyticsInsightCache(Base):
     )
 
 
+class AIConfig(Base):
+    """Single-row table for AI-feature settings that should be
+    admin-editable without a redeploy — same single-row pattern as
+    RevenueRateConfig. Currently just the AI Insights cache duration;
+    more AI-related settings can live here later without a new table.
+    """
+    __tablename__ = "ai_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    insight_cache_hours = Column(Integer, nullable=False, default=6)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class Ad(Base):
     """A reusable ad definition — just a name and a VAST tag URL (from
     Google Ad Manager, or any VAST-compliant ad network). theomy doesn't

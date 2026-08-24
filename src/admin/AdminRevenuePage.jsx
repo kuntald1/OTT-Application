@@ -3,6 +3,7 @@ import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, In
 import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
   fetchAdminContentPerformance, fetchAdminRevenueConfig, updateAdminRevenueConfig,
+  fetchAIConfig, updateAIConfig,
   fetchRevenueByDay, fetchRevenueByCountry, fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
   fetchAnalyticsInsights,
 } from "./adminApi";
@@ -61,6 +62,12 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState("");
   const [configSaved, setConfigSaved] = useState(false);
+
+  const [aiConfigLoading, setAiConfigLoading] = useState(true);
+  const [aiConfigForm, setAiConfigForm] = useState({ insightCacheHours: "" });
+  const [aiConfigSaving, setAiConfigSaving] = useState(false);
+  const [aiConfigError, setAiConfigError] = useState("");
+  const [aiConfigSaved, setAiConfigSaved] = useState(false);
 
   // Custom confirmation dialog — replaces window.confirm/window.prompt's
   // unbranded browser popup with theomy's own styling. `action` is
@@ -142,6 +149,12 @@ export default function AdminRevenuePage({ currentAdmin }) {
       })
       .catch(() => setConfig(null))
       .finally(() => setConfigLoading(false));
+
+    setAiConfigLoading(true);
+    fetchAIConfig()
+      .then((c) => setAiConfigForm({ insightCacheHours: String(c.insight_cache_hours) }))
+      .catch(() => {})
+      .finally(() => setAiConfigLoading(false));
   }, [tab, isSuperadmin]);
 
   const handleSaveConfig = async () => {
@@ -166,6 +179,25 @@ export default function AdminRevenuePage({ currentAdmin }) {
       setConfigError(err.message || "Couldn't save. Please try again.");
     } finally {
       setConfigSaving(false);
+    }
+  };
+
+  const handleSaveAIConfig = async () => {
+    setAiConfigError("");
+    setAiConfigSaved(false);
+    const hours = Number(aiConfigForm.insightCacheHours);
+    if (!hours || hours < 1 || hours > 168) {
+      setAiConfigError("Must be between 1 and 168 hours.");
+      return;
+    }
+    setAiConfigSaving(true);
+    try {
+      await updateAIConfig(hours);
+      setAiConfigSaved(true);
+    } catch (err) {
+      setAiConfigError(err.message || "Couldn't save. Please try again.");
+    } finally {
+      setAiConfigSaving(false);
     }
   };
 
@@ -629,6 +661,46 @@ export default function AdminRevenuePage({ currentAdmin }) {
                 style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
               >
                 {configSaving ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          )}
+
+          <h3 className="mb-1 mt-8 text-sm font-semibold" style={{ color: COLORS.cream }}>AI Insights cache duration</h3>
+          <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+            How long a generated insight stays cached before the Analytics tab triggers a fresh (paid) Claude call again.
+          </p>
+
+          {aiConfigLoading ? (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+          ) : (
+            <div className="rounded-xl p-5" style={{ background: COLORS.panel, border: "1px solid rgba(255,255,255,0.08)" }}>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                Cache duration (hours)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="168"
+                value={aiConfigForm.insightCacheHours}
+                onChange={(e) => setAiConfigForm({ insightCacheHours: e.target.value })}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+              <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                1 to 168 hours (1 week). Lower = fresher insights, more API cost. Higher = cheaper, staler.
+              </p>
+
+              {aiConfigError && <p className="mt-3 text-xs font-medium" style={{ color: "#f87171" }}>{aiConfigError}</p>}
+              {aiConfigSaved && !aiConfigError && <p className="mt-3 text-xs font-medium" style={{ color: "#6FCF97" }}>Saved.</p>}
+
+              <button
+                type="button"
+                onClick={handleSaveAIConfig}
+                disabled={aiConfigSaving}
+                className="mt-4 w-full rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              >
+                {aiConfigSaving ? "Saving…" : "Save changes"}
               </button>
             </div>
           )}

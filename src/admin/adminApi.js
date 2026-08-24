@@ -372,3 +372,17 @@ export function suggestVideoMetadata(title, description) {
 export function fetchAnalyticsInsights(force = false) {
   return request(`/admin/ai/analytics-insights${force ? "?force=true" : ""}`, { auth: true });
 }
+
+// AI config — the AI Insights cache-duration setting, admin-editable
+// instead of a hardcoded value.
+export function fetchAIConfig() {
+  return request(`/admin/ai/config`, { auth: true });
+}
+
+export function updateAIConfig(insightCacheHours) {
+  return request(`/admin/ai/config`, {
+    method: "PUT",
+    auth: true,
+    body: { insight_cache_hours: insightCacheHours },
+  });
+}
