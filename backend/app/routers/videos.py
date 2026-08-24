@@ -134,6 +134,14 @@ def _check_video_access(video: Video, user: User | None, db: Session) -> tuple[b
     if user is None:
         return False, "login_required"
 
+    # The uploader can always preview their own content — this is what
+    # makes "My Video List"'s inline preview actually play; without it,
+    # a creator with no personal subscription/purchase of their OWN
+    # video would get has_access=False and a null embed_url, same as
+    # any other logged-in-but-not-subscribed viewer.
+    if video.uploaded_by_user_id and user.id == video.uploaded_by_user_id:
+        return True, None
+
     if video.monetization_type == VideoMonetization.pay_per_video:
         if not _has_active_subscription_any(user, db):
             return False, "subscription_required"
@@ -565,7 +573,7 @@ def list_my_videos(
         .order_by(Video.created_at.desc())
         .all()
     )
-    return [_to_out(v, db) for v in videos]
+    return [_to_out(v, db, current_user) for v in videos]
 
 
 @router.get("", response_model=list[VideoOut])
