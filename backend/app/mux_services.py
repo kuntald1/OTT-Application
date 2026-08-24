@@ -46,7 +46,12 @@ def create_mux_live_stream(title: str) -> dict:
             },
             timeout=15.0,
         )
-        response.raise_for_status()
+        if response.status_code >= 400:
+            # Surface Mux's actual error body (has the real "which field
+            # was invalid" detail) instead of just the generic HTTP
+            # status line — that's the only way to actually fix a 400
+            # instead of guessing at the request shape.
+            raise MuxServiceError(f"Mux API {response.status_code}: {response.text}")
         return response.json()["data"]
     except MuxServiceError:
         raise

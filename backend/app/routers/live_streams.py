@@ -57,8 +57,8 @@ def create_live_stream(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Live streaming isn't enabled for your account yet — ask an admin to enable it.",
         )
-    if payload.section not in ("play", "archive"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'.")
+    if payload.section not in ("play", "archive", "both"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play', 'archive', or 'both'.")
 
     try:
         mux_data = create_mux_live_stream(payload.title)
@@ -96,19 +96,24 @@ def list_my_live_streams(
 
 @router.get("", response_model=list[LiveStreamOut])
 def list_active_live_streams(
+    section: str | None = None,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
     """Currently-live streams, most recently started first. See
     LiveStream's docstring — no subscription check yet, just requires
     the viewer to be logged in to actually get a playback_url back.
+    section (play/archive), when given, scopes results to that
+    section OR any live stream tagged "both" — so a "both" event shows
+    up on whichever page the viewer is on, while a plain Play or
+    Archive event only shows on its own page.
     """
-    streams = (
-        db.query(LiveStream)
-        .filter(LiveStream.status == LiveStreamStatus.active)
-        .order_by(LiveStream.started_at.desc())
-        .all()
-    )
+    query = db.query(LiveStream).filter(LiveStream.status == LiveStreamStatus.active)
+    if section:
+        if section not in ("play", "archive"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'.")
+        query = query.filter(LiveStream.section.in_([VideoSection(section), VideoSection.both]))
+    streams = query.order_by(LiveStream.started_at.desc()).all()
     return [_to_public_out(s, current_user) for s in streams]
 
 

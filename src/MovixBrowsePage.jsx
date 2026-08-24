@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
+import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star, Radio } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "./theme";
 import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById } from "./api";
+import { fetchPublishedVideos, fetchVideoById, fetchActiveLiveStreams } from "./api";
 
 import filmsPoster from "./assets/posters/films.jpg";
 import seriesPoster from "./assets/posters/series.jpg";
@@ -165,9 +165,32 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       .catch(() => setRealVideos([]));
   }, []);
 
+  // "Live Now" — currently-active live streams scoped to Archive
+  // (section=archive), same pattern as VideoStreaming/VideoBrowsePage.jsx's
+  // Play-page version. Polls every 30s.
+  const [liveNow, setLiveNow] = useState([]);
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setLiveNow([]);
+      return;
+    }
+    const load = () => {
+      fetchActiveLiveStreams("archive")
+        .then(setLiveNow)
+        .catch(() => setLiveNow([]));
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
+
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
       requestLogin();
+      return;
+    }
+    if (card.isLive) {
+      onNavigate?.("liveWatch", { liveStreamId: card.id });
       return;
     }
     // Both real and demo cards use the same modal mechanism — which
@@ -188,6 +211,37 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       }}
     >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {liveNow.length > 0 && (
+          <div className="mb-8">
+            <h2 className="mb-3 flex items-center gap-2 px-1 text-lg font-semibold sm:text-xl" style={{ color: t.text }}>
+              <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: "#f87171", color: "#0a0104" }}>
+                <Radio className="h-3 w-3" /> LIVE
+              </span>
+              Live Now
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {liveNow.map((ls) => (
+                <button
+                  key={ls.id}
+                  type="button"
+                  onClick={() => handleSelectCard({ id: ls.id, title: ls.title, poster: ls.poster_image_url, isLive: true })}
+                  className="group relative flex-shrink-0 overflow-hidden rounded-lg"
+                  style={{ width: 220, aspectRatio: "16/9", background: "rgba(255,255,255,0.06)" }}
+                >
+                  {ls.poster_image_url && (
+                    <img src={ls.poster_image_url} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  )}
+                  <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                    <Radio className="h-2.5 w-2.5" /> LIVE
+                  </span>
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                    <p className="truncate text-xs font-semibold text-white">{ls.title}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {realVideos.length > 0 && (
           <GenreRow category="Recently Uploaded" cards={realVideos} onSelect={handleSelectCard} t={t} />
         )}

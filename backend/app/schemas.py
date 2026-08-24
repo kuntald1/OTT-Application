@@ -66,6 +66,7 @@ class UserOut(BaseModel):
     auth_provider: str
     profile_photo_url: Optional[str] = None
     reward_points_balance: int
+    can_live_stream: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

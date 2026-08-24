@@ -647,3 +647,32 @@ export function searchVideos(q, section) {
   if (section) params.set("section", section);
   return request(`/videos/search?${params.toString()}`, { auth: true });
 }
+
+// Live streaming — creator/organiser side (requires can_live_stream)
+// and public viewing side. See routers/live_streams.py.
+export function createMyLiveStream(title, description, section) {
+  return request(`/videos/live`, {
+    method: "POST",
+    auth: true,
+    body: { title, description: description || null, section },
+  });
+}
+
+export function fetchMyLiveStreams() {
+  return request(`/videos/live/mine`, { auth: true });
+}
+
+export function endMyLiveStream(liveStreamId) {
+  return request(`/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
+}
+
+// Public — currently-active live streams. auth:true attaches the
+// token only when one exists, same pattern as fetchVideoById: a
+// logged-out visitor still sees the list, just without a playback_url.
+export function fetchActiveLiveStreams(section) {
+  return request(`/videos/live${section ? `?section=${section}` : ""}`, { auth: true });
+}
+
+export function fetchLiveStream(liveStreamId) {
+  return request(`/videos/live/${liveStreamId}`, { auth: true });
+}

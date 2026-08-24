@@ -4,6 +4,7 @@ import TopNav from './components/TopNav'
 import MovixHero from './VideoStreaming/MovixHero'
 import VideoBrowsePage from './VideoStreaming/VideoBrowsePage'
 import SearchResultsPage from './VideoStreaming/SearchResultsPage'
+import LiveWatchPage from './VideoStreaming/LiveWatchPage'
 import MovixGenreAccordion from './Movies/MovixGenreAccordion'
 import MovixBrowsePage from './MovixBrowsePage'
 import TheaterHero from './Theater/TheaterHero'
@@ -25,6 +26,7 @@ import DonationPage from './Community/DonationPage'
 import ResetPasswordPage from './Auth/ResetPasswordPage'
 import StripeSuccessPage from './Subscription/StripeSuccessPage'
 import MyVideoListPage from './Profile/MyVideoListPage'
+import MyLiveStreamsPage from './Profile/MyLiveStreamsPage'
 import RevenuePage from './Profile/RevenuePage'
 import HistoryPage from './Profile/HistoryPage'
 import EventEnquiryPage from './Profile/EventEnquiryPage'
@@ -157,6 +159,8 @@ export default function App() {
           </div>
         ) : route.view === 'search' ? (
           <SearchResultsPage query={route.params.q} section={route.params.section} onBack={goBack} onNavigate={navigate} />
+        ) : route.view === 'liveWatch' ? (
+          <LiveWatchPage liveStreamId={route.params.liveStreamId} onBack={goBack} />
         ) : route.view === 'accordion' ? (
           <div>
             <MovixGenreAccordion onSelectGenre={(id) => console.log('selected:', id)} />
@@ -188,6 +192,8 @@ export default function App() {
           <HelpCenterPage onBack={goBack} />
         ) : route.view === 'myVideos' ? (
           <MyVideoListPage onBack={goBack} />
+        ) : route.view === 'myLiveStreams' ? (
+          <MyLiveStreamsPage onBack={goBack} />
         ) : route.view === 'revenue' ? (
           <RevenuePage onBack={goBack} />
         ) : route.view === 'history' ? (

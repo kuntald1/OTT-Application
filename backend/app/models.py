@@ -771,6 +771,12 @@ class AgeRating(str, enum.Enum):
 class VideoSection(str, enum.Enum):
     play = "play"
     archive = "archive"
+    # Live-stream-only option — a live event tagged "both" shows up on
+    # BOTH the Play and Archive "Live Now" rows, regardless of which
+    # section a viewer is browsing. VOD video uploads don't offer this
+    # (their form is still Play/Archive only), so this value only ever
+    # appears on LiveStream rows in practice.
+    both = "both"
 
 
 class VideoStatus(str, enum.Enum):

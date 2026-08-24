@@ -23,8 +23,8 @@ def create_live_stream_as_admin(
     permission check (that flag only gates Creator/Organiser accounts,
     see User model), since admins are theomy staff.
     """
-    if payload.section not in ("play", "archive"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'.")
+    if payload.section not in ("play", "archive", "both"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play', 'archive', or 'both'.")
 
     try:
         mux_data = create_mux_live_stream(payload.title)

@@ -157,6 +157,7 @@ export default function AdminLiveStreamsPage() {
           >
             <option value="play" style={{ background: COLORS.panel }}>Play</option>
             <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+            <option value="both" style={{ background: COLORS.panel }}>Both</option>
           </select>
           <div>
             <button
