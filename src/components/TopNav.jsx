@@ -185,12 +185,18 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView })
               type="text"
               value={localQuery}
               onChange={(e) => updateQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && localQuery.trim()) {
+                  onNavigate?.("search", { q: localQuery.trim() });
+                }
+              }}
               placeholder="Search"
               className="w-24 bg-transparent px-3 py-1.5 text-sm outline-none placeholder-white/40 sm:w-40 sm:px-4 md:w-56"
               style={{ color: COLORS.cream }}
             />
             <button
               type="button"
+              onClick={() => { if (localQuery.trim()) onNavigate?.("search", { q: localQuery.trim() }); }}
               className="flex items-center justify-center px-3 py-1.5 text-white sm:px-4"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >

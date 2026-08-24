@@ -72,9 +72,29 @@ function formatDuration(min) {
   return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
-export default function VideoBrowsePage({ onOpenPerson, onNavigate }) {
+export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId }) {
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
+
+  // Auto-opens a specific video's real detail modal when arriving here
+  // with openVideoId set (from search results, see SearchResultsPage) —
+  // reuses the exact same RealDetailModal as browsing normally, so ads,
+  // resume position, screens-limit, and purchase flow all still work.
+  useEffect(() => {
+    if (!openVideoId) return;
+    fetchVideoById(openVideoId)
+      .then((v) => {
+        modal.open({
+          id: v.id,
+          title: v.title,
+          poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+          isReal: true,
+          videoId: v.id,
+        });
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openVideoId]);
 
   // Real, published videos — grouped by their ACTUAL category (from
   // the backend, video.categories), not a hardcoded string. This is

@@ -638,3 +638,10 @@ export function redirectToGoogleLogin() {
 export function redirectToFacebookLogin() {
   window.location.href = `${BASE_URL}/auth/facebook/login`;
 }
+
+// Real search — title, description, category, cast, and crew name.
+// Plain SQL text matching, not AI — see routers/videos.py's
+// search_videos for why a name search shouldn't be semantic.
+export function searchVideos(q) {
+  return request(`/videos/search?q=${encodeURIComponent(q)}`, { auth: true });
+}

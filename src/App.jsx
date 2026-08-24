@@ -3,6 +3,7 @@ import { AppProvider } from './context/AppContext'
 import TopNav from './components/TopNav'
 import MovixHero from './VideoStreaming/MovixHero'
 import VideoBrowsePage from './VideoStreaming/VideoBrowsePage'
+import SearchResultsPage from './VideoStreaming/SearchResultsPage'
 import MovixGenreAccordion from './Movies/MovixGenreAccordion'
 import MovixBrowsePage from './MovixBrowsePage'
 import TheaterHero from './Theater/TheaterHero'
@@ -141,8 +142,10 @@ export default function App() {
         {route.view === 'hero' ? (
           <div>
             <MovixHero />
-            <VideoBrowsePage onOpenPerson={openPerson} onNavigate={navigate} />
+            <VideoBrowsePage onOpenPerson={openPerson} onNavigate={navigate} openVideoId={route.params.openVideoId} />
           </div>
+        ) : route.view === 'search' ? (
+          <SearchResultsPage query={route.params.q} onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'accordion' ? (
           <div>
             <MovixGenreAccordion onSelectGenre={(id) => console.log('selected:', id)} />

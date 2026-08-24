@@ -622,6 +622,75 @@ def list_published_videos(
     return [_to_out(v, db, current_user) for v in videos]
 
 
+@router.get("/search", response_model=list[VideoOut])
+def search_videos(
+    q: str,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    """Real search across title, description, category, and cast/crew
+    NAMES — plain SQL text matching (ILIKE), deliberately not AI/
+    embedding-based. A name search wants exact/partial text matches,
+    not semantic similarity — "Pavel Smirnov" should find Pavel
+    Smirnov, not someone else vaguely similar. Declared before
+    GET /{video_id} so "/videos/search" isn't swallowed by that path
+    parameter.
+    """
+    q = q.strip()
+    if not q:
+        return []
+    pattern = f"%{q}%"
+
+    matching_ids: set = set()
+
+    title_desc_matches = (
+        db.query(Video.id)
+        .filter(
+            Video.status == VideoStatus.published,
+            (Video.title.ilike(pattern)) | (Video.description.ilike(pattern)),
+        )
+        .all()
+    )
+    matching_ids.update(vid for (vid,) in title_desc_matches)
+
+    category_matches = (
+        db.query(VideoCategory.video_id)
+        .join(Video, Video.id == VideoCategory.video_id)
+        .filter(Video.status == VideoStatus.published, VideoCategory.category.ilike(pattern))
+        .all()
+    )
+    matching_ids.update(vid for (vid,) in category_matches)
+
+    cast_matches = (
+        db.query(VideoCast.video_id)
+        .join(Person, Person.id == VideoCast.person_id)
+        .join(Video, Video.id == VideoCast.video_id)
+        .filter(Video.status == VideoStatus.published, Person.name.ilike(pattern))
+        .all()
+    )
+    matching_ids.update(vid for (vid,) in cast_matches)
+
+    crew_matches = (
+        db.query(VideoCrew.video_id)
+        .join(Person, Person.id == VideoCrew.person_id)
+        .join(Video, Video.id == VideoCrew.video_id)
+        .filter(Video.status == VideoStatus.published, Person.name.ilike(pattern))
+        .all()
+    )
+    matching_ids.update(vid for (vid,) in crew_matches)
+
+    if not matching_ids:
+        return []
+
+    videos = (
+        db.query(Video)
+        .filter(Video.id.in_(matching_ids))
+        .order_by(Video.published_at.desc())
+        .all()
+    )
+    return [_to_out(v, db, current_user) for v in videos]
+
+
 @router.get("/{video_id}", response_model=VideoOut)
 def get_published_video(
     video_id: str,
