@@ -130,6 +130,11 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
         raise invalid_creds
     if not verify_password(payload.password, user.hashed_password):
         raise invalid_creds
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated. Contact support if you believe this is a mistake.",
+        )
 
     token = create_access_token(subject=str(user.id))
     return Token(access_token=token, user=UserOut.model_validate(user))

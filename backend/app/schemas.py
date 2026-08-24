@@ -199,6 +199,58 @@ class AIConfigUpdate(BaseModel):
     insight_cache_hours: int = Field(ge=1, le=168)  # 1 hour to 1 week
 
 
+class AdminUserAccountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+    is_active: bool
+    can_live_stream: bool
+    created_at: datetime
+
+
+class AdminUserSetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class AdminUserToggleRequest(BaseModel):
+    enabled: bool
+
+
+class LiveStreamCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    section: str = Field(default="play")
+
+
+class LiveStreamOut(BaseModel):
+    """Public-facing shape — never includes mux_stream_key. Only ever
+    populated when the current viewer is logged in (see the "skip
+    subscription-gating for now" decision in LiveStream's docstring).
+    """
+    id: uuid.UUID
+    title: str
+    description: Optional[str] = None
+    section: str
+    poster_image_url: Optional[str] = None
+    status: str
+    playback_url: Optional[str] = None
+    started_at: Optional[datetime] = None
+
+
+class LiveStreamBroadcastInfoOut(BaseModel):
+    """The owner-only shape — includes the RTMP details needed to
+    actually go live. Never returned to anyone except the stream's own
+    creator/admin, or a superadmin looking it up for support purposes.
+    """
+    id: uuid.UUID
+    title: str
+    status: str
+    rtmp_url: str
+    stream_key: str
+    playback_url: str
+
+
 class AdminCategoryCreate(BaseModel):
     """Admin creates a new Category sub-menu item. label and
     category_param are kept in sync (same value) so a category always

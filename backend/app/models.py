@@ -59,6 +59,12 @@ class User(Base):
 
     is_active = Column(Boolean, default=True, nullable=False)
 
+    # Admin-toggled permission (see Admin > Users) — a Content Creator or
+    # Plays Organiser can only create a live stream if this is True.
+    # False by default: live streaming is opt-in per account, not
+    # automatic just from having the right role.
+    can_live_stream = Column(Boolean, default=False, nullable=False)
+
     # Password-reset flow: a random token is stored here (hashed values are
     # overkill for a short-lived, single-use link, but we still invalidate
     # it immediately after use and it expires on its own regardless).
@@ -1067,6 +1073,57 @@ class AIConfig(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class LiveStreamStatus(str, enum.Enum):
+    idle = "idle"          # created, not broadcasting yet
+    active = "active"      # currently receiving RTMP input, viewers can watch
+    ended = "ended"        # broadcast finished (or manually ended/deleted)
+
+
+class LiveStream(Base):
+    """A live event, backed by Mux (Bunny Stream has no live-streaming
+    support — see routers/mux_services.py). mux_stream_key is the RTMP
+    broadcast secret — shown to the creator/admin who owns this stream
+    ONLY, never in any public-facing response. Anyone with this key
+    could push a fake broadcast under this stream's identity, same
+    sensitivity as a password.
+
+    status starts "idle" right after creation via the Mux API, flips to
+    "active" the moment Mux's video.live_stream.active webhook fires
+    (real broadcast started), and "ended" either when the encoder
+    disconnects (video.live_stream.idle webhook) or the owner/admin
+    manually ends it. Mux auto-records every session to a VOD asset,
+    but wiring that recording into theomy's own Video catalog is a
+    later step, not part of this pass.
+
+    Viewer access is intentionally NOT gated by subscription in this
+    first pass (explicitly deferred) — any logged-in user can watch a
+    live stream that's currently active. Tightening this later doesn't
+    require a schema change, just a check in the read endpoint.
+    """
+    __tablename__ = "live_streams"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    section = Column(Enum(VideoSection), nullable=False, default=VideoSection.play)
+    poster_image_url = Column(String(500), nullable=True)
+
+    uploaded_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    uploaded_by_admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True)
+
+    status = Column(Enum(LiveStreamStatus), nullable=False, default=LiveStreamStatus.idle)
+
+    mux_live_stream_id = Column(String(255), nullable=False)
+    mux_playback_id = Column(String(255), nullable=False)
+    mux_stream_key = Column(String(255), nullable=False)
+
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
 

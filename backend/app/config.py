@@ -72,5 +72,13 @@ class Settings:
     VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY", "")
     VOYAGE_MODEL = os.getenv("VOYAGE_MODEL", "voyage-4-lite")
 
+    # Mux — third-party live streaming (RTMP ingest, HLS playback).
+    # Bunny Stream doesn't support live streaming, hence a second video
+    # vendor just for this. MUX_WEBHOOK_SECRET verifies that incoming
+    # /webhooks/mux requests genuinely came from Mux (HMAC signature).
+    MUX_TOKEN_ID = os.getenv("MUX_TOKEN_ID", "")
+    MUX_TOKEN_SECRET = os.getenv("MUX_TOKEN_SECRET", "")
+    MUX_WEBHOOK_SECRET = os.getenv("MUX_WEBHOOK_SECRET", "")
+
 
 settings = Settings()
