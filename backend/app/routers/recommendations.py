@@ -9,7 +9,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
 from app.models import (
-    User, Video, VideoStatus, VideoEmbedding, VideoCast, VideoCrew, Person,
+    User, Video, VideoStatus, VideoEmbedding, VideoCast, VideoCrew, Person, VideoCategory,
     VideoWatchRecord, VideoLike,
 )
 from app.routers.videos import _to_out
@@ -21,9 +21,14 @@ router = APIRouter(prefix="/videos", tags=["recommendations"])
 def _build_embedding_text(video: Video, db: Session) -> str:
     """What actually gets embedded — title, description, categories,
     and cast/crew names, so similarity captures genre/theme/people
-    overlap, not just surface text matching.
+    overlap, not just surface text matching. Categories come from the
+    VideoCategory table (up to 3 per video), not a Video.categories
+    attribute — that's not how multi-category storage works here (see
+    VideoCategory's docstring).
     """
-    parts = [video.title, video.description or "", ", ".join(video.categories or [])]
+    category_rows = db.query(VideoCategory.category).filter(VideoCategory.video_id == video.id).all()
+    categories = [c for (c,) in category_rows]
+    parts = [video.title, video.description or "", ", ".join(categories)]
     cast_names = (
         db.query(Person.name)
         .join(VideoCast, VideoCast.person_id == Person.id)
