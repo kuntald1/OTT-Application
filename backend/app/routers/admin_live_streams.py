@@ -96,12 +96,17 @@ def end_any_live_stream(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
+    """Marks not-currently-live without destroying the Mux resource —
+    see live_streams.py's end_my_live_stream for the full reasoning
+    (same fix applies here: this used to permanently kill the RTMP
+    key, which is why "End" made a stream unresumable — now it
+    doesn't, and DELETE below remains the truly permanent action).
+    """
     live_stream = db.query(LiveStream).filter(LiveStream.id == live_stream_id).first()
     if not live_stream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
 
-    delete_mux_live_stream(live_stream.mux_live_stream_id)
-    live_stream.status = LiveStreamStatus.ended
+    live_stream.status = LiveStreamStatus.idle
     live_stream.ended_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(live_stream)

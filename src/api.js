@@ -666,6 +666,10 @@ export function endMyLiveStream(liveStreamId) {
   return request(`/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
 }
 
+export function deleteMyLiveStream(liveStreamId) {
+  return request(`/videos/live/${liveStreamId}`, { method: "DELETE", auth: true });
+}
+
 // Public — currently-active live streams. auth:true attaches the
 // token only when one exists, same pattern as fetchVideoById: a
 // logged-out visitor still sees the list, just without a playback_url.

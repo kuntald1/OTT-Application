@@ -53,11 +53,14 @@ async def handle_mux_webhook(request: Request, db: Session = Depends(get_db)):
         live_stream.status = LiveStreamStatus.active
         live_stream.started_at = datetime.now(timezone.utc)
     elif event_type == "video.live_stream.idle":
-        # Encoder disconnected — the broadcast session ended, though the
-        # Mux live stream RESOURCE may still be reusable depending on
-        # how it was configured. theomy treats a single LiveStream row
-        # as one broadcast, so this is a real end.
-        live_stream.status = LiveStreamStatus.ended
+        # Encoder disconnected — this is a NORMAL, expected part of the
+        # broadcast lifecycle (network hiccup, or the broadcaster
+        # intentionally stopped OBS), not a permanent end. The Mux
+        # resource stays intact; pointing the same RTMP URL + Stream
+        # Key at it again later goes live under this same event, no
+        # new event needed. Only an explicit Delete permanently
+        # destroys the resource (see live_streams.py / admin_live_streams.py).
+        live_stream.status = LiveStreamStatus.idle
         live_stream.ended_at = datetime.now(timezone.utc)
 
     db.commit()

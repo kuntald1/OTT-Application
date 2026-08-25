@@ -246,6 +246,13 @@ export default function AdminLiveStreamsPage() {
                 <CopyableField label="Stream Key" value={s.stream_key} secret />
                 <CopyableField label="Playback URL" value={s.playback_url} />
 
+                {s.status === "idle" && (
+                  <p className="mt-2 text-xs" style={{ color: "rgba(111,207,151,0.9)" }}>
+                    Ready to broadcast — the RTMP URL + Stream Key above go live again the moment they're
+                    used, no need to create a new event.
+                  </p>
+                )}
+
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
@@ -255,7 +262,7 @@ export default function AdminLiveStreamsPage() {
                   >
                     <Pencil className="h-3.5 w-3.5" /> Edit
                   </button>
-                  {s.status !== "ended" && (
+                  {s.status === "active" && (
                     <button
                       type="button"
                       onClick={() => setConfirmAction({ type: "end", stream: s })}
@@ -263,7 +270,7 @@ export default function AdminLiveStreamsPage() {
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                       style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
                     >
-                      <Square className="h-3.5 w-3.5" /> End
+                      <Square className="h-3.5 w-3.5" /> End for now
                     </button>
                   )}
                   <button
@@ -345,13 +352,13 @@ export default function AdminLiveStreamsPage() {
 
       <ConfirmDialog
         open={!!confirmAction}
-        title={confirmAction?.type === "end" ? "End live event" : "Delete live event"}
+        title={confirmAction?.type === "end" ? "End for now" : "Delete live event"}
         message={
           confirmAction?.type === "end"
-            ? `End "${confirmAction?.stream.title}"? This disconnects the broadcast and can't be undone.`
-            : `Delete "${confirmAction?.stream.title}" permanently?`
+            ? `Mark "${confirmAction?.stream.title}" as not currently live? The RTMP URL and Stream Key stay valid — it can go live again with the same details any time.`
+            : `Permanently delete "${confirmAction?.stream.title}"? This destroys the RTMP URL + Stream Key — they'll stop working and this can't be undone.`
         }
-        confirmLabel={confirmAction?.type === "end" ? "End" : "Delete"}
+        confirmLabel={confirmAction?.type === "end" ? "End for now" : "Delete"}
         danger
         busy={busyId === confirmAction?.stream.id}
         onCancel={() => setConfirmAction(null)}

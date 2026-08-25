@@ -135,9 +135,17 @@ def end_my_live_stream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Manually ends a broadcast (in addition to it auto-ending via the
-    Mux webhook when the encoder disconnects) — deletes the Mux
-    resource so it can't be pushed to again, and marks it ended here.
+    """Marks the broadcast as not-currently-live WITHOUT destroying the
+    underlying Mux resource — the same RTMP URL + Stream Key stay valid,
+    so pointing OBS (or similar) at them again later goes live under
+    this exact same event, no need to create a new one. This is the
+    same thing that happens automatically when the encoder disconnects
+    (see webhooks.py's video.live_stream.idle handling) — this endpoint
+    is just a manual "hide it from Live Now right now" in case the
+    webhook is delayed, or the broadcaster forgot to stop OBS.
+
+    Use DELETE /videos/live/{id} instead for a genuinely permanent end
+    (that one does destroy the Mux resource).
     """
     live_stream = (
         db.query(LiveStream)
@@ -147,9 +155,31 @@ def end_my_live_stream(
     if not live_stream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
 
-    delete_mux_live_stream(live_stream.mux_live_stream_id)
-    live_stream.status = LiveStreamStatus.ended
+    live_stream.status = LiveStreamStatus.idle
     live_stream.ended_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(live_stream)
     return _to_broadcast_info(live_stream)
+
+
+@router.delete("/{live_stream_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_live_stream(
+    live_stream_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently removes this live event — unlike /end above, THIS
+    does destroy the Mux resource (the RTMP URL + Stream Key stop
+    working after this). Use when the event is genuinely over for
+    good, not just paused between sessions.
+    """
+    live_stream = (
+        db.query(LiveStream)
+        .filter(LiveStream.id == live_stream_id, LiveStream.uploaded_by_user_id == current_user.id)
+        .first()
+    )
+    if not live_stream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
+    delete_mux_live_stream(live_stream.mux_live_stream_id)
+    db.delete(live_stream)
+    db.commit()

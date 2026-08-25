@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff, Trash2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream } from "../api";
+import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream, deleteMyLiveStream } from "../api";
 import { useApp } from "../context/AppContext";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
@@ -104,6 +104,7 @@ export default function MyLiveStreamsPage({ onBack }) {
   };
 
   const [confirmEndStream, setConfirmEndStream] = useState(null);
+  const [confirmDeleteStream, setConfirmDeleteStream] = useState(null);
 
   const handleEndConfirmed = async () => {
     const stream = confirmEndStream;
@@ -117,6 +118,21 @@ export default function MyLiveStreamsPage({ onBack }) {
     } finally {
       setBusyId(null);
       setConfirmEndStream(null);
+    }
+  };
+
+  const handleDeleteConfirmed = async () => {
+    const stream = confirmDeleteStream;
+    setBusyId(stream.id);
+    setError("");
+    try {
+      await deleteMyLiveStream(stream.id);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't delete live stream.");
+    } finally {
+      setBusyId(null);
+      setConfirmDeleteStream(null);
     }
   };
 
@@ -221,17 +237,35 @@ export default function MyLiveStreamsPage({ onBack }) {
                   <CopyableField label="Stream Key" value={s.stream_key} secret />
                   <CopyableField label="Playback URL" value={s.playback_url} />
 
-                  {s.status !== "ended" && (
+                  {s.status === "idle" && (
+                    <p className="mt-2 text-xs" style={{ color: "rgba(111,207,151,0.9)" }}>
+                      Ready to broadcast — point OBS (or similar) at the RTMP URL + Stream Key above and press
+                      Start Streaming there any time. No need to create a new event.
+                    </p>
+                  )}
+
+                  <div className="mt-3 flex gap-2">
+                    {s.status === "active" && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmEndStream(s)}
+                        disabled={busyId === s.id}
+                        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                        style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
+                      >
+                        <Square className="h-3.5 w-3.5" /> End for now
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setConfirmEndStream(s)}
+                      onClick={() => setConfirmDeleteStream(s)}
                       disabled={busyId === s.id}
-                      className="mt-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                      style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                      style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
                     >
-                      <Square className="h-3.5 w-3.5" /> End
+                      <Trash2 className="h-3.5 w-3.5" /> Delete permanently
                     </button>
-                  )}
+                  </div>
                 </div>
               );
             })}
@@ -241,13 +275,24 @@ export default function MyLiveStreamsPage({ onBack }) {
 
       <ConfirmDialog
         open={!!confirmEndStream}
-        title="End live event"
-        message={`End "${confirmEndStream?.title}"? This disconnects the broadcast and can't be undone.`}
-        confirmLabel="End"
+        title="End for now"
+        message={`Mark "${confirmEndStream?.title}" as not currently live? Your RTMP URL and Stream Key stay valid — you can go live again with the same details any time.`}
+        confirmLabel="End for now"
         danger
         busy={busyId === confirmEndStream?.id}
         onCancel={() => setConfirmEndStream(null)}
         onConfirm={handleEndConfirmed}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteStream}
+        title="Delete live event"
+        message={`Permanently delete "${confirmDeleteStream?.title}"? This destroys the RTMP URL + Stream Key — they'll stop working and this can't be undone.`}
+        confirmLabel="Delete"
+        danger
+        busy={busyId === confirmDeleteStream?.id}
+        onCancel={() => setConfirmDeleteStream(null)}
+        onConfirm={handleDeleteConfirmed}
       />
     </div>
   );
