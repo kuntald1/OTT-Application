@@ -5,6 +5,7 @@ import MovixHero from './VideoStreaming/MovixHero'
 import VideoBrowsePage from './VideoStreaming/VideoBrowsePage'
 import SearchResultsPage from './VideoStreaming/SearchResultsPage'
 import LiveWatchPage from './VideoStreaming/LiveWatchPage'
+import LiveFloatingBadge from './shared/LiveFloatingBadge'
 import MovixGenreAccordion from './Movies/MovixGenreAccordion'
 import MovixBrowsePage from './MovixBrowsePage'
 import TheaterHero from './Theater/TheaterHero'
@@ -151,6 +152,7 @@ export default function App() {
     <AppProvider>
       <div style={{ position: 'relative' }}>
         <TopNav onNavigate={navigate} activeView={route.view} currentSection={lastSection} />
+        <LiveFloatingBadge onNavigate={navigate} />
 
         {route.view === 'hero' ? (
           <div>

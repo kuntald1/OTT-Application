@@ -5,6 +5,15 @@ import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
+// Distinct color per role so the account list is scannable at a
+// glance — User (neutral gray), Content Creator (gold, matches the
+// site's accent), Plays Organiser (blue, visually distinct from gold).
+const ROLE_STYLES = {
+  User: { bg: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" },
+  "Content Creator": { bg: "rgba(212,175,55,0.15)", color: COLORS.gold },
+  "Plays Organiser": { bg: "rgba(96,165,250,0.15)", color: "#60a5fa" },
+};
+
 export default function AdminUsersPage({ currentAdmin }) {
   const isSuperadmin = currentAdmin?.role === "superadmin";
 
@@ -130,7 +139,10 @@ export default function AdminUsersPage({ currentAdmin }) {
               <div className="min-w-0">
                 <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: COLORS.cream }}>
                   {u.name}
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase" style={{ background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }}>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                    style={ROLE_STYLES[u.role] || ROLE_STYLES.User}
+                  >
                     {u.role}
                   </span>
                   {!u.is_active && (
@@ -153,18 +165,20 @@ export default function AdminUsersPage({ currentAdmin }) {
                     <Key className="h-3.5 w-3.5" /> Password
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handleToggleLiveStreaming(u)}
-                  disabled={busyId === u.id}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                  style={{
-                    background: u.can_live_stream ? "rgba(111,207,151,0.15)" : "rgba(245,235,221,0.06)",
-                    color: u.can_live_stream ? "#6FCF97" : "rgba(245,235,221,0.7)",
-                  }}
-                >
-                  <Video className="h-3.5 w-3.5" /> {u.can_live_stream ? "Live: On" : "Live: Off"}
-                </button>
+                {(u.role === "Content Creator" || u.role === "Plays Organiser") && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLiveStreaming(u)}
+                    disabled={busyId === u.id}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                    style={{
+                      background: u.can_live_stream ? "rgba(111,207,151,0.15)" : "rgba(245,235,221,0.06)",
+                      color: u.can_live_stream ? "#6FCF97" : "rgba(245,235,221,0.7)",
+                    }}
+                  >
+                    <Video className="h-3.5 w-3.5" /> {u.can_live_stream ? "Live: On" : "Live: Off"}
+                  </button>
+                )}
                 {isSuperadmin && (
                   <button
                     type="button"
