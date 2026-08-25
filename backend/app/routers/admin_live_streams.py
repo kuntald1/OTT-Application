@@ -8,7 +8,7 @@ from app.deps import get_current_admin
 from app.models import AdminUser, LiveStream, LiveStreamStatus, VideoSection
 from app.mux_services import create_mux_live_stream, delete_mux_live_stream, MuxServiceError
 from app.routers.live_streams import _to_broadcast_info, MUX_RTMP_URL
-from app.schemas import LiveStreamCreate, LiveStreamBroadcastInfoOut
+from app.schemas import LiveStreamCreate, LiveStreamUpdate, LiveStreamBroadcastInfoOut
 
 router = APIRouter(prefix="/admin/videos/live", tags=["admin-live-streaming"])
 
@@ -57,6 +57,37 @@ def list_all_live_streams(
     """
     streams = db.query(LiveStream).order_by(LiveStream.created_at.desc()).all()
     return [_to_broadcast_info(s) for s in streams]
+
+
+@router.put("/{live_stream_id}", response_model=LiveStreamBroadcastInfoOut)
+def update_live_stream(
+    live_stream_id: str,
+    payload: LiveStreamUpdate,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Edits title/description/section only — see LiveStreamUpdate's
+    docstring for why the Mux-linked fields (RTMP key, playback id)
+    are never editable here. Works regardless of the stream's current
+    status (idle/active/ended), since correcting a typo in the title
+    of an already-ended event is a legitimate use case too.
+    """
+    live_stream = db.query(LiveStream).filter(LiveStream.id == live_stream_id).first()
+    if not live_stream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
+
+    if payload.title is not None:
+        live_stream.title = payload.title
+    if payload.description is not None:
+        live_stream.description = payload.description
+    if payload.section is not None:
+        if payload.section not in ("play", "archive", "both"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play', 'archive', or 'both'.")
+        live_stream.section = VideoSection(payload.section)
+
+    db.commit()
+    db.refresh(live_stream)
+    return _to_broadcast_info(live_stream)
 
 
 @router.post("/{live_stream_id}/end", response_model=LiveStreamBroadcastInfoOut)

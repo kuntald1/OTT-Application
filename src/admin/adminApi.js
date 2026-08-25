@@ -431,6 +431,14 @@ export function fetchAdminLiveStreams() {
   return request(`/admin/videos/live`, { auth: true });
 }
 
+export function updateAdminLiveStream(liveStreamId, updates) {
+  return request(`/admin/videos/live/${liveStreamId}`, {
+    method: "PUT",
+    auth: true,
+    body: updates,
+  });
+}
+
 export function endAdminLiveStream(liveStreamId) {
   return request(`/admin/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
 }

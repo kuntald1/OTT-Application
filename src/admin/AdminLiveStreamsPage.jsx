@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Radio, Plus, Copy, Check, Square, Trash2, Eye, EyeOff } from "lucide-react";
-import { createAdminLiveStream, fetchAdminLiveStreams, endAdminLiveStream, deleteAdminLiveStream } from "./adminApi";
+import { Radio, Plus, Copy, Check, Square, Trash2, Eye, EyeOff, Pencil, X } from "lucide-react";
+import { createAdminLiveStream, fetchAdminLiveStreams, endAdminLiveStream, deleteAdminLiveStream, updateAdminLiveStream } from "./adminApi";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -54,6 +54,12 @@ export default function AdminLiveStreamsPage() {
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState(null);
 
+  const [editingStream, setEditingStream] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editSection, setEditSection] = useState("play");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const load = () => {
     setLoading(true);
     fetchAdminLiveStreams()
@@ -79,6 +85,33 @@ export default function AdminLiveStreamsPage() {
       setError(err.message || "Couldn't create live stream.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const openEdit = (stream) => {
+    setEditingStream(stream);
+    setEditTitle(stream.title);
+    setEditDescription(stream.description || "");
+    setEditSection(stream.section || "play");
+    setError("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim()) return;
+    setSavingEdit(true);
+    setError("");
+    try {
+      await updateAdminLiveStream(editingStream.id, {
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+        section: editSection,
+      });
+      setEditingStream(null);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't save changes.");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -208,8 +241,16 @@ export default function AdminLiveStreamsPage() {
                 <CopyableField label="Stream Key" value={s.stream_key} secret />
                 <CopyableField label="Playback URL" value={s.playback_url} />
 
-                {s.status !== "ended" && (
-                  <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(s)}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+                    style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  {s.status !== "ended" && (
                     <button
                       type="button"
                       onClick={() => handleEnd(s)}
@@ -219,20 +260,81 @@ export default function AdminLiveStreamsPage() {
                     >
                       <Square className="h-3.5 w-3.5" /> End
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(s)}
-                      disabled={busyId === s.id}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                      style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Delete
-                    </button>
-                  </div>
-                )}
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(s)}
+                    disabled={busyId === s.id}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                    style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {editingStream && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={() => setEditingStream(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6"
+            style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.25)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold" style={{ color: COLORS.cream }}>Edit live event</h3>
+              <button type="button" onClick={() => setEditingStream(null)} style={{ color: "rgba(245,235,221,0.5)" }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Title"
+              className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              placeholder="Description (optional)"
+              rows={2}
+              className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+            <select
+              value={editSection}
+              onChange={(e) => setEditSection(e.target.value)}
+              className="mb-3 w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            >
+              <option value="play" style={{ background: COLORS.panel }}>Play</option>
+              <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+              <option value="both" style={{ background: COLORS.panel }}>Both</option>
+            </select>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setEditingStream(null)} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.6)" }}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={savingEdit || !editTitle.trim()}
+                className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: COLORS.gold, color: "#0a0104" }}
+              >
+                {savingEdit ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

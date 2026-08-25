@@ -224,6 +224,18 @@ class LiveStreamCreate(BaseModel):
     section: str = Field(default="play")
 
 
+class LiveStreamUpdate(BaseModel):
+    """Only theomy-side metadata is editable — never the Mux-linked
+    fields (mux_live_stream_id/playback_id/stream_key), since those
+    are tied to the actual Mux resource created at broadcast-creation
+    time and can't be changed after the fact without creating a new
+    Mux live stream entirely.
+    """
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    section: Optional[str] = None
+
+
 class LiveStreamOut(BaseModel):
     """Public-facing shape — never includes mux_stream_key. Only ever
     populated when the current viewer is logged in (see the "skip
