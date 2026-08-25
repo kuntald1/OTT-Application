@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Users, Search, Key, Video, UserX, UserCheck, X } from "lucide-react";
-import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive } from "./adminApi";
+import { Users, Search, Key, Video, UserX, UserCheck, X, Send } from "lucide-react";
+import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
@@ -50,6 +50,22 @@ export default function AdminUsersPage({ currentAdmin }) {
       load(search);
     } catch (err) {
       setError(err.message || "Couldn't update live streaming permission.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const [notifiedId, setNotifiedId] = useState(null);
+
+  const handleNotify = async (user) => {
+    setBusyId(user.id);
+    setError("");
+    try {
+      await notifyUserLiveStreaming(user.id);
+      setNotifiedId(user.id);
+      setTimeout(() => setNotifiedId((id) => (id === user.id ? null : id)), 3000);
+    } catch (err) {
+      setError(err.message || "Couldn't send notification.");
     } finally {
       setBusyId(null);
     }
@@ -177,6 +193,21 @@ export default function AdminUsersPage({ currentAdmin }) {
                     }}
                   >
                     <Video className="h-3.5 w-3.5" /> {u.can_live_stream ? "Live: On" : "Live: Off"}
+                  </button>
+                )}
+                {(u.role === "Content Creator" || u.role === "Plays Organiser") && u.can_live_stream && (
+                  <button
+                    type="button"
+                    onClick={() => handleNotify(u)}
+                    disabled={busyId === u.id}
+                    title="Email + WhatsApp them about broadcasting"
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                    style={{
+                      background: notifiedId === u.id ? "rgba(111,207,151,0.15)" : "rgba(212,175,55,0.12)",
+                      color: notifiedId === u.id ? "#6FCF97" : COLORS.gold,
+                    }}
+                  >
+                    <Send className="h-3.5 w-3.5" /> {notifiedId === u.id ? "Sent!" : "Notify"}
                   </button>
                 )}
                 {isSuperadmin && (

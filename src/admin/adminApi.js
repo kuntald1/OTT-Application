@@ -409,6 +409,10 @@ export function setUserLiveStreaming(userId, enabled) {
   });
 }
 
+export function notifyUserLiveStreaming(userId) {
+  return request(`/admin/users/${userId}/notify-live-streaming`, { method: "POST", auth: true });
+}
+
 export function setUserActive(userId, enabled) {
   return request(`/admin/users/${userId}/active`, {
     method: "PUT",

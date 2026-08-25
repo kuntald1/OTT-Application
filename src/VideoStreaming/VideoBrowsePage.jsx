@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star, Radio } from "lucide-react";
+import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchActiveLiveStreams } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -173,27 +173,6 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
       .catch(() => setRecommended([]));
   }, [isLoggedIn]);
 
-  // "Live Now" — currently-active live streams. Polls every 30s so a
-  // stream that just went live (or just ended) shows up without a
-  // manual page reload. No subscription check yet (see LiveStream's
-  // backend docstring) — just needs to be logged in to get a real
-  // playback_url back.
-  const [liveNow, setLiveNow] = useState([]);
-  useEffect(() => {
-    if (!isLoggedIn) {
-      setLiveNow([]);
-      return;
-    }
-    const load = () => {
-      fetchActiveLiveStreams("play")
-        .then(setLiveNow)
-        .catch(() => setLiveNow([]));
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, [isLoggedIn]);
-
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
       requestLogin();
@@ -212,37 +191,6 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
-        {liveNow.length > 0 && (
-          <div className="mb-8">
-            <h2 className="mb-3 flex items-center gap-2 px-1 text-lg font-semibold sm:text-xl" style={{ color: T.text }}>
-              <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: "#f87171", color: "#0a0104" }}>
-                <Radio className="h-3 w-3" /> LIVE
-              </span>
-              Live Now
-            </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {liveNow.map((ls) => (
-                <button
-                  key={ls.id}
-                  type="button"
-                  onClick={() => handleSelectCard({ id: ls.id, title: ls.title, poster: ls.poster_image_url, isLive: true })}
-                  className="group relative flex-shrink-0 overflow-hidden rounded-lg"
-                  style={{ width: 220, aspectRatio: "16/9", background: "rgba(255,255,255,0.06)" }}
-                >
-                  {ls.poster_image_url && (
-                    <img src={ls.poster_image_url} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                  )}
-                  <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                    <Radio className="h-2.5 w-2.5" /> LIVE
-                  </span>
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                    <p className="truncate text-xs font-semibold text-white">{ls.title}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         {continueWatching.length > 0 && (
           <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
         )}
@@ -256,7 +204,27 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
 
       {/* ---------------- Footer ---------------- */}
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${T.border}` }}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+          {[
+            { heading: "theomy", links: ["About", "Jobs", "Press"] },
+            { heading: "Support", links: ["Help Center", "Account", "Devices"] },
+            { heading: "Watch", links: ["Films", "Series", "New & Popular"] },
+            { heading: "Legal", links: ["Privacy", "Terms", "Cookie Preferences"] },
+          ].map((col) => (
+            <div key={col.heading}>
+              <p className="mb-3 text-sm font-semibold" style={{ color: T.text }}>{col.heading}</p>
+              <div className="flex flex-col gap-2">
+                {col.links.map((link) => (
+                  <span key={link} className="cursor-pointer text-sm" style={{ color: T.textFaint }}>
+                    {link}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: `1px solid ${T.border}` }}>
           <div className="flex items-center gap-2" style={{ color: T.text }}>
             <MovixMark className="h-5 w-5" style={{ fill: COLORS.gold }} />
             <div>

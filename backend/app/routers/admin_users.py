@@ -6,6 +6,7 @@ from app.deps import get_current_admin, get_current_superadmin
 from app.models import AdminUser, User
 from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest
 from app.security import hash_password
+from app.notifications import send_live_streaming_enabled_email, send_live_streaming_enabled_whatsapp
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -89,3 +90,21 @@ def set_user_active(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/{user_id}/notify-live-streaming", status_code=status.HTTP_204_NO_CONTENT)
+def notify_user_about_live_streaming(
+    user_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Sends the user an email + WhatsApp message telling them live
+    streaming is enabled on their account and pointing them to "My
+    Live Events" to create one themselves. Doesn't (and can't) send an
+    actual RTMP URL/Stream Key here — those only come into existence
+    once THIS user creates their own live event, so there's nothing
+    stream-specific to hand over at this point, only the pointer.
+    """
+    user = _get_user_or_404(user_id, db)
+    send_live_streaming_enabled_email(user.email, user.name)
+    send_live_streaming_enabled_whatsapp(user.phone, user.name)

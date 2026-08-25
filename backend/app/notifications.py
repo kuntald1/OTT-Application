@@ -532,3 +532,49 @@ def send_enquiry_rejected_whatsapp(to_phone: str, contact_person: str, event_tit
         client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
     except Exception:
         pass
+
+
+def send_live_streaming_enabled_whatsapp(to_phone: str, name: str) -> None:
+    """Tells a Content Creator / Plays Organiser their account can now
+    broadcast — the actual RTMP URL + Stream Key aren't known yet at
+    this point (those only exist once THEY create a live event), so
+    this just points them to where to go get those details themselves.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Hi {name}, live streaming has been enabled for your account. "
+        f"Log in and go to \"My Live Events\" to create an event and get your RTMP URL + Stream Key "
+        f"for broadcasting software like OBS."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_live_streaming_enabled_email(to_email: str, name: str) -> None:
+    subject = "Live streaming is now enabled on your theomy account"
+    text_body = (
+        f"Hi {name},\n\nLive streaming has been enabled for your account. Log in and go to "
+        f"\"My Live Events\" to create an event — you'll get an RTMP URL and Stream Key there to use with "
+        f"broadcasting software like OBS Studio.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Live streaming enabled \U0001F3A5",
+        [
+            f"Hi {name},",
+            "Live streaming has been enabled for your account.",
+            'Log in and go to "<b>My Live Events</b>" to create an event — you\'ll get an RTMP URL and '
+            "Stream Key there to use with broadcasting software like OBS Studio.",
+        ],
+        "#D4AF37",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
