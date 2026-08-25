@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Radio, Plus, Copy, Check, Square, Trash2, Eye, EyeOff, Pencil, X } from "lucide-react";
 import { createAdminLiveStream, fetchAdminLiveStreams, endAdminLiveStream, deleteAdminLiveStream, updateAdminLiveStream } from "./adminApi";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -115,8 +116,10 @@ export default function AdminLiveStreamsPage() {
     }
   };
 
-  const handleEnd = async (stream) => {
-    if (!window.confirm(`End "${stream.title}"? This disconnects the broadcast and can't be undone.`)) return;
+  const [confirmAction, setConfirmAction] = useState(null); // { type: "end" | "delete", stream }
+
+  const handleEndConfirmed = async () => {
+    const stream = confirmAction.stream;
     setBusyId(stream.id);
     setError("");
     try {
@@ -126,11 +129,12 @@ export default function AdminLiveStreamsPage() {
       setError(err.message || "Couldn't end live stream.");
     } finally {
       setBusyId(null);
+      setConfirmAction(null);
     }
   };
 
-  const handleDelete = async (stream) => {
-    if (!window.confirm(`Delete "${stream.title}" permanently?`)) return;
+  const handleDeleteConfirmed = async () => {
+    const stream = confirmAction.stream;
     setBusyId(stream.id);
     setError("");
     try {
@@ -140,6 +144,7 @@ export default function AdminLiveStreamsPage() {
       setError(err.message || "Couldn't delete live stream.");
     } finally {
       setBusyId(null);
+      setConfirmAction(null);
     }
   };
 
@@ -253,7 +258,7 @@ export default function AdminLiveStreamsPage() {
                   {s.status !== "ended" && (
                     <button
                       type="button"
-                      onClick={() => handleEnd(s)}
+                      onClick={() => setConfirmAction({ type: "end", stream: s })}
                       disabled={busyId === s.id}
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                       style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
@@ -263,7 +268,7 @@ export default function AdminLiveStreamsPage() {
                   )}
                   <button
                     type="button"
-                    onClick={() => handleDelete(s)}
+                    onClick={() => setConfirmAction({ type: "delete", stream: s })}
                     disabled={busyId === s.id}
                     className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                     style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
@@ -337,6 +342,21 @@ export default function AdminLiveStreamsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={confirmAction?.type === "end" ? "End live event" : "Delete live event"}
+        message={
+          confirmAction?.type === "end"
+            ? `End "${confirmAction?.stream.title}"? This disconnects the broadcast and can't be undone.`
+            : `Delete "${confirmAction?.stream.title}" permanently?`
+        }
+        confirmLabel={confirmAction?.type === "end" ? "End" : "Delete"}
+        danger
+        busy={busyId === confirmAction?.stream.id}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={confirmAction?.type === "end" ? handleEndConfirmed : handleDeleteConfirmed}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Megaphone, Plus, Trash2, Pencil, Check, X, EyeOff, Eye } from "lucide-react";
 import { fetchAdminAds, createAdminAd, updateAdminAd, deleteAdminAd } from "./adminApi";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -79,8 +80,10 @@ export default function AdminAdsPage() {
     }
   };
 
-  const handleDelete = async (ad) => {
-    if (!window.confirm(`Delete "${ad.name}"? This also removes it from every video's ad schedule.`)) return;
+  const [confirmDeleteAd, setConfirmDeleteAd] = useState(null);
+
+  const handleDeleteConfirmed = async () => {
+    const ad = confirmDeleteAd;
     setBusyId(ad.id);
     setError("");
     try {
@@ -90,6 +93,7 @@ export default function AdminAdsPage() {
       setError(err.message || "Couldn't delete ad.");
     } finally {
       setBusyId(null);
+      setConfirmDeleteAd(null);
     }
   };
 
@@ -216,7 +220,7 @@ export default function AdminAdsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(ad)}
+                      onClick={() => setConfirmDeleteAd(ad)}
                       disabled={busyId === ad.id}
                       className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-white/5 disabled:opacity-50"
                       style={{ color: "#f87171" }}
@@ -231,6 +235,17 @@ export default function AdminAdsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteAd}
+        title="Delete ad"
+        message={`Delete "${confirmDeleteAd?.name}"? This also removes it from every video's ad schedule.`}
+        confirmLabel="Delete"
+        danger
+        busy={busyId === confirmDeleteAd?.id}
+        onCancel={() => setConfirmDeleteAd(null)}
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
 }

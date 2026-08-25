@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo, uploadAdminPersonPhoto } from "./adminApi";
 import AdminVideoEditForm from "./AdminVideoEditForm";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = {
   panel: "#150307",
@@ -84,17 +85,20 @@ export default function AdminVideoReviewPage() {
     }
   };
 
-  const handleDelete = async (videoId, title) => {
-    const confirmed = window.confirm(
-      `Permanently delete "${title}"?\n\nThis removes it from theomy AND deletes the actual video file from Bunny Stream. This cannot be undone.`
-    );
-    if (!confirmed) return;
+  const [confirmDeleteVideo, setConfirmDeleteVideo] = useState(null); // { id, title }
+  const [deletingVideo, setDeletingVideo] = useState(false);
+
+  const handleDeleteConfirmed = async () => {
+    setDeletingVideo(true);
     setVideoActionError("");
     try {
-      await deleteVideo(videoId);
+      await deleteVideo(confirmDeleteVideo.id);
       loadVideos(videoStatusFilter);
+      setConfirmDeleteVideo(null);
     } catch (err) {
       setVideoActionError(err.message || "Couldn't delete this video.");
+    } finally {
+      setDeletingVideo(false);
     }
   };
 
@@ -106,7 +110,7 @@ export default function AdminVideoReviewPage() {
       await uploadAdminPersonPhoto(personId, file);
       loadVideos(videoStatusFilter);
     } catch (err) {
-      alert(err.message || "Couldn't upload photo. Please try again.");
+      setVideoActionError(err.message || "Couldn't upload photo. Please try again.");
     } finally {
       setUploadingPhotoFor(null);
     }
@@ -324,7 +328,7 @@ export default function AdminVideoReviewPage() {
                         Disable
                       </button>
                       <button
-                        onClick={() => handleDelete(v.id, v.title)}
+                        onClick={() => setConfirmDeleteVideo({ id: v.id, title: v.title })}
                         className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5"
                         style={{ borderColor: "#f87171", color: "#f87171" }}
                       >
@@ -343,7 +347,7 @@ export default function AdminVideoReviewPage() {
                         Enable
                       </button>
                       <button
-                        onClick={() => handleDelete(v.id, v.title)}
+                        onClick={() => setConfirmDeleteVideo({ id: v.id, title: v.title })}
                         className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5"
                         style={{ borderColor: "#f87171", color: "#f87171" }}
                       >
@@ -354,7 +358,7 @@ export default function AdminVideoReviewPage() {
 
                   {v.status === "rejected" && (
                     <button
-                      onClick={() => handleDelete(v.id, v.title)}
+                      onClick={() => setConfirmDeleteVideo({ id: v.id, title: v.title })}
                       className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5"
                       style={{ borderColor: "#f87171", color: "#f87171" }}
                     >
@@ -367,6 +371,17 @@ export default function AdminVideoReviewPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteVideo}
+        title="Delete video"
+        message={`Permanently delete "${confirmDeleteVideo?.title}"? This removes it from theomy AND deletes the actual video file from Bunny Stream. This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        busy={deletingVideo}
+        onCancel={() => setConfirmDeleteVideo(null)}
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
 }

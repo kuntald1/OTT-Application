@@ -3,6 +3,7 @@ import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff } from "lucide
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream } from "../api";
 import { useApp } from "../context/AppContext";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Creator/Organiser's own live streaming — gated by
@@ -102,8 +103,10 @@ export default function MyLiveStreamsPage({ onBack }) {
     }
   };
 
-  const handleEnd = async (stream) => {
-    if (!window.confirm(`End "${stream.title}"? This disconnects the broadcast and can't be undone.`)) return;
+  const [confirmEndStream, setConfirmEndStream] = useState(null);
+
+  const handleEndConfirmed = async () => {
+    const stream = confirmEndStream;
     setBusyId(stream.id);
     setError("");
     try {
@@ -113,6 +116,7 @@ export default function MyLiveStreamsPage({ onBack }) {
       setError(err.message || "Couldn't end live stream.");
     } finally {
       setBusyId(null);
+      setConfirmEndStream(null);
     }
   };
 
@@ -220,7 +224,7 @@ export default function MyLiveStreamsPage({ onBack }) {
                   {s.status !== "ended" && (
                     <button
                       type="button"
-                      onClick={() => handleEnd(s)}
+                      onClick={() => setConfirmEndStream(s)}
                       disabled={busyId === s.id}
                       className="mt-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                       style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
@@ -234,6 +238,17 @@ export default function MyLiveStreamsPage({ onBack }) {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={!!confirmEndStream}
+        title="End live event"
+        message={`End "${confirmEndStream?.title}"? This disconnects the broadcast and can't be undone.`}
+        confirmLabel="End"
+        danger
+        busy={busyId === confirmEndStream?.id}
+        onCancel={() => setConfirmEndStream(null)}
+        onConfirm={handleEndConfirmed}
+      />
     </div>
   );
 }

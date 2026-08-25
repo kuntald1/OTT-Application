@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Users, Search, Key, Video, UserX, UserCheck, X } from "lucide-react";
 import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive } from "./adminApi";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -45,9 +46,11 @@ export default function AdminUsersPage({ currentAdmin }) {
     }
   };
 
-  const handleToggleActive = async (user) => {
+  const [confirmToggleUser, setConfirmToggleUser] = useState(null);
+
+  const handleToggleActiveConfirmed = async () => {
+    const user = confirmToggleUser;
     const action = user.is_active ? "deactivate" : "reactivate";
-    if (!window.confirm(`${action === "deactivate" ? "Deactivate" : "Reactivate"} ${user.name}'s account?`)) return;
     setBusyId(user.id);
     setError("");
     try {
@@ -57,6 +60,7 @@ export default function AdminUsersPage({ currentAdmin }) {
       setError(err.message || `Couldn't ${action} account.`);
     } finally {
       setBusyId(null);
+      setConfirmToggleUser(null);
     }
   };
 
@@ -164,7 +168,7 @@ export default function AdminUsersPage({ currentAdmin }) {
                 {isSuperadmin && (
                   <button
                     type="button"
-                    onClick={() => handleToggleActive(u)}
+                    onClick={() => setConfirmToggleUser(u)}
                     disabled={busyId === u.id}
                     className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                     style={{
@@ -226,6 +230,17 @@ export default function AdminUsersPage({ currentAdmin }) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmToggleUser}
+        title={confirmToggleUser?.is_active ? "Deactivate account" : "Reactivate account"}
+        message={`${confirmToggleUser?.is_active ? "Deactivate" : "Reactivate"} ${confirmToggleUser?.name}'s account?`}
+        confirmLabel={confirmToggleUser?.is_active ? "Deactivate" : "Reactivate"}
+        danger={confirmToggleUser?.is_active}
+        busy={busyId === confirmToggleUser?.id}
+        onCancel={() => setConfirmToggleUser(null)}
+        onConfirm={handleToggleActiveConfirmed}
+      />
     </div>
   );
 }

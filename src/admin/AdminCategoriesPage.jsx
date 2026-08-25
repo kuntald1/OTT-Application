@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Tag, Plus, Trash2, Pencil, Check, X, EyeOff, Eye } from "lucide-react";
 import { fetchAdminCategories, createAdminCategory, updateAdminCategory, deleteAdminCategory } from "./adminApi";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -77,8 +78,10 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const handleDelete = async (cat) => {
-    if (!window.confirm(`Delete "${cat.label}"? Videos already tagged with it keep the tag, but it won't be selectable for new uploads or show in the nav anymore.`)) return;
+  const [confirmDeleteCat, setConfirmDeleteCat] = useState(null);
+
+  const handleDeleteConfirmed = async () => {
+    const cat = confirmDeleteCat;
     setBusyId(cat.id);
     setError("");
     try {
@@ -88,6 +91,7 @@ export default function AdminCategoriesPage() {
       setError(err.message || "Couldn't delete category.");
     } finally {
       setBusyId(null);
+      setConfirmDeleteCat(null);
     }
   };
 
@@ -203,7 +207,7 @@ export default function AdminCategoriesPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(cat)}
+                      onClick={() => setConfirmDeleteCat(cat)}
                       disabled={busyId === cat.id}
                       className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-white/5 disabled:opacity-50"
                       style={{ color: "#f87171" }}
@@ -218,6 +222,17 @@ export default function AdminCategoriesPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteCat}
+        title="Delete category"
+        message={`Delete "${confirmDeleteCat?.label}"? Videos already tagged with it keep the tag, but it won't be selectable for new uploads or show in the nav anymore.`}
+        confirmLabel="Delete"
+        danger
+        busy={busyId === confirmDeleteCat?.id}
+        onCancel={() => setConfirmDeleteCat(null)}
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
 }

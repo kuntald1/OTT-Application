@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { fetchAdminEnquiries, approveEnquiry, rejectEnquiry, deleteEnquiry } from "./adminApi";
 import AdminEnquiryEditForm from "./AdminEnquiryEditForm";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -44,11 +45,21 @@ export default function AdminEventEnquiriesPage() {
     } catch (err) { setActionError(err.message || "Couldn't reject this enquiry."); }
   };
 
-  const handleDelete = async (id, title) => {
-    if (!window.confirm(`Permanently delete the enquiry for "${title}"?\n\nThis removes it and its attachments completely. This cannot be undone.`)) return;
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, title }
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteConfirmed = async () => {
+    setDeleting(true);
     setActionError("");
-    try { await deleteEnquiry(id); load(statusFilter); }
-    catch (err) { setActionError(err.message || "Couldn't delete this enquiry."); }
+    try {
+      await deleteEnquiry(confirmDelete.id);
+      load(statusFilter);
+      setConfirmDelete(null);
+    } catch (err) {
+      setActionError(err.message || "Couldn't delete this enquiry.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -116,7 +127,7 @@ export default function AdminEventEnquiriesPage() {
                   <button onClick={() => setEditingId(editingId === e.id ? null : e.id)} className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5" style={{ borderColor: "rgba(212,175,55,0.4)", color: COLORS.gold }}>
                     {editingId === e.id ? "Close editor" : "Edit"}
                   </button>
-                  <button onClick={() => handleDelete(e.id, e.event_title)} className="flex items-center gap-1 rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5" style={{ borderColor: "#f87171", color: "#f87171" }}>
+                  <button onClick={() => setConfirmDelete({ id: e.id, title: e.event_title })} className="flex items-center gap-1 rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5" style={{ borderColor: "#f87171", color: "#f87171" }}>
                     <Trash2 className="h-3 w-3" /> Delete
                   </button>
                 </div>
@@ -160,6 +171,17 @@ export default function AdminEventEnquiriesPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete enquiry"
+        message={`Permanently delete the enquiry for "${confirmDelete?.title}"? This removes it and its attachments completely. This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        busy={deleting}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { fetchAdminList, createAdminAccount, deactivateAdminAccount } from "./adminApi";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = {
   panel: "#150307",
@@ -41,13 +42,19 @@ export default function AdminAccountsPage({ currentAdmin }) {
     }
   };
 
-  const handleDeactivate = async (adminId) => {
-    if (!window.confirm("Deactivate this admin account? They will no longer be able to log in.")) return;
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState(null);
+  const [deactivating, setDeactivating] = useState(false);
+
+  const handleDeactivateConfirmed = async () => {
+    setDeactivating(true);
     try {
-      await deactivateAdminAccount(adminId);
+      await deactivateAdminAccount(confirmDeactivateId);
       loadAdmins();
+      setConfirmDeactivateId(null);
     } catch (err) {
-      alert(err.message || "Couldn't deactivate this account.");
+      setError(err.message || "Couldn't deactivate this account.");
+    } finally {
+      setDeactivating(false);
     }
   };
 
@@ -139,7 +146,7 @@ export default function AdminAccountsPage({ currentAdmin }) {
               {a.is_active ? (
                 a.id !== currentAdmin.id && (
                   <button
-                    onClick={() => handleDeactivate(a.id)}
+                    onClick={() => setConfirmDeactivateId(a.id)}
                     className="text-xs font-medium hover:opacity-80"
                     style={{ color: "#f87171" }}
                   >
@@ -153,6 +160,17 @@ export default function AdminAccountsPage({ currentAdmin }) {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeactivateId}
+        title="Deactivate admin account"
+        message="Deactivate this admin account? They will no longer be able to log in."
+        confirmLabel="Deactivate"
+        danger
+        busy={deactivating}
+        onCancel={() => setConfirmDeactivateId(null)}
+        onConfirm={handleDeactivateConfirmed}
+      />
     </div>
   );
 }
