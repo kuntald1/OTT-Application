@@ -14,6 +14,9 @@ import {
   fetchMySubscription,
   fetchCommunityRooms,
   createCommunityRoom,
+  fetchMyList,
+  toggleMyListItem,
+  removeMyListItem,
 } from "../api";
 // ---------------------------------------------------------------------------
 // AppContext — the one place that owns:
@@ -48,6 +51,7 @@ function toProfile(user, existingPhoto = null) {
     role: user.role,
     photo: user.profile_photo_url || existingPhoto,
     rewardPoints: user.reward_points_balance ?? 0,
+    can_live_stream: user.can_live_stream ?? false,
   };
 }
 
@@ -137,6 +141,13 @@ export function AppProvider({ children }) {
       setTickets(ticketList.map(toTicketDisplay));
     } catch {
       // Non-fatal — Help Center just shows no tickets if this fails
+    }
+
+    try {
+      const items = await fetchMyList();
+      setMyList(items.map((i) => ({ id: i.item_id, title: i.title, image: i.image_url, meta: i.meta, section: i.section })));
+    } catch {
+      // Non-fatal — My List just shows empty if this fails
     }
 
     await refreshSubscription();
@@ -234,6 +245,7 @@ export function AppProvider({ children }) {
     setIsLoggedIn(false);
     setProfile({ id: null, name: "", email: "", photo: null, role: "User", country: "India" });
     setTickets([]);
+    setMyList([]);
     setIsSubscribed(false);
     setActivePlan(null);
     setActiveDuration(null);
@@ -293,16 +305,32 @@ export function AppProvider({ children }) {
 
   // Requires login first — callers should already have checked isLoggedIn
   // and called requestLogin() if not, but this guards regardless.
+  // Optimistic: updates local state immediately (so the button feels
+  // instant), then syncs to the backend in the background — reverting
+  // the optimistic change if that call fails, so the UI never claims
+  // something is saved when it actually isn't.
   const toggleListItem = useCallback((item) => {
-    setMyList((list) => {
-      const exists = list.some((i) => i.id === item.id);
-      return exists ? list.filter((i) => i.id !== item.id) : [...list, item];
+    const wasInList = myList.some((i) => i.id === item.id);
+    setMyList((list) => (wasInList ? list.filter((i) => i.id !== item.id) : [...list, item]));
+
+    toggleMyListItem(item).catch(() => {
+      // Revert on failure
+      setMyList((list) => {
+        const stillHasIt = list.some((i) => i.id === item.id);
+        if (wasInList && !stillHasIt) return [...list, item]; // put it back
+        if (!wasInList && stillHasIt) return list.filter((i) => i.id !== item.id); // take it back out
+        return list;
+      });
     });
-  }, []);
+  }, [myList]);
 
   const removeFromList = useCallback((id) => {
+    const removedItem = myList.find((i) => i.id === id);
     setMyList((list) => list.filter((i) => i.id !== id));
-  }, []);
+    removeMyListItem(id).catch(() => {
+      if (removedItem) setMyList((list) => (list.some((i) => i.id === id) ? list : [...list, removedItem]));
+    });
+  }, [myList]);
 
   // Help Center — persists the complaint as a real ticket on the backend.
   // Throws on failure so the page can show an error; on success, prepends
