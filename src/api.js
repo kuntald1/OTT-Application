@@ -666,6 +666,13 @@ export function endMyLiveStream(liveStreamId) {
   return request(`/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
 }
 
+// TEMPORARY / TEST-ONLY — flips a stream to "active" without any real
+// broadcast, purely for previewing the Live Now UI. Remove once real
+// Mux end-to-end broadcasting has been tested.
+export function simulateStartMyLiveStream(liveStreamId) {
+  return request(`/videos/live/${liveStreamId}/simulate-start`, { method: "POST", auth: true });
+}
+
 export function deleteMyLiveStream(liveStreamId) {
   return request(`/videos/live/${liveStreamId}`, { method: "DELETE", auth: true });
 }

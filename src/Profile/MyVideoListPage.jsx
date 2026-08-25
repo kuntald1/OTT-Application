@@ -544,7 +544,7 @@ export default function MyVideoListPage({ onBack }) {
               )}
             </div>
 
-            {error && <p className="text-sm font-medium" style={{ color: "#f87171" }}>{error}</p>}
+            {error && <div className="rounded-lg px-3 py-2 text-sm font-medium" style={{ background: "rgba(255,255,255,0.95)", color: "#b91c1c", border: "1px solid rgba(185,28,28,0.3)" }}>{error}</div>}
 
             <button
               type="button"

@@ -129,6 +129,33 @@ def get_live_stream(
     return _to_public_out(live_stream, current_user)
 
 
+@router.post("/{live_stream_id}/simulate-start", response_model=LiveStreamBroadcastInfoOut)
+def simulate_start_my_live_stream(
+    live_stream_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """⚠️ TEMPORARY / TEST-ONLY — same as admin_live_streams.py's
+    version, scoped to the caller's own live streams. Flips status to
+    "active" directly without touching Mux or requiring a real RTMP
+    broadcast, purely so a creator can preview the Live Now UI without
+    OBS. Remove once real end-to-end Mux broadcasting has been tested.
+    """
+    live_stream = (
+        db.query(LiveStream)
+        .filter(LiveStream.id == live_stream_id, LiveStream.uploaded_by_user_id == current_user.id)
+        .first()
+    )
+    if not live_stream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
+
+    live_stream.status = LiveStreamStatus.active
+    live_stream.started_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(live_stream)
+    return _to_broadcast_info(live_stream)
+
+
 @router.post("/{live_stream_id}/end", response_model=LiveStreamBroadcastInfoOut)
 def end_my_live_stream(
     live_stream_id: str,

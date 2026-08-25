@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff, Trash2 } from "lucide-react";
+import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff, Trash2, Play } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream, deleteMyLiveStream } from "../api";
+import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream, deleteMyLiveStream, simulateStartMyLiveStream } from "../api";
 import { useApp } from "../context/AppContext";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
@@ -104,6 +104,21 @@ export default function MyLiveStreamsPage({ onBack }) {
   };
 
   const [confirmEndStream, setConfirmEndStream] = useState(null);
+  const [simulatingId, setSimulatingId] = useState(null);
+
+  const handleSimulateStart = async (stream) => {
+    setSimulatingId(stream.id);
+    setError("");
+    try {
+      await simulateStartMyLiveStream(stream.id);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't simulate start.");
+    } finally {
+      setSimulatingId(null);
+    }
+  };
+
   const [confirmDeleteStream, setConfirmDeleteStream] = useState(null);
 
   const handleEndConfirmed = async () => {
@@ -215,7 +230,11 @@ export default function MyLiveStreamsPage({ onBack }) {
           </div>
         )}
 
-        {error && <p className="mb-4 text-sm" style={{ color: "#f87171" }}>{error}</p>}
+        {error && (
+          <div className="mb-4 rounded-lg px-3 py-2 text-sm" style={{ background: "rgba(255,255,255,0.95)", color: "#b91c1c", border: "1px solid rgba(185,28,28,0.3)" }}>
+            {error}
+          </div>
+        )}
 
         {loading ? (
           <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
@@ -238,10 +257,27 @@ export default function MyLiveStreamsPage({ onBack }) {
                   <CopyableField label="Playback URL" value={s.playback_url} />
 
                   {s.status === "idle" && (
-                    <p className="mt-2 text-xs" style={{ color: "rgba(111,207,151,0.9)" }}>
-                      Ready to broadcast — point OBS (or similar) at the RTMP URL + Stream Key above and press
-                      Start Streaming there any time. No need to create a new event.
-                    </p>
+                    <>
+                      <p className="mt-2 text-xs" style={{ color: "rgba(111,207,151,0.9)" }}>
+                        Ready to broadcast — point OBS (or similar) at the RTMP URL + Stream Key above and press
+                        Start Streaming there any time. No need to create a new event.
+                      </p>
+                      <div className="mt-2 rounded-lg p-2" style={{ background: "rgba(245,158,11,0.08)", border: "1px dashed rgba(245,158,11,0.4)" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateStart(s)}
+                          disabled={simulatingId === s.id}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                          style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
+                        >
+                          <Play className="h-3.5 w-3.5" /> {simulatingId === s.id ? "Starting…" : "Start Streaming"}
+                        </button>
+                        <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,158,11,0.8)" }}>
+                          ⚠️ Temporary / test only — marks this "Live" without a real broadcast, just to preview
+                          the Live Now UI.
+                        </p>
+                      </div>
+                    </>
                   )}
 
                   <div className="mt-3 flex gap-2">

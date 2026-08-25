@@ -188,7 +188,7 @@ export default function RevenuePage({ onBack }) {
               className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
             />
-            {error && <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}
+            {error && <div className="mt-2 rounded-lg px-3 py-1.5 text-xs font-medium" style={{ background: "rgba(255,255,255,0.95)", color: "#b91c1c", border: "1px solid rgba(185,28,28,0.3)" }}>{error}</div>}
             <div className="mt-3 flex justify-end gap-3">
               <button onClick={() => setShowWithdrawForm(false)} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
               <button
