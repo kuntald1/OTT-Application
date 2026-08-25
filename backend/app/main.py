@@ -42,6 +42,13 @@ app.include_router(exchange_rate.router, prefix="/api")
 app.include_router(stripe_payments.router, prefix="/api")
 app.include_router(reward_config.router, prefix="/api")
 app.include_router(admin_auth.router, prefix="/api")
+# live_streams MUST be registered before videos — GET /videos/live is a
+# 2-segment path, same shape as videos.py's GET /{video_id} catch-all,
+# and Starlette matches routes strictly in registration order (not by
+# specificity), so registering videos first would swallow "live" as a
+# video_id and 500 on the UUID cast. Same reasoning as /videos/search
+# needing to be declared before /{video_id} within videos.py itself.
+app.include_router(live_streams.router, prefix="/api")
 app.include_router(videos.router, prefix="/api")
 app.include_router(admin_videos.router, prefix="/api")
 app.include_router(admin_event_enquiries.router, prefix="/api")
@@ -56,7 +63,6 @@ app.include_router(watch_progress.router, prefix="/api")
 app.include_router(admin_ads.router, prefix="/api")
 app.include_router(recommendations.router, prefix="/api")
 app.include_router(admin_ai.router, prefix="/api")
-app.include_router(live_streams.router, prefix="/api")
 app.include_router(admin_live_streams.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(admin_users.router, prefix="/api")
