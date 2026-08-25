@@ -10,6 +10,18 @@ from app.mux_services import verify_mux_webhook_signature
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
+@router.get("/mux", status_code=status.HTTP_204_NO_CONTENT)
+def mux_webhook_health_check():
+    """Some webhook dashboards (including Mux's own "Test webhook"
+    reachability check) send a plain GET before relying on the URL for
+    real events. This just confirms the endpoint exists and is
+    reachable — it does nothing else, and carries no signature check
+    since there's no event data to verify. Actual live-stream state
+    changes only ever arrive via the signature-verified POST below.
+    """
+    return
+
+
 @router.post("/mux", status_code=status.HTTP_204_NO_CONTENT)
 async def handle_mux_webhook(request: Request, db: Session = Depends(get_db)):
     """Mux calls this whenever a live stream's broadcast state changes.
