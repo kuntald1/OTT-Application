@@ -443,6 +443,13 @@ export function endAdminLiveStream(liveStreamId) {
   return request(`/admin/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
 }
 
+// TEMPORARY / TEST-ONLY — flips a stream to "active" without any real
+// broadcast, purely for previewing the Live Now UI. Remove once real
+// Mux end-to-end broadcasting has been tested.
+export function simulateStartAdminLiveStream(liveStreamId) {
+  return request(`/admin/videos/live/${liveStreamId}/simulate-start`, { method: "POST", auth: true });
+}
+
 export function deleteAdminLiveStream(liveStreamId) {
   return request(`/admin/videos/live/${liveStreamId}`, { method: "DELETE", auth: true });
 }

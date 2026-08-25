@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Radio, Plus, Copy, Check, Square, Trash2, Eye, EyeOff, Pencil, X } from "lucide-react";
-import { createAdminLiveStream, fetchAdminLiveStreams, endAdminLiveStream, deleteAdminLiveStream, updateAdminLiveStream } from "./adminApi";
+import { Radio, Plus, Copy, Check, Square, Trash2, Eye, EyeOff, Pencil, X, Play } from "lucide-react";
+import { createAdminLiveStream, fetchAdminLiveStreams, endAdminLiveStream, deleteAdminLiveStream, updateAdminLiveStream, simulateStartAdminLiveStream } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
@@ -117,6 +117,20 @@ export default function AdminLiveStreamsPage() {
   };
 
   const [confirmAction, setConfirmAction] = useState(null); // { type: "end" | "delete", stream }
+  const [simulatingId, setSimulatingId] = useState(null);
+
+  const handleSimulateStart = async (stream) => {
+    setSimulatingId(stream.id);
+    setError("");
+    try {
+      await simulateStartAdminLiveStream(stream.id);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't simulate start.");
+    } finally {
+      setSimulatingId(null);
+    }
+  };
 
   const handleEndConfirmed = async () => {
     const stream = confirmAction.stream;
@@ -247,10 +261,27 @@ export default function AdminLiveStreamsPage() {
                 <CopyableField label="Playback URL" value={s.playback_url} />
 
                 {s.status === "idle" && (
-                  <p className="mt-2 text-xs" style={{ color: "rgba(111,207,151,0.9)" }}>
-                    Ready to broadcast — the RTMP URL + Stream Key above go live again the moment they're
-                    used, no need to create a new event.
-                  </p>
+                  <>
+                    <p className="mt-2 text-xs" style={{ color: "rgba(111,207,151,0.9)" }}>
+                      Ready to broadcast — the RTMP URL + Stream Key above go live again the moment they're
+                      used, no need to create a new event.
+                    </p>
+                    <div className="mt-2 rounded-lg p-2" style={{ background: "rgba(245,158,11,0.08)", border: "1px dashed rgba(245,158,11,0.4)" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateStart(s)}
+                        disabled={simulatingId === s.id}
+                        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                        style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
+                      >
+                        <Play className="h-3.5 w-3.5" /> {simulatingId === s.id ? "Starting…" : "Start Streaming"}
+                      </button>
+                      <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,158,11,0.8)" }}>
+                        ⚠️ Temporary / test only — marks this "Live" without a real broadcast, just to preview
+                        the Live Now UI. Remove once real Mux broadcasting is tested end-to-end.
+                      </p>
+                    </div>
+                  </>
                 )}
 
                 <div className="mt-3 flex gap-2">

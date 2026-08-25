@@ -90,6 +90,32 @@ def update_live_stream(
     return _to_broadcast_info(live_stream)
 
 
+@router.post("/{live_stream_id}/simulate-start", response_model=LiveStreamBroadcastInfoOut)
+def simulate_start_live_stream(
+    live_stream_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """⚠️ TEMPORARY / TEST-ONLY — flips status to "active" directly in
+    theomy's own database WITHOUT touching Mux or requiring a real RTMP
+    broadcast. Exists purely so the "Live Now" row, floating badge, and
+    player UI can be previewed/tested without OBS or a real broadcast
+    running. In real use, status only ever becomes "active" via the
+    signature-verified Mux webhook (see webhooks.py) when a genuine
+    broadcast starts — this endpoint bypasses that entirely and should
+    be removed once real end-to-end Mux broadcasting has been tested.
+    """
+    live_stream = db.query(LiveStream).filter(LiveStream.id == live_stream_id).first()
+    if not live_stream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
+
+    live_stream.status = LiveStreamStatus.active
+    live_stream.started_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(live_stream)
+    return _to_broadcast_info(live_stream)
+
+
 @router.post("/{live_stream_id}/end", response_model=LiveStreamBroadcastInfoOut)
 def end_any_live_stream(
     live_stream_id: str,
