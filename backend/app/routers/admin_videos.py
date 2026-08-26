@@ -58,7 +58,7 @@ def list_videos_for_review(
     if status_filter != "all":
         query = query.filter(Video.status == VideoStatus(status_filter))
     videos = query.order_by(Video.created_at.desc()).all()
-    return [_to_out(v, db) for v in videos]
+    return [_to_out(v, db, force_access=True) for v in videos]
 
 
 @router.put("/{video_id}", response_model=VideoOut)
@@ -79,7 +79,7 @@ def edit_video(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = _update_video_core(video, payload, db)
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/{video_id}/approve", response_model=VideoOut)
@@ -99,7 +99,7 @@ def approve_video(
     db.refresh(video)
     compute_and_store_embedding(video, db)  # best-effort — see its docstring
     _notify_video_uploader(video, db, "approved")
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/{video_id}/reject", response_model=VideoOut)
@@ -118,7 +118,7 @@ def reject_video(
     db.commit()
     db.refresh(video)
     _notify_video_uploader(video, db, "rejected", reason=payload.admin_note)
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/{video_id}/disable", response_model=VideoOut)
@@ -140,7 +140,7 @@ def disable_video(
     video.status = VideoStatus.disabled
     db.commit()
     db.refresh(video)
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/{video_id}/enable", response_model=VideoOut)
@@ -158,7 +158,7 @@ def enable_video(
     video.status = VideoStatus.published
     db.commit()
     db.refresh(video)
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -274,7 +274,7 @@ def create_video_as_admin(
             auto_publish=True,
         )
     compute_and_store_embedding(video, db)  # best-effort — auto-published, so this is "on publish" too
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/{video_id}/upload-file", response_model=VideoOut)
@@ -293,7 +293,7 @@ async def upload_video_file_as_admin(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _upload_to_bunny(video, file, db)
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/{video_id}/upload-poster", response_model=VideoOut)
@@ -307,7 +307,7 @@ async def upload_video_poster_as_admin(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _save_poster_file(video, file, db)
-    return _to_out(video, db)
+    return _to_out(video, db, force_access=True)
 
 
 @router.post("/people/{person_id}/upload-photo", response_model=PersonOut)

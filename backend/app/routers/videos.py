@@ -164,7 +164,7 @@ def _check_video_access(video: Video, user: User | None, db: Session) -> tuple[b
     return False, "subscription_required"
 
 
-def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
+def _to_out(video: Video, db: Session, viewer: User | None = None, force_access: bool = False) -> VideoOut:
     if video.bunny_video_id and video.duration_seconds is None:
         _fetch_and_cache_duration(video, db)
 
@@ -210,7 +210,10 @@ def _to_out(video: Video, db: Session, viewer: User | None = None) -> VideoOut:
         .order_by(VideoCrew.display_order.asc())
         .all()
     )
-    has_access, access_reason = _check_video_access(video, viewer, db)
+    if force_access:
+        has_access, access_reason = True, None
+    else:
+        has_access, access_reason = _check_video_access(video, viewer, db)
     likes_count = db.query(VideoLike).filter(VideoLike.video_id == video.id).count()
     liked_by_me = bool(
         viewer and db.query(VideoLike).filter(VideoLike.video_id == video.id, VideoLike.user_id == viewer.id).first()
