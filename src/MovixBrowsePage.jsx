@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "./the
 import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById } from "./api";
+import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories } from "./api";
 
 import filmsPoster from "./assets/posters/films.jpg";
 import seriesPoster from "./assets/posters/series.jpg";
@@ -146,6 +146,15 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
   // Real, published videos with section "archive" — fetched from the
   // actual backend, shown as their own row at the top using the same
   // poster-card GenreRow visual as the demo rows below.
+  // Admin-curated "Special Categories" — see VideoStreaming/VideoBrowsePage.jsx's
+  // identical block for the full reasoning. Requested with section="archive".
+  const [specialCategories, setSpecialCategories] = useState([]);
+  useEffect(() => {
+    fetchSpecialCategories("archive")
+      .then(setSpecialCategories)
+      .catch(() => setSpecialCategories([]));
+  }, []);
+
   const [realVideos, setRealVideos] = useState([]);
   useEffect(() => {
     fetchPublishedVideos("archive")
@@ -192,6 +201,22 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       }}
     >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {specialCategories.map((sc) => (
+          <GenreRow
+            key={sc.id}
+            category={sc.title}
+            cards={sc.videos.map((v) => ({
+              id: v.id,
+              title: v.title,
+              poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+              isReal: true,
+              videoId: v.id,
+              trailerUrl: v.trailer_playback_url || null,
+            }))}
+            onSelect={handleSelectCard}
+            t={t}
+          />
+        ))}
         {realVideos.length > 0 && (
           <GenreRow category="Recently Uploaded" cards={realVideos} onSelect={handleSelectCard} t={t} />
         )}

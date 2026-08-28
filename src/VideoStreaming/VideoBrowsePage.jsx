@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -125,6 +125,19 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
       .catch(() => setRealVideosByCategory({}));
   }, []);
 
+  // Admin-curated "Special Categories" (e.g. "Sunday Special") — shown
+  // above every other row, including Continue Watching. Public, no
+  // login required (unlike Continue Watching below). The backend
+  // already filters to only currently-active (date-window, not
+  // disabled) rows for this section, so anything returned here is
+  // meant to be shown as-is.
+  const [specialCategories, setSpecialCategories] = useState([]);
+  useEffect(() => {
+    fetchSpecialCategories("play")
+      .then(setSpecialCategories)
+      .catch(() => setSpecialCategories([]));
+  }, []);
+
   // "Continue Watching" — real, from WatchProgress, not a demo. Only
   // fetched when logged in (the endpoint requires auth anyway).
   const [continueWatching, setContinueWatching] = useState([]);
@@ -194,6 +207,21 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {specialCategories.map((sc) => (
+          <GenreRow
+            key={sc.id}
+            category={sc.title}
+            cards={sc.videos.map((v) => ({
+              id: v.id,
+              title: v.title,
+              poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+              isReal: true,
+              videoId: v.id,
+              trailerUrl: v.trailer_playback_url || null,
+            }))}
+            onSelect={handleSelectCard}
+          />
+        ))}
         {continueWatching.length > 0 && (
           <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
         )}
