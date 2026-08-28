@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronDown } from "lucide-react";
-import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint } from "./adminApi";
+import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
+import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle } from "./adminApi";
 import { fetchCategoryOptions } from "../api";
+import SubtitleManager from "../shared/SubtitleManager";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -89,7 +90,7 @@ function makeEmptyCrew() {
   };
 }
 
-export default function AdminVideoEditForm({ video, onSave, onCancel }) {
+export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpdated }) {
   const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
 
   useEffect(() => {
@@ -97,6 +98,68 @@ export default function AdminVideoEditForm({ video, onSave, onCancel }) {
       if (cats.length > 0) setCategories(cats);
     }).catch(() => {});
   }, []);
+
+  // File uploads (video, poster, trailer, subtitles) — admin can
+  // replace any of these regardless of the video's current status
+  // (pending, published, disabled, rejected), unlike the text-field
+  // edits below which go through Save changes. Each upload propagates
+  // immediately via onFileUpdated so the rest of the page (and this
+  // form's own preview) reflects it without needing Save changes.
+  const [uploadingVideoFile, setUploadingVideoFile] = useState(false);
+  const [videoFileProgress, setVideoFileProgress] = useState(0);
+  const [uploadingPoster, setUploadingPoster] = useState(false);
+  const [uploadingTrailer, setUploadingTrailer] = useState(false);
+  const [trailerProgress, setTrailerProgress] = useState(0);
+  const [fileError, setFileError] = useState("");
+
+  const handleVideoFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileError("");
+    setVideoFileProgress(0);
+    setUploadingVideoFile(true);
+    try {
+      const updated = await uploadAdminVideoFile(video.id, file, (pct) => setVideoFileProgress(pct));
+      onFileUpdated?.(updated);
+    } catch (err) {
+      setFileError(err.message || "Couldn't upload video file. Please try again.");
+    } finally {
+      setUploadingVideoFile(false);
+      setVideoFileProgress(0);
+    }
+  };
+
+  const handlePosterSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileError("");
+    setUploadingPoster(true);
+    try {
+      const updated = await uploadAdminVideoPoster(video.id, file);
+      onFileUpdated?.(updated);
+    } catch (err) {
+      setFileError(err.message || "Couldn't upload poster. Please try again.");
+    } finally {
+      setUploadingPoster(false);
+    }
+  };
+
+  const handleTrailerSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileError("");
+    setTrailerProgress(0);
+    setUploadingTrailer(true);
+    try {
+      const updated = await uploadAdminVideoTrailer(video.id, file, (pct) => setTrailerProgress(pct));
+      onFileUpdated?.(updated);
+    } catch (err) {
+      setFileError(err.message || "Couldn't upload trailer. Please try again.");
+    } finally {
+      setUploadingTrailer(false);
+      setTrailerProgress(0);
+    }
+  };
 
   const [form, setForm] = useState({
     title: video.title, description: video.description || "", section: video.section,
@@ -175,6 +238,66 @@ export default function AdminVideoEditForm({ video, onSave, onCancel }) {
 
   return (
     <div className="mt-3 flex flex-col gap-3 rounded-lg p-3" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(212,175,55,0.2)" }}>
+      <div className="flex flex-col gap-2 rounded-lg p-3" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(245,235,221,0.1)" }}>
+        <p className="text-xs font-semibold uppercase" style={{ color: "rgba(245,235,221,0.5)" }}>Files</p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {uploadingVideoFile ? (
+            <div className="w-48">
+              <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
+                <span>{videoFileProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                <span>{videoFileProgress}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${videoFileProgress}%`, background: COLORS.gold }} />
+              </div>
+            </div>
+          ) : (
+            <label
+              className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+              style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {video.has_file ? "Replace video file" : "Upload video file"}
+              <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo" className="hidden" onChange={handleVideoFileSelect} />
+            </label>
+          )}
+
+          <label
+            className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+            style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            {uploadingPoster ? "Uploading poster…" : video.poster_image_url ? "Change poster" : "Upload poster"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPoster} onChange={handlePosterSelect} />
+          </label>
+
+          {uploadingTrailer ? (
+            <div className="w-48">
+              <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
+                <span>{trailerProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
+                <span>{trailerProgress}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${trailerProgress}%`, background: COLORS.gold }} />
+              </div>
+            </div>
+          ) : (
+            <label
+              className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+              style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {video.trailer_playback_url ? "Replace trailer (hover preview)" : "Upload trailer (hover preview)"}
+              <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo" className="hidden" onChange={handleTrailerSelect} />
+            </label>
+          )}
+        </div>
+        {fileError && <p className="text-xs font-medium" style={{ color: "#f87171" }}>{fileError}</p>}
+
+        <SubtitleManager video={video} addFn={addAdminVideoSubtitle} deleteFn={deleteAdminVideoSubtitle} onUpdated={(updated) => onFileUpdated?.(updated)} />
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
           <label style={labelStyle}>Title</label>

@@ -260,6 +260,7 @@ export default function AdminVideoReviewPage() {
                   <AdminVideoEditForm
                     video={v}
                     onCancel={() => setEditingVideoId(null)}
+                    onFileUpdated={(updated) => setVideos((list) => list.map((item) => (item.id === updated.id ? updated : item)))}
                     onSave={(updated) => {
                       setVideos((list) => list.map((item) => (item.id === updated.id ? updated : item)));
                       setEditingVideoId(null);
