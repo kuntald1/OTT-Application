@@ -859,6 +859,12 @@ class Video(Base):
 
     # Filled in during Phase 2, once real Bunny Stream upload exists
     bunny_video_id = Column(String(255), nullable=True)
+    # A SEPARATE Bunny video upload (its own bunny_video_id), used only
+    # for the silent hover-preview on video cards — never the same
+    # asset as the real feature (bunny_video_id above). Never
+    # ad-gated: has_ads/ad cue points only ever apply to the real
+    # content, a trailer plays clean regardless of that setting.
+    trailer_bunny_video_id = Column(String(255), nullable=True)
     # Real runtime, fetched from Bunny once encoding finishes — never a
     # manually-typed value, since a Creator guessing/mistyping a runtime
     # would be less trustworthy than the actual file's real duration.

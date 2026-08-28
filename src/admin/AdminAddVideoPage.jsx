@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle, Sparkles } from "lucide-react";
-import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata } from "./adminApi";
+import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoTrailer, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata } from "./adminApi";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions } from "../api";
 
@@ -296,6 +296,27 @@ export default function AdminAddVideoPage() {
     } finally {
       setUploadingFileFor(null);
       setUploadProgress(0);
+    }
+  };
+
+  const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
+  const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
+  const [trailerUploadError, setTrailerUploadError] = useState("");
+
+  const handleTrailerSelect = async (videoId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTrailerUploadError("");
+    setTrailerUploadProgress(0);
+    setUploadingTrailerFor(videoId);
+    try {
+      const updated = await uploadAdminVideoTrailer(videoId, file, (pct) => setTrailerUploadProgress(pct));
+      setAddedVideos((prev) => prev.map((v) => (v.id === videoId ? updated : v)));
+    } catch (err) {
+      setTrailerUploadError(err.message || "Couldn't upload trailer. Please try again.");
+    } finally {
+      setUploadingTrailerFor(null);
+      setTrailerUploadProgress(0);
     }
   };
 
@@ -906,6 +927,37 @@ export default function AdminAddVideoPage() {
                           onChange={(e) => handlePosterSelect(v.id, e)}
                         />
                       </label>
+
+                      {uploadingTrailerFor === v.id ? (
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                            <span>{trailerUploadProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
+                            <span>{trailerUploadProgress}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${trailerUploadProgress}%`, background: COLORS.gold }} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label
+                            className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                            style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            {v.trailer_playback_url ? "Replace trailer (hover preview)" : "Upload trailer (hover preview)"}
+                            <input
+                              type="file"
+                              accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
+                              className="hidden"
+                              onChange={(e) => handleTrailerSelect(v.id, e)}
+                            />
+                          </label>
+                          {trailerUploadError && uploadingTrailerFor === null && (
+                            <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{trailerUploadError}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

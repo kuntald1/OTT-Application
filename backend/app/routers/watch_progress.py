@@ -61,6 +61,12 @@ def _thumbnail_url(video: Video) -> str | None:
     return f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/thumbnail.jpg"
 
 
+def _trailer_url(video: Video) -> str | None:
+    if not video.trailer_bunny_video_id:
+        return None
+    return f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.trailer_bunny_video_id}/playlist.m3u8"
+
+
 def _progress_percent(position: int, duration: int | None) -> int | None:
     if not duration or duration <= 0:
         return None
@@ -95,6 +101,7 @@ def get_continue_watching(
             title=video.title,
             poster_image_url=video.poster_image_url,
             thumbnail_url=_thumbnail_url(video),
+            trailer_playback_url=_trailer_url(video),
             duration_seconds=video.duration_seconds,
             position_seconds=progress.position_seconds,
             progress_percent=_progress_percent(progress.position_seconds, video.duration_seconds),

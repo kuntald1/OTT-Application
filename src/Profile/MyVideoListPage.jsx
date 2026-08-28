@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoFile, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
+import { uploadVideo, uploadVideoFile, uploadVideoTrailer, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
@@ -34,7 +34,12 @@ const STATUS_STYLES = {
 };
 
 function makeEmptyTier() {
-  return { key: Math.random().toString(36).slice(2), min_minutes: "", max_minutes: "", rate_per_minute_inr: "" };
+  // Creators no longer set their own revenue-share rate (see the
+  // hidden Revenue-Share Tiers section below) — this default (1
+  // minute to unlimited, a placeholder rate) is what actually gets
+  // submitted silently. Admin sets the real rate during review, via
+  // Admin > Video Review's Edit form, which still has this field.
+  return { key: Math.random().toString(36).slice(2), min_minutes: "1", max_minutes: "", rate_per_minute_inr: "1.20" };
 }
 function makeEmptyCast() {
   return {
@@ -245,6 +250,27 @@ export default function MyVideoListPage({ onBack }) {
     }
   };
 
+  const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
+  const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
+  const [trailerUploadError, setTrailerUploadError] = useState("");
+
+  const handleTrailerSelect = async (videoId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTrailerUploadError("");
+    setTrailerUploadProgress(0);
+    setUploadingTrailerFor(videoId);
+    try {
+      await uploadVideoTrailer(videoId, file, (pct) => setTrailerUploadProgress(pct));
+      loadVideos();
+    } catch (err) {
+      setTrailerUploadError(err.message || "Couldn't upload trailer. Please try again.");
+    } finally {
+      setUploadingTrailerFor(null);
+      setTrailerUploadProgress(0);
+    }
+  };
+
   const handlePosterSelect = async (videoId, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -406,6 +432,7 @@ export default function MyVideoListPage({ onBack }) {
 
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
+            {false && (
             <div>
               <label style={labelStyle}>Revenue-Share Tiers * (up to 5)</label>
               <div className="flex flex-col gap-2">
@@ -429,8 +456,7 @@ export default function MyVideoListPage({ onBack }) {
                 </button>
               )}
             </div>
-
-            <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+            )}
 
             <div>
               <label style={labelStyle}>Cast (optional, up to 10)</label>
@@ -743,6 +769,37 @@ export default function MyVideoListPage({ onBack }) {
                           onChange={(e) => handlePosterSelect(v.id, e)}
                         />
                       </label>
+
+                      {uploadingTrailerFor === v.id ? (
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                            <span>{trailerUploadProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
+                            <span>{trailerUploadProgress}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${trailerUploadProgress}%`, background: CTA_GRADIENT }} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label
+                            className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                            style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            {v.trailer_playback_url ? "Replace trailer (hover preview)" : "Upload trailer (hover preview)"}
+                            <input
+                              type="file"
+                              accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo"
+                              className="hidden"
+                              onChange={(e) => handleTrailerSelect(v.id, e)}
+                            />
+                          </label>
+                          {trailerUploadError && uploadingTrailerFor === null && (
+                            <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{trailerUploadError}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

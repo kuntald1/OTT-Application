@@ -303,6 +303,38 @@ export function uploadVideoFile(videoId, file, onProgress) {
   });
 }
 
+export function uploadVideoTrailer(videoId, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE_URL}/videos/${videoId}/upload-trailer`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload trailer. Please try again."));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during upload. Please try again."));
+
+    xhr.send(formData);
+  });
+}
+
 export async function uploadVideoPoster(videoId, file) {
   const token = getToken();
   const formData = new FormData();

@@ -8,7 +8,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person
 from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
-from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _save_poster_file
+from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file
 from app.routers.recommendations import compute_and_store_embedding
 from app.routers.people import _save_person_photo
 from app.notifications import (
@@ -293,6 +293,20 @@ async def upload_video_file_as_admin(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _upload_to_bunny(video, file, db)
+    return _to_out(video, db, force_access=True)
+
+
+@router.post("/{video_id}/upload-trailer", response_model=VideoOut)
+async def upload_video_trailer_as_admin(
+    video_id: str,
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = await _upload_trailer_to_bunny(video, file, db)
     return _to_out(video, db, force_access=True)
 
 

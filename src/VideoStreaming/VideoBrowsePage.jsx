@@ -113,6 +113,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
             poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
             isReal: true,
             videoId: v.id,
+            trailerUrl: v.trailer_playback_url || null,
           };
           (v.categories || []).forEach((cat) => {
             if (!grouped[cat]) grouped[cat] = [];
@@ -142,6 +143,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
             isReal: true,
             videoId: v.video_id,
             progressPercent: v.progress_percent,
+            trailerUrl: v.trailer_playback_url || null,
           }))
         );
       })
@@ -165,6 +167,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
             id: v.id,
             title: v.title,
             poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+            trailerUrl: v.trailer_playback_url || null,
             isReal: true,
             videoId: v.id,
           }))
@@ -275,6 +278,96 @@ function useReveal() {
   return [ref, visible];
 }
 
+// ---------------------------------------------------------------------------
+// HoverTrailerPreview — the poster by default; on hover, if a trailer
+// exists, starts playing it (muted, no controls, no ads — trailers
+// never carry ad cue points) with the title overlaid, after a short
+// delay so a quick mouse pass-by doesn't trigger playback. Reuses the
+// same hls.js loader as AdEnabledVideoPlayer.
+// ---------------------------------------------------------------------------
+function HoverTrailerPreview({ poster, trailerUrl, title }) {
+  const videoRef = useRef(null);
+  const [hovering, setHovering] = useState(false);
+  const [trailerReady, setTrailerReady] = useState(false);
+  const hoverTimerRef = useRef(null);
+  const hlsRef = useRef(null);
+
+  const startHover = () => {
+    if (!trailerUrl) return;
+    hoverTimerRef.current = setTimeout(() => setHovering(true), 400);
+  };
+  const endHover = () => {
+    clearTimeout(hoverTimerRef.current);
+    setHovering(false);
+  };
+
+  useEffect(() => {
+    if (!hovering || !trailerUrl) return;
+    let cancelled = false;
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    async function playTrailer() {
+      try {
+        if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+          videoEl.src = trailerUrl;
+          videoEl.play().catch(() => {});
+          if (!cancelled) setTrailerReady(true);
+        } else {
+          await loadScriptOnce("https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js", () => !!window.Hls);
+          if (cancelled || !window.Hls || !window.Hls.isSupported()) return;
+          const hls = new window.Hls();
+          hls.loadSource(trailerUrl);
+          hls.attachMedia(videoEl);
+          hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+            if (cancelled) return;
+            videoEl.play().catch(() => {});
+            setTrailerReady(true);
+          });
+          hlsRef.current = hls;
+        }
+      } catch (e) {
+        // Trailer failed to load — just stays on the poster, no error shown (low-stakes, decorative feature)
+      }
+    }
+    playTrailer();
+
+    return () => {
+      cancelled = true;
+      if (hlsRef.current) { try { hlsRef.current.destroy(); } catch (e) {} hlsRef.current = null; }
+      videoEl.pause();
+      setTrailerReady(false);
+    };
+  }, [hovering, trailerUrl]);
+
+  return (
+    <div className="absolute inset-0" onMouseEnter={startHover} onMouseLeave={endHover}>
+      <img
+        src={poster}
+        alt=""
+        draggable={false}
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+        style={{ opacity: hovering && trailerReady ? 0 : 1, transition: "opacity 300ms" }}
+      />
+      {hovering && trailerUrl && (
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          loop
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ opacity: trailerReady ? 1 : 0, transition: "opacity 300ms" }}
+        />
+      )}
+      {hovering && trailerReady && title && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+          <p className="truncate text-sm font-semibold text-white">{title}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GenreRow({ category, cards, onSelect }) {
   const [ref, visible] = useReveal();
   const scrollerRef = React.useRef(null);
@@ -357,12 +450,7 @@ function GenreRow({ category, cards, onSelect }) {
                 className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
                 style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
               >
-                <img
-                  src={card.poster}
-                  alt=""
-                  draggable={false}
-                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
+                <HoverTrailerPreview poster={card.poster} trailerUrl={card.trailerUrl} title={card.title} />
                 <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 {typeof card.progressPercent === "number" && (
                   <div className="absolute inset-x-0 bottom-0 h-1 bg-black/40">
@@ -617,13 +705,20 @@ function loadScriptOnce(src, isLoadedCheck) {
   });
 }
 
-function AdEnabledVideoPlayer({ video, poster }) {
+function AdEnabledVideoPlayer({ video, poster, onAdPlayingChange, resumeSeconds }) {
   const videoRef = useRef(null);
   const adContainerRef = useRef(null);
   const wrapperRef = useRef(null);
   const [adPlaying, setAdPlaying] = useState(false);
   const [loadError, setLoadError] = useState("");
   const state = useRef({ playedOffsets: new Set() }).current;
+
+  // Tell the parent every time ad-vs-content state flips, so its
+  // revenue heartbeat timer can exclude ad-watching time — see the
+  // useEffect below and RealDetailModal's heartbeat effect.
+  useEffect(() => {
+    onAdPlayingChange?.(adPlaying);
+  }, [adPlaying, onAdPlayingChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -651,6 +746,19 @@ function AdEnabledVideoPlayer({ video, poster }) {
         } else {
           setLoadError("This browser can't play this video's format.");
           return;
+        }
+
+        // Resume from where the viewer left off — this is what makes
+        // "Continue Watching" actually resume for ad-enabled videos
+        // (the Bunny iframe path handles this server-side via
+        // embed_url's ?t= param; this native player needs to seek
+        // itself). Waits for metadata so currentTime actually sticks
+        // instead of being silently ignored pre-load.
+        if (resumeSeconds > 5) {
+          const seekToResume = () => {
+            try { videoEl.currentTime = resumeSeconds; } catch (e) {}
+          };
+          videoEl.addEventListener("loadedmetadata", seekToResume, { once: true });
         }
 
         const google = window.google;
@@ -814,6 +922,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
             id: v.id,
             title: v.title,
             poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+            trailerUrl: v.trailer_playback_url || null,
             isReal: true,
             videoId: v.id,
           }))
@@ -865,13 +974,42 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
   // ever credits the INCREMENTAL amount when a session beats the
   // viewer's previous best, so an inflated estimate from, say, a
   // backgrounded tab doesn't runaway-credit anything real).
+  //
+  // For ad-enabled videos (AdEnabledVideoPlayer), this clock EXCLUDES
+  // ad-watching time — it accumulates only while content is actually
+  // playing, freezing whenever an ad is on screen and resuming right
+  // after (see handleAdPlayingChange below and the ref-based
+  // accumulator). Without this, a 36s video with 30s of ads would
+  // wrongly report 66s of "watch time" and pay out on ad time as if
+  // it were content.
+  const contentSecondsRef = useRef(0);
+  const segmentStartRef = useRef(null);
+
+  const handleAdPlayingChange = React.useCallback((isAdPlaying) => {
+    if (isAdPlaying) {
+      if (segmentStartRef.current !== null) {
+        contentSecondsRef.current += (Date.now() - segmentStartRef.current) / 1000;
+        segmentStartRef.current = null; // frozen — ad is on screen
+      }
+    } else if (segmentStartRef.current === null) {
+      segmentStartRef.current = Date.now(); // resume the content-only clock
+    }
+  }, []);
+
   useEffect(() => {
     if (!playing || !canPlay) return;
     const sessionToken = getPlaybackSessionToken();
     const resumeOffsetSeconds = video?.resume_position_seconds || 0;
-    const playStartedAt = Date.now();
+    contentSecondsRef.current = 0;
+    segmentStartRef.current = Date.now(); // starts unfrozen — pre-roll (if any) flips this via handleAdPlayingChange
+
+    const currentContentSeconds = () => {
+      const liveSegment = segmentStartRef.current !== null ? (Date.now() - segmentStartRef.current) / 1000 : 0;
+      return contentSecondsRef.current + liveSegment;
+    };
+
     const sendHeartbeat = () => {
-      const elapsedSeconds = Math.round((Date.now() - playStartedAt) / 1000);
+      const elapsedSeconds = Math.round(currentContentSeconds());
       if (elapsedSeconds > 0) {
         // Revenue heartbeat stays session-relative by design (see
         // VideoWatchRecord's "max single-session view" rule) — it
@@ -983,7 +1121,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
         <div className="relative aspect-video w-full" style={{ background: "#000" }}>
           {playing && canPlay ? (
             video.ad_cue_points && video.ad_cue_points.length > 0 ? (
-              <AdEnabledVideoPlayer video={video} poster={card.poster} />
+              <AdEnabledVideoPlayer video={video} poster={card.poster} onAdPlayingChange={handleAdPlayingChange} resumeSeconds={video?.resume_position_seconds || 0} />
             ) : (
               <iframe
                 src={video.embed_url}
@@ -995,7 +1133,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
             )
           ) : (
             <>
-              {(card.poster) && <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+              {(card.poster) && <HoverTrailerPreview poster={card.poster} trailerUrl={video?.trailer_playback_url} title="" />}
               <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
               <h2 className="absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ color: T.text }}>{card.title}</h2>
             </>

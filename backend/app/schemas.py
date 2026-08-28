@@ -588,6 +588,7 @@ class ContinueWatchingOut(BaseModel):
     title: str
     poster_image_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    trailer_playback_url: Optional[str] = None
     position_seconds: int
     duration_seconds: Optional[int] = None
     progress_percent: Optional[int] = None
@@ -910,6 +911,10 @@ class VideoOut(BaseModel):
     embed_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     preview_url: Optional[str] = None
+    # Never access-gated (unlike playback_url/embed_url above) — a
+    # trailer is meant to be freely watchable to entice a subscription/
+    # purchase, so this populates regardless of has_access.
+    trailer_playback_url: Optional[str] = None
     created_at: datetime
     published_at: Optional[datetime] = None
 
