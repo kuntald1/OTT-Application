@@ -360,8 +360,8 @@ function HoverTrailerPreview({ poster, trailerUrl, title }) {
         />
       )}
       {hovering && trailerReady && title && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-          <p className="truncate text-sm font-semibold text-white">{title}</p>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10">
+          <p className="truncate text-xl font-bold text-white sm:text-2xl">{title}</p>
         </div>
       )}
     </div>
@@ -443,7 +443,7 @@ function GenreRow({ category, cards, onSelect }) {
               type="button"
               key={i}
               onClick={() => onCardClick(card)}
-              className="group relative w-56 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-64 lg:w-72"
+              className="group relative w-64 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-72 lg:w-80"
               style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start" }}
             >
               <div
@@ -705,7 +705,7 @@ function loadScriptOnce(src, isLoadedCheck) {
   });
 }
 
-function AdEnabledVideoPlayer({ video, poster, onAdPlayingChange, resumeSeconds }) {
+function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSeconds }) {
   const videoRef = useRef(null);
   const adContainerRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -713,12 +713,31 @@ function AdEnabledVideoPlayer({ video, poster, onAdPlayingChange, resumeSeconds 
   const [loadError, setLoadError] = useState("");
   const state = useRef({ playedOffsets: new Set() }).current;
 
-  // Tell the parent every time ad-vs-content state flips, so its
-  // revenue heartbeat timer can exclude ad-watching time — see the
-  // useEffect below and RealDetailModal's heartbeat effect.
+  // Tell the parent whenever "is real content actively advancing right
+  // now" changes — combines ad-state with the video element's own
+  // playing/paused/buffering state, so the revenue heartbeat timer
+  // excludes ALL non-content time: IMA SDK loading, the VAST ad
+  // request roundtrip, the ad itself, and any buffering pause — not
+  // just ad playback alone (see RealDetailModal's heartbeat effect).
   useEffect(() => {
-    onAdPlayingChange?.(adPlaying);
-  }, [adPlaying, onAdPlayingChange]);
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    const report = () => {
+      const isActive = !adPlaying && !videoEl.paused && !videoEl.ended && videoEl.readyState >= 3;
+      onContentPlayingChange?.(isActive);
+    };
+    videoEl.addEventListener("playing", report);
+    videoEl.addEventListener("pause", report);
+    videoEl.addEventListener("waiting", report);
+    videoEl.addEventListener("ended", report);
+    report();
+    return () => {
+      videoEl.removeEventListener("playing", report);
+      videoEl.removeEventListener("pause", report);
+      videoEl.removeEventListener("waiting", report);
+      videoEl.removeEventListener("ended", report);
+    };
+  }, [adPlaying, onContentPlayingChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -967,32 +986,34 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
   const canPlay = video?.has_file && video?.has_access;
 
   // Phase 3 — real watch-time tracking. The Bunny embed is a
-  // cross-origin iframe with no postMessage wiring here, so this
-  // approximates "watching" as wall-clock time elapsed since Play was
-  // pressed — reasonable given the embed doesn't expose real play/pause
-  // events to us, and heartbeats are cheap/idempotent (the backend only
-  // ever credits the INCREMENTAL amount when a session beats the
-  // viewer's previous best, so an inflated estimate from, say, a
-  // backgrounded tab doesn't runaway-credit anything real).
+  // cross-origin iframe with no postMessage wiring here, so for
+  // ad-free videos this approximates "watching" as wall-clock time
+  // elapsed since Play was pressed — reasonable given the embed
+  // doesn't expose real play/pause events to us, and heartbeats are
+  // cheap/idempotent (the backend only ever credits the INCREMENTAL
+  // amount when a session beats the viewer's previous best, so an
+  // inflated estimate from, say, a backgrounded tab doesn't
+  // runaway-credit anything real).
   //
-  // For ad-enabled videos (AdEnabledVideoPlayer), this clock EXCLUDES
-  // ad-watching time — it accumulates only while content is actually
-  // playing, freezing whenever an ad is on screen and resuming right
-  // after (see handleAdPlayingChange below and the ref-based
-  // accumulator). Without this, a 36s video with 30s of ads would
-  // wrongly report 66s of "watch time" and pay out on ad time as if
-  // it were content.
+  // For ad-enabled videos (AdEnabledVideoPlayer), this clock is far
+  // more precise — it only accumulates while onContentPlayingChange
+  // reports content is ACTUALLY playing, so it excludes IMA SDK
+  // loading time, the VAST ad-request roundtrip, ad playback itself,
+  // AND any buffering pause. It starts FROZEN (not counting) the
+  // instant Play is pressed, and only unfreezes once that first
+  // "actually playing" report arrives — not immediately at mount like
+  // the old version did, which wrongly counted ad-setup time as watched.
   const contentSecondsRef = useRef(0);
   const segmentStartRef = useRef(null);
+  const usesContentSignalRef = useRef(false); // true once AdEnabledVideoPlayer reports at least once
 
-  const handleAdPlayingChange = React.useCallback((isAdPlaying) => {
-    if (isAdPlaying) {
-      if (segmentStartRef.current !== null) {
-        contentSecondsRef.current += (Date.now() - segmentStartRef.current) / 1000;
-        segmentStartRef.current = null; // frozen — ad is on screen
-      }
-    } else if (segmentStartRef.current === null) {
-      segmentStartRef.current = Date.now(); // resume the content-only clock
+  const handleContentPlayingChange = React.useCallback((isActive) => {
+    usesContentSignalRef.current = true;
+    if (isActive) {
+      if (segmentStartRef.current === null) segmentStartRef.current = Date.now();
+    } else if (segmentStartRef.current !== null) {
+      contentSecondsRef.current += (Date.now() - segmentStartRef.current) / 1000;
+      segmentStartRef.current = null;
     }
   }, []);
 
@@ -1001,7 +1022,19 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
     const sessionToken = getPlaybackSessionToken();
     const resumeOffsetSeconds = video?.resume_position_seconds || 0;
     contentSecondsRef.current = 0;
-    segmentStartRef.current = Date.now(); // starts unfrozen — pre-roll (if any) flips this via handleAdPlayingChange
+    usesContentSignalRef.current = false;
+    // Starts FROZEN — AdEnabledVideoPlayer's onContentPlayingChange
+    // unfreezes it once content is genuinely playing. If this video
+    // has no ads (plain iframe path, no such callback ever fires),
+    // fall back to the old "count from the moment Play was pressed"
+    // behavior after a brief grace period, since there's no finer
+    // signal available for that path.
+    segmentStartRef.current = null;
+    const fallbackTimer = setTimeout(() => {
+      if (!usesContentSignalRef.current && segmentStartRef.current === null) {
+        segmentStartRef.current = Date.now();
+      }
+    }, 500);
 
     const currentContentSeconds = () => {
       const liveSegment = segmentStartRef.current !== null ? (Date.now() - segmentStartRef.current) / 1000 : 0;
@@ -1022,6 +1055,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
     };
     const interval = setInterval(sendHeartbeat, 20000);
     return () => {
+      clearTimeout(fallbackTimer);
       clearInterval(interval);
       sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
       endPlaybackSession(sessionToken).catch(() => {}); // frees this device's screens-limit slot immediately
@@ -1121,7 +1155,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
         <div className="relative aspect-video w-full" style={{ background: "#000" }}>
           {playing && canPlay ? (
             video.ad_cue_points && video.ad_cue_points.length > 0 ? (
-              <AdEnabledVideoPlayer video={video} poster={card.poster} onAdPlayingChange={handleAdPlayingChange} resumeSeconds={video?.resume_position_seconds || 0} />
+              <AdEnabledVideoPlayer video={video} poster={card.poster} onContentPlayingChange={handleContentPlayingChange} resumeSeconds={video?.resume_position_seconds || 0} />
             ) : (
               <iframe
                 src={video.embed_url}
@@ -1134,8 +1168,8 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
           ) : (
             <>
               {(card.poster) && <HoverTrailerPreview poster={card.poster} trailerUrl={video?.trailer_playback_url} title="" />}
-              <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
-              <h2 className="absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ color: T.text }}>{card.title}</h2>
+              <div className="pointer-events-none absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
+              <h2 className="pointer-events-none absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ color: T.text }}>{card.title}</h2>
             </>
           )}
           <button type="button" onClick={onClose} className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
