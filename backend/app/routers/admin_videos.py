@@ -1,12 +1,12 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person
+from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person, VideoSubtitle
 from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
 from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file, _srt_to_vtt, _sync_caption_to_bunny
 from app.routers.recommendations import compute_and_store_embedding
@@ -310,9 +310,11 @@ async def upload_video_trailer_as_admin(
     return _to_out(video, db, force_access=True)
 
 
-@router.post("/{video_id}/upload-subtitle", response_model=VideoOut)
-async def upload_video_subtitle_as_admin(
+@router.post("/{video_id}/subtitles", response_model=VideoOut)
+async def add_video_subtitle_as_admin(
     video_id: str,
+    language_code: str = Form(...),
+    language_label: str = Form(...),
     file: UploadFile = File(...),
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
@@ -322,12 +324,42 @@ async def upload_video_subtitle_as_admin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     if not file.filename.lower().endswith((".srt", ".vtt")):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .srt or .vtt files are allowed.")
+
     raw = (await file.read()).decode("utf-8", errors="replace")
     vtt_text = _srt_to_vtt(raw)
-    video.subtitle_vtt_text = vtt_text
+
+    existing = (
+        db.query(VideoSubtitle)
+        .filter(VideoSubtitle.video_id == video.id, VideoSubtitle.language_code == language_code)
+        .first()
+    )
+    if existing:
+        existing.vtt_text = vtt_text
+        existing.language_label = language_label
+    else:
+        db.add(VideoSubtitle(video_id=video.id, language_code=language_code, language_label=language_label, vtt_text=vtt_text))
     db.commit()
     db.refresh(video)
-    await _sync_caption_to_bunny(video, vtt_text)
+    await _sync_caption_to_bunny(video, language_code, language_label, vtt_text)
+    return _to_out(video, db, force_access=True)
+
+
+@router.delete("/{video_id}/subtitles/{subtitle_id}", response_model=VideoOut)
+def delete_video_subtitle_as_admin(
+    video_id: str,
+    subtitle_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    sub = db.query(VideoSubtitle).filter(VideoSubtitle.id == subtitle_id, VideoSubtitle.video_id == video.id).first()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtitle not found")
+    db.delete(sub)
+    db.commit()
+    db.refresh(video)
     return _to_out(video, db, force_access=True)
 
 

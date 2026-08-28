@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoFile, uploadVideoTrailer, uploadVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
+import { uploadVideo, uploadVideoFile, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
+import SubtitleManager from "../shared/SubtitleManager";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
@@ -271,22 +272,8 @@ export default function MyVideoListPage({ onBack }) {
     }
   };
 
-  const [uploadingSubtitleFor, setUploadingSubtitleFor] = useState(null);
-  const [subtitleUploadError, setSubtitleUploadError] = useState("");
-
-  const handleSubtitleSelect = async (videoId, e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSubtitleUploadError("");
-    setUploadingSubtitleFor(videoId);
-    try {
-      await uploadVideoSubtitle(videoId, file);
-      loadVideos();
-    } catch (err) {
-      setSubtitleUploadError(err.message || "Couldn't upload subtitle. Please try again.");
-    } finally {
-      setUploadingSubtitleFor(null);
-    }
+  const handleSubtitleUpdated = (updatedVideo) => {
+    setVideos((prev) => prev.map((v) => (v.id === updatedVideo.id ? updatedVideo : v)));
   };
 
   const handlePosterSelect = async (videoId, e) => {
@@ -819,25 +806,7 @@ export default function MyVideoListPage({ onBack }) {
                         </div>
                       )}
 
-                      <div>
-                        <label
-                          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-                          style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          {uploadingSubtitleFor === v.id ? "Uploading subtitle…" : v.subtitle_url ? "Replace subtitle (.srt/.vtt)" : "Upload subtitle (.srt/.vtt)"}
-                          <input
-                            type="file"
-                            accept=".srt,.vtt"
-                            className="hidden"
-                            disabled={uploadingSubtitleFor === v.id}
-                            onChange={(e) => handleSubtitleSelect(v.id, e)}
-                          />
-                        </label>
-                        {subtitleUploadError && uploadingSubtitleFor === null && (
-                          <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{subtitleUploadError}</p>
-                        )}
-                      </div>
+                      <SubtitleManager video={v} addFn={addVideoSubtitle} deleteFn={deleteVideoSubtitle} onUpdated={handleSubtitleUpdated} />
                     </div>
                   </div>
                 </div>

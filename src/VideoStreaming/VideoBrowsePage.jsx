@@ -891,7 +891,9 @@ function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSec
   return (
     <div ref={wrapperRef} className="absolute inset-0">
       <video ref={videoRef} poster={poster} className="h-full w-full" playsInline controls={!adPlaying} crossOrigin="anonymous">
-        {video.subtitle_url && <track kind="subtitles" src={video.subtitle_url} srcLang="en" label="English" default />}
+        {(video.subtitles || []).map((s, i) => (
+          <track key={s.id} kind="subtitles" src={s.url} srcLang={s.language_code} label={s.language_label} default={i === 0} />
+        ))}
       </video>
       <div ref={adContainerRef} className="absolute inset-0" style={{ pointerEvents: adPlaying ? "auto" : "none" }} />
       {loadError && (

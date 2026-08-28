@@ -335,12 +335,14 @@ export function uploadVideoTrailer(videoId, file, onProgress) {
   });
 }
 
-export async function uploadVideoSubtitle(videoId, file) {
+export async function addVideoSubtitle(videoId, languageCode, languageLabel, file) {
   const token = getToken();
   const formData = new FormData();
+  formData.append("language_code", languageCode);
+  formData.append("language_label", languageLabel);
   formData.append("file", file);
 
-  const res = await fetch(`${BASE_URL}/videos/${videoId}/upload-subtitle`, {
+  const res = await fetch(`${BASE_URL}/videos/${videoId}/subtitles`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
@@ -348,6 +350,19 @@ export async function uploadVideoSubtitle(videoId, file) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload subtitle. Please try again.");
+  }
+  return data;
+}
+
+export async function deleteVideoSubtitle(videoId, subtitleId) {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/videos/${videoId}/subtitles/${subtitleId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete subtitle. Please try again.");
   }
   return data;
 }

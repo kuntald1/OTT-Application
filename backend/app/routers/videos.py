@@ -3,7 +3,7 @@ import uuid as uuid_module
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form
 from pathlib import Path
 from sqlalchemy.orm import Session
 
@@ -15,11 +15,12 @@ from app.models import (
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
     Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
-    Ad, AdCuePoint, Menu,
+    Ad, AdCuePoint, Menu, VideoSubtitle,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
     VideoCastOut, VideoCrewOut, PersonOut, VideoLikeToggleResponse, PlayerAdCuePointOut,
+    VideoSubtitleOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -324,7 +325,15 @@ def _to_out(video: Video, db: Session, viewer: User | None = None, force_access:
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.trailer_bunny_video_id}/playlist.m3u8"
             if video.trailer_bunny_video_id else None
         ),
-        subtitle_url=(f"/api/videos/{video.id}/subtitle.vtt" if video.subtitle_vtt_text else None),
+        subtitles=[
+            VideoSubtitleOut(
+                id=s.id,
+                language_code=s.language_code,
+                language_label=s.language_label,
+                url=f"/api/videos/{video.id}/subtitles/{s.language_code}.vtt",
+            )
+            for s in db.query(VideoSubtitle).filter(VideoSubtitle.video_id == video.id).all()
+        ],
         created_at=video.created_at,
         published_at=video.published_at,
         has_access=has_access,
@@ -854,14 +863,14 @@ def _srt_to_vtt(text: str) -> str:
     return "WEBVTT\n\n" + converted
 
 
-async def _sync_caption_to_bunny(video: Video, vtt_text: str) -> None:
+async def _sync_caption_to_bunny(video: Video, language_code: str, language_label: str, vtt_text: str) -> None:
     """Best-effort — also uploads the same caption to Bunny's own
     native Add Caption API (confirmed real, current endpoint:
     POST /library/{id}/videos/{id}/captions/{srclang}), so the Bunny
-    iframe embed (ad-free videos, where subtitle_vtt_text/our own
-    <track> can't reach — that player is entirely Bunny's own UI)
-    ALSO gets subtitles, not just the native ad-enabled player. Never
-    raises — our own stored subtitle_vtt_text is the reliable copy
+    iframe embed (ad-free videos, where our own <track> can't reach —
+    that player is entirely Bunny's own UI) ALSO gets subtitles for
+    this language, not just the native ad-enabled player. Never
+    raises — our own stored VideoSubtitle row is the reliable copy
     regardless of whether this succeeds.
     """
     if not video.bunny_video_id or not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY):
@@ -871,57 +880,90 @@ async def _sync_caption_to_bunny(video: Video, vtt_text: str) -> None:
         encoded = base64.b64encode(vtt_text.encode("utf-8")).decode("ascii")
         async with httpx.AsyncClient(timeout=15.0) as client:
             await client.post(
-                f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{video.bunny_video_id}/captions/en",
+                f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{video.bunny_video_id}/captions/{language_code}",
                 headers={"AccessKey": settings.BUNNY_API_KEY, "Content-Type": "application/json"},
-                json={"srclang": "en", "label": "English", "captionsFile": encoded},
+                json={"srclang": language_code, "label": language_label, "captionsFile": encoded},
             )
     except Exception:
         pass
 
 
-@router.post("/{video_id}/upload-subtitle", response_model=VideoOut)
-async def upload_video_subtitle(
+@router.post("/{video_id}/subtitles", response_model=VideoOut)
+async def add_video_subtitle(
     video_id: str,
+    language_code: str = Form(...),
+    language_label: str = Form(...),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Accepts a .srt or .vtt file, converts to WebVTT if needed, and
-    stores the text directly (see subtitle_vtt_text's docstring on the
-    Video model). ALSO relays the same caption to Bunny's own native
+    """Adds (or replaces, if this language_code already has one for
+    this video) a subtitle track. Accepts .srt or .vtt, converts to
+    WebVTT if needed, stores the text directly (see VideoSubtitle's
+    docstring), and relays the same caption to Bunny's own native
     captions API (see _sync_caption_to_bunny) so the plain iframe
-    embed path gets real subtitles too, not just the native ad-enabled
-    player. Re-uploading replaces the existing subtitle, same
-    low-stakes-edit reasoning as trailers.
+    embed path gets it too.
     """
     _require_creator_or_organiser(current_user)
     video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-
     if not file.filename.lower().endswith((".srt", ".vtt")):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .srt or .vtt files are allowed.")
 
     raw = (await file.read()).decode("utf-8", errors="replace")
     vtt_text = _srt_to_vtt(raw)
-    video.subtitle_vtt_text = vtt_text
+
+    existing = (
+        db.query(VideoSubtitle)
+        .filter(VideoSubtitle.video_id == video.id, VideoSubtitle.language_code == language_code)
+        .first()
+    )
+    if existing:
+        existing.vtt_text = vtt_text
+        existing.language_label = language_label
+    else:
+        db.add(VideoSubtitle(video_id=video.id, language_code=language_code, language_label=language_label, vtt_text=vtt_text))
     db.commit()
     db.refresh(video)
-    await _sync_caption_to_bunny(video, vtt_text)
+    await _sync_caption_to_bunny(video, language_code, language_label, vtt_text)
     return _to_out(video, db, force_access=True)
 
 
-@router.get("/{video_id}/subtitle.vtt")
-def get_video_subtitle(video_id: str, db: Session = Depends(get_db)):
-    """Serves the raw WebVTT text — no auth, same reasoning as
-    trailers being freely accessible: a subtitle track isn't sensitive
-    content, and the <track> element fetching it doesn't carry an
-    Authorization header anyway.
+@router.delete("/{video_id}/subtitles/{subtitle_id}", response_model=VideoOut)
+def delete_video_subtitle(
+    video_id: str,
+    subtitle_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    sub = db.query(VideoSubtitle).filter(VideoSubtitle.id == subtitle_id, VideoSubtitle.video_id == video.id).first()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtitle not found")
+    db.delete(sub)
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db, force_access=True)
+
+
+@router.get("/{video_id}/subtitles/{language_code}.vtt")
+def get_video_subtitle(video_id: str, language_code: str, db: Session = Depends(get_db)):
+    """Serves the raw WebVTT text for one language — no auth, same
+    reasoning as trailers being freely accessible: a subtitle track
+    isn't sensitive content, and the <track> element fetching it
+    doesn't carry an Authorization header anyway.
     """
-    video = db.query(Video).filter(Video.id == video_id).first()
-    if not video or not video.subtitle_vtt_text:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No subtitle for this video.")
-    return Response(content=video.subtitle_vtt_text, media_type="text/vtt")
+    sub = (
+        db.query(VideoSubtitle)
+        .filter(VideoSubtitle.video_id == video_id, VideoSubtitle.language_code == language_code)
+        .first()
+    )
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No subtitle for this language.")
+    return Response(content=sub.vtt_text, media_type="text/vtt")
 
 
 @router.post("/{video_id}/upload-trailer", response_model=VideoOut)

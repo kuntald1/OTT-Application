@@ -919,6 +919,28 @@ class VideoRevenueTier(Base):
     rate_per_minute_inr = Column(Numeric(10, 2), nullable=False)
 
 
+class VideoSubtitle(Base):
+    """One row per subtitle language for a video — replaces the earlier
+    single-language design (a lone subtitle_vtt_text column on Video,
+    now unused/deprecated but left in place rather than dropped, since
+    it may already hold data in production). Multiple rows per video
+    are expected (English, Bengali, Hindi, etc.), each independently
+    add/replace/delete-able. vtt_text is the converted WebVTT content,
+    stored directly (see the old column's original docstring for why —
+    not hosted on Bunny by default, though _sync_caption_to_bunny
+    ALSO relays each one to Bunny's own native captions API so the
+    plain iframe embed path gets them too).
+    """
+    __tablename__ = "video_subtitles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    language_code = Column(String(10), nullable=False)  # e.g. "en", "bn", "hi" — ISO 639-1 where possible
+    language_label = Column(String(50), nullable=False)  # e.g. "English", "Bengali", "Hindi"
+    vtt_text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class VideoCategory(Base):
     """Multiple categories/genres per video (up to 3), e.g. "Bengali
     Theatre" + "Classical Theatre" — replaces the old single-category

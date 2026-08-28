@@ -796,6 +796,15 @@ class VideoRevenueTierOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VideoSubtitleOut(BaseModel):
+    id: uuid.UUID
+    language_code: str
+    language_label: str
+    url: str  # GET /videos/{video_id}/subtitles/{language_code}.vtt
+
+    model_config = {"from_attributes": True}
+
+
 class PersonOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -915,11 +924,8 @@ class VideoOut(BaseModel):
     # trailer is meant to be freely watchable to entice a subscription/
     # purchase, so this populates regardless of has_access.
     trailer_playback_url: Optional[str] = None
-    # Points at GET /videos/{id}/subtitle.vtt when a subtitle has been
-    # uploaded — only meaningful for the native ad-enabled player (see
-    # subtitle_vtt_text's docstring on the model for why the Bunny
-    # iframe path can't use this).
-    subtitle_url: Optional[str] = None
+    # One entry per uploaded language — see VideoSubtitle model.
+    subtitles: List[VideoSubtitleOut] = []
     created_at: datetime
     published_at: Optional[datetime] = None
 

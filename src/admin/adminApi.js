@@ -220,12 +220,14 @@ export function uploadAdminVideoTrailer(videoId, file, onProgress) {
   });
 }
 
-export async function uploadAdminVideoSubtitle(videoId, file) {
+export async function addAdminVideoSubtitle(videoId, languageCode, languageLabel, file) {
   const token = getAdminToken();
   const formData = new FormData();
+  formData.append("language_code", languageCode);
+  formData.append("language_label", languageLabel);
   formData.append("file", file);
 
-  const res = await fetch(`${BASE_URL}/admin/videos/${videoId}/upload-subtitle`, {
+  const res = await fetch(`${BASE_URL}/admin/videos/${videoId}/subtitles`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
@@ -233,6 +235,19 @@ export async function uploadAdminVideoSubtitle(videoId, file) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload subtitle.");
+  }
+  return data;
+}
+
+export async function deleteAdminVideoSubtitle(videoId, subtitleId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/videos/${videoId}/subtitles/${subtitleId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete subtitle.");
   }
   return data;
 }
