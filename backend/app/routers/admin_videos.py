@@ -8,7 +8,7 @@ from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person
 from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
-from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file, _srt_to_vtt
+from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file, _srt_to_vtt, _sync_caption_to_bunny
 from app.routers.recommendations import compute_and_store_embedding
 from app.routers.people import _save_person_photo
 from app.notifications import (
@@ -323,9 +323,11 @@ async def upload_video_subtitle_as_admin(
     if not file.filename.lower().endswith((".srt", ".vtt")):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .srt or .vtt files are allowed.")
     raw = (await file.read()).decode("utf-8", errors="replace")
-    video.subtitle_vtt_text = _srt_to_vtt(raw)
+    vtt_text = _srt_to_vtt(raw)
+    video.subtitle_vtt_text = vtt_text
     db.commit()
     db.refresh(video)
+    await _sync_caption_to_bunny(video, vtt_text)
     return _to_out(video, db, force_access=True)
 
 

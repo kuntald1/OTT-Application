@@ -854,6 +854,31 @@ def _srt_to_vtt(text: str) -> str:
     return "WEBVTT\n\n" + converted
 
 
+async def _sync_caption_to_bunny(video: Video, vtt_text: str) -> None:
+    """Best-effort — also uploads the same caption to Bunny's own
+    native Add Caption API (confirmed real, current endpoint:
+    POST /library/{id}/videos/{id}/captions/{srclang}), so the Bunny
+    iframe embed (ad-free videos, where subtitle_vtt_text/our own
+    <track> can't reach — that player is entirely Bunny's own UI)
+    ALSO gets subtitles, not just the native ad-enabled player. Never
+    raises — our own stored subtitle_vtt_text is the reliable copy
+    regardless of whether this succeeds.
+    """
+    if not video.bunny_video_id or not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY):
+        return
+    try:
+        import base64
+        encoded = base64.b64encode(vtt_text.encode("utf-8")).decode("ascii")
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(
+                f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{video.bunny_video_id}/captions/en",
+                headers={"AccessKey": settings.BUNNY_API_KEY, "Content-Type": "application/json"},
+                json={"srclang": "en", "label": "English", "captionsFile": encoded},
+            )
+    except Exception:
+        pass
+
+
 @router.post("/{video_id}/upload-subtitle", response_model=VideoOut)
 async def upload_video_subtitle(
     video_id: str,
@@ -863,8 +888,11 @@ async def upload_video_subtitle(
 ):
     """Accepts a .srt or .vtt file, converts to WebVTT if needed, and
     stores the text directly (see subtitle_vtt_text's docstring on the
-    Video model for why — not hosted on Bunny). Re-uploading replaces
-    the existing subtitle, same low-stakes-edit reasoning as trailers.
+    Video model). ALSO relays the same caption to Bunny's own native
+    captions API (see _sync_caption_to_bunny) so the plain iframe
+    embed path gets real subtitles too, not just the native ad-enabled
+    player. Re-uploading replaces the existing subtitle, same
+    low-stakes-edit reasoning as trailers.
     """
     _require_creator_or_organiser(current_user)
     video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
@@ -875,9 +903,11 @@ async def upload_video_subtitle(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .srt or .vtt files are allowed.")
 
     raw = (await file.read()).decode("utf-8", errors="replace")
-    video.subtitle_vtt_text = _srt_to_vtt(raw)
+    vtt_text = _srt_to_vtt(raw)
+    video.subtitle_vtt_text = vtt_text
     db.commit()
     db.refresh(video)
+    await _sync_caption_to_bunny(video, vtt_text)
     return _to_out(video, db, force_access=True)
 
 
