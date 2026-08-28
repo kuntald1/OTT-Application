@@ -1005,10 +1005,8 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
   // the old version did, which wrongly counted ad-setup time as watched.
   const contentSecondsRef = useRef(0);
   const segmentStartRef = useRef(null);
-  const usesContentSignalRef = useRef(false); // true once AdEnabledVideoPlayer reports at least once
 
   const handleContentPlayingChange = React.useCallback((isActive) => {
-    usesContentSignalRef.current = true;
     if (isActive) {
       if (segmentStartRef.current === null) segmentStartRef.current = Date.now();
     } else if (segmentStartRef.current !== null) {
@@ -1022,19 +1020,18 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
     const sessionToken = getPlaybackSessionToken();
     const resumeOffsetSeconds = video?.resume_position_seconds || 0;
     contentSecondsRef.current = 0;
-    usesContentSignalRef.current = false;
-    // Starts FROZEN — AdEnabledVideoPlayer's onContentPlayingChange
-    // unfreezes it once content is genuinely playing. If this video
-    // has no ads (plain iframe path, no such callback ever fires),
-    // fall back to the old "count from the moment Play was pressed"
-    // behavior after a brief grace period, since there's no finer
-    // signal available for that path.
-    segmentStartRef.current = null;
-    const fallbackTimer = setTimeout(() => {
-      if (!usesContentSignalRef.current && segmentStartRef.current === null) {
-        segmentStartRef.current = Date.now();
-      }
-    }, 500);
+
+    // Deterministic, not a guess: this matches the exact same condition
+    // the render logic below uses to choose AdEnabledVideoPlayer over
+    // the plain iframe. If it's true, AdEnabledVideoPlayer WILL be
+    // mounted and WILL eventually call handleContentPlayingChange —
+    // however long the ad takes to load, wait for that real signal
+    // rather than guessing with a fixed timeout (a fixed timeout raced
+    // against real ad-request network latency, which is often slower
+    // than any timeout short enough to still exclude loading time —
+    // that mismatch was the ~3s of extra "watched" time in testing).
+    const usesContentSignal = !!(video?.ad_cue_points && video.ad_cue_points.length > 0);
+    segmentStartRef.current = usesContentSignal ? null : Date.now();
 
     const currentContentSeconds = () => {
       const liveSegment = segmentStartRef.current !== null ? (Date.now() - segmentStartRef.current) / 1000 : 0;
@@ -1055,7 +1052,6 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
     };
     const interval = setInterval(sendHeartbeat, 20000);
     return () => {
-      clearTimeout(fallbackTimer);
       clearInterval(interval);
       sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
       endPlaybackSession(sessionToken).catch(() => {}); // frees this device's screens-limit slot immediately
