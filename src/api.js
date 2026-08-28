@@ -748,6 +748,10 @@ export function fetchActiveLiveStreams(section) {
   return request(`/videos/live${section ? `?section=${section}` : ""}`, { auth: true });
 }
 
+export function fetchSpecialCategories(section) {
+  return request(`/special-categories?section=${section}`, { auth: true });
+}
+
 export function fetchLiveStream(liveStreamId) {
   return request(`/videos/live/${liveStreamId}`, { auth: true });
 }

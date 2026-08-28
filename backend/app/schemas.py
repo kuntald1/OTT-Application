@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional
 
@@ -216,6 +216,45 @@ class AdminUserSetPasswordRequest(BaseModel):
 
 class AdminUserToggleRequest(BaseModel):
     enabled: bool
+
+
+class SpecialCategoryCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    visible_from: date
+    visible_to: date
+    section: str = Field(default="play")  # "play" | "archive" | "both"
+
+
+class SpecialCategoryUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    visible_from: Optional[date] = None
+    visible_to: Optional[date] = None
+    section: Optional[str] = None
+
+
+class SpecialCategoryVideoCardOut(BaseModel):
+    """Minimal video card shape for rendering inside a special
+    category row — same fields the browse-page card components
+    already expect (id, title, poster, trailer for hover-preview).
+    """
+    id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    trailer_playback_url: Optional[str] = None
+
+
+class SpecialCategoryOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    visible_from: date
+    visible_to: date
+    section: str
+    is_disabled: bool
+    video_count: int
+    videos: List[SpecialCategoryVideoCardOut] = []
+
+    model_config = {"from_attributes": True}
 
 
 class LiveStreamCreate(BaseModel):

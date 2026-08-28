@@ -513,3 +513,37 @@ export function simulateStartAdminLiveStream(liveStreamId) {
 export function deleteAdminLiveStream(liveStreamId) {
   return request(`/admin/videos/live/${liveStreamId}`, { method: "DELETE", auth: true });
 }
+
+// --- Special Categories (admin-curated featured rows) ---
+
+export function createAdminSpecialCategory(title, visibleFrom, visibleTo, section) {
+  return request(`/admin/special-categories`, {
+    method: "POST",
+    auth: true,
+    body: { title, visible_from: visibleFrom, visible_to: visibleTo, section },
+  });
+}
+
+export function fetchAdminSpecialCategories() {
+  return request(`/admin/special-categories`, { auth: true });
+}
+
+export function updateAdminSpecialCategory(id, updates) {
+  return request(`/admin/special-categories/${id}`, { method: "PUT", auth: true, body: updates });
+}
+
+export function toggleAdminSpecialCategoryDisabled(id) {
+  return request(`/admin/special-categories/${id}/disable`, { method: "PUT", auth: true });
+}
+
+export function deleteAdminSpecialCategory(id) {
+  return request(`/admin/special-categories/${id}`, { method: "DELETE", auth: true });
+}
+
+export function addVideoToAdminSpecialCategory(id, videoId) {
+  return request(`/admin/special-categories/${id}/videos?video_id=${videoId}`, { method: "POST", auth: true });
+}
+
+export function removeVideoFromAdminSpecialCategory(id, videoId) {
+  return request(`/admin/special-categories/${id}/videos/${videoId}`, { method: "DELETE", auth: true });
+}

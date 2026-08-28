@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Column, String, DateTime, Enum, Boolean, ForeignKey, Integer, Numeric, Text, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Date, Enum, Boolean, ForeignKey, Integer, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -1121,6 +1121,41 @@ class LiveStreamStatus(str, enum.Enum):
     idle = "idle"          # created, not broadcasting yet
     active = "active"      # currently receiving RTMP input, viewers can watch
     ended = "ended"        # broadcast finished (or manually ended/deleted)
+
+
+class SpecialCategory(Base):
+    """An admin-curated featured row (e.g. "Sunday Special") that shows
+    at the very top of the Play and/or Archive page — above every
+    other row — only while today falls within [visible_from,
+    visible_to]. Outside that window (or while is_disabled), it's
+    simply not returned by the public listing endpoint, so no
+    separate cron/cleanup job is needed — visibility is computed at
+    read time from the current date. Delete removes it and its video
+    links entirely; is_disabled is the softer "hide without deleting"
+    toggle, same End-vs-Delete distinction used for live streams.
+    """
+    __tablename__ = "special_categories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(200), nullable=False)
+    visible_from = Column(Date, nullable=False)
+    visible_to = Column(Date, nullable=False)
+    section = Column(Enum(VideoSection), nullable=False, default=VideoSection.play)
+    is_disabled = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class SpecialCategoryVideo(Base):
+    """One row per video included in a SpecialCategory — a simple
+    many-to-many join, since one video could plausibly appear in more
+    than one special row and a special row holds many videos.
+    """
+    __tablename__ = "special_category_videos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    special_category_id = Column(UUID(as_uuid=True), ForeignKey("special_categories.id"), nullable=False, index=True)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
+    added_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class LiveStream(Base):

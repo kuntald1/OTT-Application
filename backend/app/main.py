@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
-from app.routers import auth, oauth, tickets, subscriptions, menus, plans, payments, tax, blogs, community, organisers, donations, revenue, withdrawals, event_enquiries, otp, exchange_rate, stripe_payments, reward_config, admin_auth, videos, admin_videos, people, admin_event_enquiries, video_payments, watch, admin_revenue, admin_menus, my_list, playback_sessions, watch_progress, admin_ads, recommendations, admin_ai, live_streams, admin_live_streams, webhooks, admin_users
+from app.routers import auth, oauth, tickets, subscriptions, menus, plans, payments, tax, blogs, community, organisers, donations, revenue, withdrawals, event_enquiries, otp, exchange_rate, stripe_payments, reward_config, admin_auth, videos, admin_videos, people, admin_event_enquiries, video_payments, watch, admin_revenue, admin_menus, my_list, playback_sessions, watch_progress, admin_ads, recommendations, admin_ai, live_streams, admin_live_streams, webhooks, admin_users, special_categories, admin_special_categories
 
 # Creates the `users` table on startup if it doesn't already exist.
 # For future schema changes, switch to Alembic migrations instead of
@@ -64,6 +64,8 @@ app.include_router(admin_ads.router, prefix="/api")
 app.include_router(recommendations.router, prefix="/api")
 app.include_router(admin_ai.router, prefix="/api")
 app.include_router(admin_live_streams.router, prefix="/api")
+app.include_router(special_categories.router, prefix="/api")
+app.include_router(admin_special_categories.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(admin_users.router, prefix="/api")
 
