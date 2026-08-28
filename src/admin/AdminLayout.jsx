@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -11,6 +11,7 @@ import AdminAdsPage from "./AdminAdsPage";
 import AdminUsersPage from "./AdminUsersPage";
 import AdminLiveStreamsPage from "./AdminLiveStreamsPage";
 import AdminSpecialCategoriesPage from "./AdminSpecialCategoriesPage";
+import AdminBlogsPage from "./AdminBlogsPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -32,6 +33,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "videos", label: "Video Review", icon: Clapperboard, visible: true },
     { id: "add-video", label: "Add Video", icon: PlusCircle, visible: true },
     { id: "special-categories", label: "Special Categories", icon: Sparkles, visible: true },
+    { id: "blog", label: "Blog", icon: Newspaper, visible: true },
     { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
     { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
@@ -99,6 +101,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "videos" && <AdminVideoReviewPage />}
           {activePage === "add-video" && <AdminAddVideoPage />}
           {activePage === "special-categories" && <AdminSpecialCategoriesPage />}
+          {activePage === "blog" && <AdminBlogsPage />}
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}
           {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "categories" && isSuperadmin && <AdminCategoriesPage />}

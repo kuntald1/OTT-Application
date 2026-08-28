@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle } from "lucide-react";
 import { COLORS } from "../theme";
 import { fetchBlogs } from "../api";
 import { useApp } from "../context/AppContext";
@@ -55,20 +55,29 @@ export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
             {posts.map((post) => (
               <article
                 key={post.id}
-                className="rounded-2xl p-6"
+                className="overflow-hidden rounded-2xl"
                 style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.15)" }}
               >
-                <p className="text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>{formatDate(post.published_at)}</p>
-                <h2 className="mt-2 text-lg font-semibold leading-snug" style={{ color: COLORS.cream }}>{post.title}</h2>
-                <p className="mt-2 text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.65)" }}>{post.excerpt}</p>
-                <button
-                  type="button"
-                  onClick={() => handleReadMore(post.id)}
-                  className="mt-4 text-sm font-medium hover:opacity-80"
-                  style={{ color: COLORS.gold }}
-                >
-                  Read more →
-                </button>
+                {post.cover_image_url && (
+                  <img src={post.cover_image_url} alt="" className="h-40 w-full object-cover" />
+                )}
+                <div className="p-6">
+                  <p className="text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>{formatDate(post.published_at)}</p>
+                  <h2 className="mt-2 text-lg font-semibold leading-snug" style={{ color: COLORS.cream }}>{post.title}</h2>
+                  <p className="mt-2 text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.65)" }}>{post.excerpt}</p>
+                  <div className="mt-3 flex items-center gap-4 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                    <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {post.likes_count || 0}</span>
+                    <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {post.comment_count || 0}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleReadMore(post.id)}
+                    className="mt-4 text-sm font-medium hover:opacity-80"
+                    style={{ color: COLORS.gold }}
+                  >
+                    Read more →
+                  </button>
+                </div>
               </article>
             ))}
           </div>

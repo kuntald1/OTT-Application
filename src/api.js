@@ -199,7 +199,23 @@ export function fetchBlogs() {
 }
 
 export function fetchBlogPost(id) {
-  return request(`/blogs/${id}`);
+  return request(`/blogs/${id}`, { auth: true }); // auth optional server-side, but needed to populate liked_by_me when logged in
+}
+
+export function toggleBlogLike(id) {
+  return request(`/blogs/${id}/like`, { method: "POST", auth: true });
+}
+
+export function fetchBlogComments(id) {
+  return request(`/blogs/${id}/comments`);
+}
+
+export function addBlogComment(id, content) {
+  return request(`/blogs/${id}/comments`, { method: "POST", auth: true, body: { content } });
+}
+
+export function deleteBlogComment(blogId, commentId) {
+  return request(`/blogs/${blogId}/comments/${commentId}`, { method: "DELETE", auth: true });
 }
 
 export function fetchCommunityRooms() {

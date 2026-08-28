@@ -547,3 +547,53 @@ export function addVideoToAdminSpecialCategory(id, videoId) {
 export function removeVideoFromAdminSpecialCategory(id, videoId) {
   return request(`/admin/special-categories/${id}/videos/${videoId}`, { method: "DELETE", auth: true });
 }
+
+// --- Blog management ---
+
+export function createAdminBlog(title, excerpt, body, authorName, isPublished) {
+  return request(`/admin/blogs`, {
+    method: "POST",
+    auth: true,
+    body: { title, excerpt, body, author_name: authorName || "theomy Team", is_published: isPublished },
+  });
+}
+
+export function fetchAdminBlogs() {
+  return request(`/admin/blogs`, { auth: true });
+}
+
+export function updateAdminBlog(id, updates) {
+  return request(`/admin/blogs/${id}`, { method: "PUT", auth: true, body: updates });
+}
+
+export function deleteAdminBlog(id) {
+  return request(`/admin/blogs/${id}`, { method: "DELETE", auth: true });
+}
+
+export async function uploadAdminBlogCover(id, file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/admin/blogs/${id}/upload-cover`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload cover image.");
+  }
+  return data;
+}
+
+export function fetchAllAdminBlogComments() {
+  return request(`/admin/blogs/comments/all`, { auth: true });
+}
+
+export function editAdminBlogComment(commentId, content) {
+  return request(`/admin/blogs/comments/${commentId}`, { method: "PUT", auth: true, body: { content } });
+}
+
+export function deleteAdminBlogComment(commentId) {
+  return request(`/admin/blogs/comments/${commentId}`, { method: "DELETE", auth: true });
+}
