@@ -255,9 +255,8 @@ class TaxConfig(Base):
 
 
 class Blog(Base):
-    """Blog posts — published by an admin (once the admin panel exists),
-    read by everyone. is_published lets a post be prepared as a draft
-    before going live.
+    """Blog posts — published by an admin, read by everyone.
+    is_published lets a post be prepared as a draft before going live.
     """
     __tablename__ = "blogs"
 
@@ -266,11 +265,44 @@ class Blog(Base):
     excerpt = Column(String(500), nullable=False)
     body = Column(Text, nullable=False)
     author_name = Column(String(100), nullable=False, default="theomy Team")
+    cover_image_url = Column(String(500), nullable=True)
 
     is_published = Column(Boolean, nullable=False, default=True)
     published_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class BlogComment(Base):
+    """One row per comment on a blog post. Visible to everyone on the
+    public post; admin can see every comment across every post in one
+    place for moderation, and can edit or delete any of them (see
+    admin_blogs.py) — the commenting user themselves can also delete
+    their own (not edit, to keep a comment's history honest once
+    others may have replied to/read it — same reasoning as most
+    platforms only allowing delete, not edit, on a public comment).
+    """
+    __tablename__ = "blog_comments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    blog_id = Column(UUID(as_uuid=True), ForeignKey("blogs.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class BlogLike(Base):
+    """One row per (user, blog) like — a user can only like a post
+    once, enforced by the unique constraint below (mirrors VideoLike's
+    pattern already used elsewhere in this file).
+    """
+    __tablename__ = "blog_likes"
+    __table_args__ = (UniqueConstraint("blog_id", "user_id", name="uq_blog_like_per_user"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    blog_id = Column(UUID(as_uuid=True), ForeignKey("blogs.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class CommunityRoom(Base):

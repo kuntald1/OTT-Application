@@ -394,6 +394,10 @@ class BlogListItemOut(BaseModel):
     excerpt: str
     author_name: str
     published_at: datetime
+    cover_image_url: Optional[str] = None
+    is_published: bool = True
+    likes_count: int = 0
+    comment_count: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -405,8 +409,53 @@ class BlogDetailOut(BaseModel):
     body: str
     author_name: str
     published_at: datetime
+    cover_image_url: Optional[str] = None
+    is_published: bool = True
+    likes_count: int = 0
+    liked_by_me: bool = False
+    comment_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+class BlogCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    excerpt: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1)
+    author_name: str = Field(default="theomy Team", max_length=100)
+    is_published: bool = True
+
+
+class BlogUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    excerpt: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    body: Optional[str] = None
+    author_name: Optional[str] = Field(default=None, max_length=100)
+    is_published: Optional[bool] = None
+
+
+class BlogCommentCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class BlogCommentUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class BlogCommentOut(BaseModel):
+    id: uuid.UUID
+    blog_id: uuid.UUID
+    user_id: uuid.UUID
+    user_name: str
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BlogLikeToggleOut(BaseModel):
+    liked: bool
+    likes_count: int
 
 
 class ReplyOut(BaseModel):
