@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle, Sparkles } from "lucide-react";
 import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata } from "./adminApi";
 import SubtitleManager from "../shared/SubtitleManager";
+import FilePreview from "../shared/FilePreview";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions } from "../api";
 
@@ -915,23 +916,27 @@ export default function AdminAddVideoPage() {
                           {fileUploadError && uploadingFileFor === null && (
                             <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
                           )}
+                          <FilePreview type="video" src={v.playback_url} label="Main video" />
                         </div>
                       )}
 
-                      <label
-                        className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-                        style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
-                      >
-                        <ImagePlus className="h-3.5 w-3.5" />
-                        {uploadingPosterFor === v.id ? "Uploading poster…" : v.poster_image_url ? "Change poster" : "Upload custom poster"}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="hidden"
-                          disabled={uploadingPosterFor === v.id}
-                          onChange={(e) => handlePosterSelect(v.id, e)}
-                        />
-                      </label>
+                      <div>
+                        <label
+                          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                          style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                        >
+                          <ImagePlus className="h-3.5 w-3.5" />
+                          {uploadingPosterFor === v.id ? "Uploading poster…" : v.poster_image_url ? "Change poster" : "Upload custom poster"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            disabled={uploadingPosterFor === v.id}
+                            onChange={(e) => handlePosterSelect(v.id, e)}
+                          />
+                        </label>
+                        <FilePreview type="image" src={v.poster_image_url} label="Poster" />
+                      </div>
 
                       {uploadingTrailerFor === v.id ? (
                         <div>
@@ -961,6 +966,7 @@ export default function AdminAddVideoPage() {
                           {trailerUploadError && uploadingTrailerFor === null && (
                             <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{trailerUploadError}</p>
                           )}
+                          <FilePreview type="video" src={v.trailer_playback_url} label="Trailer" />
                         </div>
                       )}
 

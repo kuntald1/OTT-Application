@@ -3,6 +3,7 @@ import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
 import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle } from "./adminApi";
 import { fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
+import FilePreview from "../shared/FilePreview";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -241,57 +242,66 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
       <div className="flex flex-col gap-2 rounded-lg p-3" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(245,235,221,0.1)" }}>
         <p className="text-xs font-semibold uppercase" style={{ color: "rgba(245,235,221,0.5)" }}>Files</p>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {uploadingVideoFile ? (
-            <div className="w-48">
-              <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
-                <span>{videoFileProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
-                <span>{videoFileProgress}%</span>
+        <div className="flex flex-wrap items-start gap-4">
+          <div>
+            {uploadingVideoFile ? (
+              <div className="w-48">
+                <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
+                  <span>{videoFileProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                  <span>{videoFileProgress}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${videoFileProgress}%`, background: COLORS.gold }} />
+                </div>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${videoFileProgress}%`, background: COLORS.gold }} />
-              </div>
-            </div>
-          ) : (
+            ) : (
+              <label
+                className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {video.has_file ? "Replace video file" : "Upload video file"}
+                <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo" className="hidden" onChange={handleVideoFileSelect} />
+              </label>
+            )}
+            <FilePreview type="video" src={video.playback_url} label="Main video" />
+          </div>
+
+          <div>
             <label
               className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
               style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
             >
-              <Upload className="h-3.5 w-3.5" />
-              {video.has_file ? "Replace video file" : "Upload video file"}
-              <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo" className="hidden" onChange={handleVideoFileSelect} />
+              <ImagePlus className="h-3.5 w-3.5" />
+              {uploadingPoster ? "Uploading poster…" : video.poster_image_url ? "Change poster" : "Upload poster"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPoster} onChange={handlePosterSelect} />
             </label>
-          )}
+            <FilePreview type="image" src={video.poster_image_url} label="Poster" />
+          </div>
 
-          <label
-            className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-            style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
-          >
-            <ImagePlus className="h-3.5 w-3.5" />
-            {uploadingPoster ? "Uploading poster…" : video.poster_image_url ? "Change poster" : "Upload poster"}
-            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPoster} onChange={handlePosterSelect} />
-          </label>
-
-          {uploadingTrailer ? (
-            <div className="w-48">
-              <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
-                <span>{trailerProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
-                <span>{trailerProgress}%</span>
+          <div>
+            {uploadingTrailer ? (
+              <div className="w-48">
+                <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
+                  <span>{trailerProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
+                  <span>{trailerProgress}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${trailerProgress}%`, background: COLORS.gold }} />
+                </div>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${trailerProgress}%`, background: COLORS.gold }} />
-              </div>
-            </div>
-          ) : (
-            <label
-              className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-              style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              {video.trailer_playback_url ? "Replace trailer (hover preview)" : "Upload trailer (hover preview)"}
-              <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo" className="hidden" onChange={handleTrailerSelect} />
-            </label>
-          )}
+            ) : (
+              <label
+                className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {video.trailer_playback_url ? "Replace trailer (hover preview)" : "Upload trailer (hover preview)"}
+                <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,video/x-msvideo" className="hidden" onChange={handleTrailerSelect} />
+              </label>
+            )}
+            <FilePreview type="video" src={video.trailer_playback_url} label="Trailer" />
+          </div>
         </div>
         {fileError && <p className="text-xs font-medium" style={{ color: "#f87171" }}>{fileError}</p>}
 

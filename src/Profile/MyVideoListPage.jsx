@@ -3,6 +3,7 @@ import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clap
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { uploadVideo, uploadVideoFile, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
+import FilePreview from "../shared/FilePreview";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
@@ -757,23 +758,27 @@ export default function MyVideoListPage({ onBack }) {
                           {fileUploadError && uploadingFileFor === null && (
                             <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
                           )}
+                          <FilePreview type="video" src={v.playback_url} label="Main video" />
                         </div>
                       )}
 
-                      <label
-                        className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
-                        style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
-                      >
-                        <ImagePlus className="h-3.5 w-3.5" />
-                        {uploadingPosterFor === v.id ? "Uploading poster…" : v.poster_image_url ? "Change poster" : "Upload custom poster"}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="hidden"
-                          disabled={uploadingPosterFor === v.id}
-                          onChange={(e) => handlePosterSelect(v.id, e)}
-                        />
-                      </label>
+                      <div>
+                        <label
+                          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                          style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                        >
+                          <ImagePlus className="h-3.5 w-3.5" />
+                          {uploadingPosterFor === v.id ? "Uploading poster…" : v.poster_image_url ? "Change poster" : "Upload custom poster"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            disabled={uploadingPosterFor === v.id}
+                            onChange={(e) => handlePosterSelect(v.id, e)}
+                          />
+                        </label>
+                        <FilePreview type="image" src={v.poster_image_url} label="Poster" />
+                      </div>
 
                       {uploadingTrailerFor === v.id ? (
                         <div>
@@ -803,6 +808,7 @@ export default function MyVideoListPage({ onBack }) {
                           {trailerUploadError && uploadingTrailerFor === null && (
                             <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{trailerUploadError}</p>
                           )}
+                          <FilePreview type="video" src={v.trailer_playback_url} label="Trailer" />
                         </div>
                       )}
 
