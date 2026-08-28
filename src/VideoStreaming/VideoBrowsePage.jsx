@@ -285,18 +285,26 @@ function useReveal() {
 // delay so a quick mouse pass-by doesn't trigger playback. Reuses the
 // same hls.js loader as AdEnabledVideoPlayer.
 // ---------------------------------------------------------------------------
-function HoverTrailerPreview({ poster, trailerUrl, title }) {
+function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = false }) {
   const videoRef = useRef(null);
-  const [hovering, setHovering] = useState(false);
+  const [hovering, setHovering] = useState(autoPlay);
   const [trailerReady, setTrailerReady] = useState(false);
   const hoverTimerRef = useRef(null);
   const hlsRef = useRef(null);
+
+  // If trailerUrl arrives AFTER mount (video data loads async) and
+  // this is the autoPlay (modal) usage, start playing once it shows
+  // up — don't require a hover gesture that'll never come here.
+  useEffect(() => {
+    if (autoPlay && trailerUrl) setHovering(true);
+  }, [autoPlay, trailerUrl]);
 
   const startHover = () => {
     if (!trailerUrl) return;
     hoverTimerRef.current = setTimeout(() => setHovering(true), 400);
   };
   const endHover = () => {
+    if (autoPlay) return; // modal usage stays playing regardless of mouse position
     clearTimeout(hoverTimerRef.current);
     setHovering(false);
   };
@@ -361,7 +369,12 @@ function HoverTrailerPreview({ poster, trailerUrl, title }) {
       )}
       {hovering && trailerReady && title && (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10">
-          <p className="truncate text-xl font-bold text-white sm:text-2xl">{title}</p>
+          <p
+            className="truncate text-2xl font-black uppercase text-white sm:text-3xl"
+            style={{ letterSpacing: "0.02em", textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
+          >
+            {title}
+          </p>
         </div>
       )}
     </div>
@@ -443,8 +456,8 @@ function GenreRow({ category, cards, onSelect }) {
               type="button"
               key={i}
               onClick={() => onCardClick(card)}
-              className="group relative w-64 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-72 lg:w-80"
-              style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start" }}
+              className="group relative flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5"
+              style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start", width: "calc(25% - 12px)", minWidth: 220 }}
             >
               <div
                 className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
@@ -877,7 +890,9 @@ function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSec
 
   return (
     <div ref={wrapperRef} className="absolute inset-0">
-      <video ref={videoRef} poster={poster} className="h-full w-full" playsInline controls={!adPlaying} />
+      <video ref={videoRef} poster={poster} className="h-full w-full" playsInline controls={!adPlaying} crossOrigin="anonymous">
+        {video.subtitle_url && <track kind="subtitles" src={video.subtitle_url} srcLang="en" label="English" default />}
+      </video>
       <div ref={adContainerRef} className="absolute inset-0" style={{ pointerEvents: adPlaying ? "auto" : "none" }} />
       {loadError && (
         <p className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-red-400">{loadError}</p>
@@ -1062,6 +1077,8 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
   // not just on page load. Blocks with a clear message instead of
   // silently letting an over-the-limit device stream, which "screens"
   // previously did nothing to prevent.
+  const playerContainerRef = useRef(null);
+
   const handlePlayClick = async () => {
     setScreenLimitError("");
     setPlayStarting(true);
@@ -1069,6 +1086,17 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
       const result = await startPlaybackSession(card.videoId, getPlaybackSessionToken());
       if (result.allowed) {
         setPlaying(true);
+        // Full-screen playback — must be called synchronously-ish from
+        // this click handler (browsers require a user-gesture context
+        // for the Fullscreen API); a short delay lets the player
+        // element actually mount first. Swallows errors silently —
+        // some browsers/embedded contexts (e.g. certain mobile
+        // in-app browsers) disallow it entirely, and playback should
+        // still work fine at the modal's normal size either way.
+        setTimeout(() => {
+          const el = playerContainerRef.current;
+          if (el?.requestFullscreen) el.requestFullscreen().catch(() => {});
+        }, 100);
       } else {
         setScreenLimitError(result.reason || "Device limit reached for your plan.");
       }
@@ -1148,7 +1176,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative aspect-video w-full" style={{ background: "#000" }}>
+        <div ref={playerContainerRef} className="relative aspect-video w-full" style={{ background: "#000" }}>
           {playing && canPlay ? (
             video.ad_cue_points && video.ad_cue_points.length > 0 ? (
               <AdEnabledVideoPlayer video={video} poster={card.poster} onContentPlayingChange={handleContentPlayingChange} resumeSeconds={video?.resume_position_seconds || 0} />
@@ -1163,7 +1191,7 @@ function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }
             )
           ) : (
             <>
-              {(card.poster) && <HoverTrailerPreview poster={card.poster} trailerUrl={video?.trailer_playback_url} title="" />}
+              {(card.poster) && <HoverTrailerPreview poster={card.poster} trailerUrl={video?.trailer_playback_url} title="" autoPlay />}
               <div className="pointer-events-none absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
               <h2 className="pointer-events-none absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ color: T.text }}>{card.title}</h2>
             </>

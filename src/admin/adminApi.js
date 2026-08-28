@@ -220,6 +220,23 @@ export function uploadAdminVideoTrailer(videoId, file, onProgress) {
   });
 }
 
+export async function uploadAdminVideoSubtitle(videoId, file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/videos/${videoId}/upload-subtitle`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload subtitle.");
+  }
+  return data;
+}
+
 export async function uploadAdminVideoPoster(videoId, file) {
   const token = getAdminToken();
   const formData = new FormData();

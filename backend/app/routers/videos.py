@@ -3,7 +3,7 @@ import uuid as uuid_module
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
 from pathlib import Path
 from sqlalchemy.orm import Session
 
@@ -324,6 +324,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None, force_access:
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.trailer_bunny_video_id}/playlist.m3u8"
             if video.trailer_bunny_video_id else None
         ),
+        subtitle_url=(f"/api/videos/{video.id}/subtitle.vtt" if video.subtitle_vtt_text else None),
         created_at=video.created_at,
         published_at=video.published_at,
         has_access=has_access,
@@ -834,6 +835,63 @@ async def _upload_trailer_to_bunny(video: Video, file: UploadFile, db: Session) 
     db.commit()
     db.refresh(video)
     return video
+
+
+def _srt_to_vtt(text: str) -> str:
+    """Converts SubRip (.srt) to WebVTT (.vtt) — the two formats are
+    almost identical, the real differences are the WEBVTT header line
+    and comma-vs-period as the milliseconds separator in timestamps.
+    If the text already looks like VTT (starts with WEBVTT), it's
+    passed through unchanged rather than double-converting.
+    """
+    stripped = text.strip()
+    if stripped.upper().startswith("WEBVTT"):
+        return stripped
+    # SRT timestamps use commas for milliseconds (00:00:01,000);
+    # WebVTT requires periods (00:00:01.000).
+    import re
+    converted = re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", stripped)
+    return "WEBVTT\n\n" + converted
+
+
+@router.post("/{video_id}/upload-subtitle", response_model=VideoOut)
+async def upload_video_subtitle(
+    video_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Accepts a .srt or .vtt file, converts to WebVTT if needed, and
+    stores the text directly (see subtitle_vtt_text's docstring on the
+    Video model for why — not hosted on Bunny). Re-uploading replaces
+    the existing subtitle, same low-stakes-edit reasoning as trailers.
+    """
+    _require_creator_or_organiser(current_user)
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    if not file.filename.lower().endswith((".srt", ".vtt")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .srt or .vtt files are allowed.")
+
+    raw = (await file.read()).decode("utf-8", errors="replace")
+    video.subtitle_vtt_text = _srt_to_vtt(raw)
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db, force_access=True)
+
+
+@router.get("/{video_id}/subtitle.vtt")
+def get_video_subtitle(video_id: str, db: Session = Depends(get_db)):
+    """Serves the raw WebVTT text — no auth, same reasoning as
+    trailers being freely accessible: a subtitle track isn't sensitive
+    content, and the <track> element fetching it doesn't carry an
+    Authorization header anyway.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video or not video.subtitle_vtt_text:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No subtitle for this video.")
+    return Response(content=video.subtitle_vtt_text, media_type="text/vtt")
 
 
 @router.post("/{video_id}/upload-trailer", response_model=VideoOut)

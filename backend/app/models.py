@@ -865,6 +865,13 @@ class Video(Base):
     # ad-gated: has_ads/ad cue points only ever apply to the real
     # content, a trailer plays clean regardless of that setting.
     trailer_bunny_video_id = Column(String(255), nullable=True)
+    # Subtitle text, stored directly as WebVTT — NOT hosted on Bunny.
+    # theomy serves this itself (see GET /videos/{id}/subtitle.vtt) so
+    # the native ad-enabled player can attach a real <track> element.
+    # This only ever works for the native-player path (AdEnabledVideoPlayer);
+    # the plain Bunny iframe embed (ad-free videos) has no subtitle
+    # hook we control — Bunny owns that player entirely.
+    subtitle_vtt_text = Column(Text, nullable=True)
     # Real runtime, fetched from Bunny once encoding finishes — never a
     # manually-typed value, since a Creator guessing/mistyping a runtime
     # would be less trustworthy than the actual file's real duration.
