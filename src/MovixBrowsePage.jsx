@@ -337,7 +337,6 @@ function GenreRow({ category, cards, onSelect, t }) {
     >
       <div className="mb-4 flex items-center justify-between">
         <h2 className="group flex cursor-default items-center gap-1.5 text-2xl font-semibold" style={{ color: t.text }}>
-          <span className="h-4 w-1 rounded-full" style={{ background: `linear-gradient(180deg, ${COLORS.gold}, ${COLORS.burgundyLight}, ${COLORS.burgundyDark})` }} />
           {category}
           <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" style={{ color: t.textFaint }} />
         </h2>
@@ -345,24 +344,13 @@ function GenreRow({ category, cards, onSelect, t }) {
       </div>
 
       <div className="relative">
-        {/* Edge fades hint that the row scrolls further — a small but real
-            "this feels premium" cue borrowed from streaming-platform rows */}
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 sm:w-12"
-          style={{ background: `linear-gradient(90deg, ${t.pageBg} 0%, transparent 100%)` }}
-        />
-        <div
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 sm:w-32"
-          style={{ background: `linear-gradient(270deg, ${t.pageBg} 15%, transparent 100%)` }}
-        />
-
         <div
           ref={scrollerRef}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
-          className="flex select-none gap-4 overflow-x-auto pb-3 pr-20 sm:pr-32 [scroll-snap-type:x_mandatory] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex select-none gap-4 overflow-x-auto pb-3 [scroll-snap-type:x_mandatory] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           style={{ cursor: "grab" }}
         >
           {cards.map((card, i) => (
