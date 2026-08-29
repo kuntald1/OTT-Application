@@ -623,6 +623,30 @@ export function fetchMyEventEnquiries() {
   return request("/event-enquiries", { auth: true });
 }
 
+export async function uploadEventEnquiryPoster(enquiryId, file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/event-enquiries/${enquiryId}/upload-poster`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload poster. Please try again.");
+  }
+  return data;
+}
+
+export function fetchApprovedEvents() {
+  return request("/event-enquiries/approved");
+}
+
+export function fetchPublicEvent(id) {
+  return request(`/event-enquiries/${id}/public`);
+}
+
 export function createDonationOrder({ organiserUserId, amount }) {
   return request("/donations/razorpay/create-order", {
     method: "POST",

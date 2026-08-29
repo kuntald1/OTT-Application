@@ -11,14 +11,17 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
-    User, UserRole, EventEnquiry, EventEnquiryAttachment, EventTicketTier,
+    User, UserRole, EventEnquiry, EventEnquiryAttachment, EventTicketTier, EnquiryStatus,
 )
 from app.notifications import send_event_enquiry_acknowledgement
-from app.schemas import EventEnquiryOut, EventEnquiryAttachmentOut, TicketTierOut, TicketTierIn
+from app.schemas import EventEnquiryOut, EventEnquiryAttachmentOut, TicketTierOut, TicketTierIn, PublicEventListingOut
 
 router = APIRouter(prefix="/event-enquiries", tags=["event-enquiries"])
 
 UPLOAD_DIR = Path("uploads/event_documents")
+POSTER_UPLOAD_DIR = Path("uploads/event_posters")
+ALLOWED_POSTER_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_POSTER_BYTES = 5 * 1024 * 1024  # 5 MB
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf",
 }
@@ -60,6 +63,7 @@ def _to_out(
         proposed_date=enquiry.proposed_date,
         proposed_time=enquiry.proposed_time,
         venue=enquiry.venue,
+        poster_image_url=enquiry.poster_image_url,
         remarks=enquiry.remarks,
         status=enquiry.status.value,
         admin_note=enquiry.admin_note,
@@ -222,3 +226,95 @@ def list_my_event_enquiries(
         )
         out.append(_to_out(e, tiers, attachments))
     return out
+
+
+@router.post("/{enquiry_id}/upload-poster", response_model=EventEnquiryOut)
+async def upload_event_enquiry_poster(
+    enquiry_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """3:4 poster — the organiser's own enquiry only. Re-uploading
+    replaces it, same low-stakes-edit reasoning used for video/blog
+    cover images elsewhere in the app.
+    """
+    _require_creator_or_organiser(current_user)
+    enquiry = (
+        db.query(EventEnquiry)
+        .filter(EventEnquiry.id == enquiry_id, EventEnquiry.submitted_by_user_id == current_user.id)
+        .first()
+    )
+    if not enquiry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enquiry not found")
+    if file.content_type not in ALLOWED_POSTER_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only JPEG, PNG, or WEBP images are allowed.")
+    contents = await file.read()
+    if len(contents) > MAX_POSTER_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Poster must be smaller than 5MB.")
+
+    POSTER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    stored_name = f"{uuid_module.uuid4()}{ext}"
+    with open(POSTER_UPLOAD_DIR / stored_name, "wb") as out_file:
+        out_file.write(contents)
+
+    enquiry.poster_image_url = f"/api/uploads/event_posters/{stored_name}"
+    db.commit()
+    db.refresh(enquiry)
+
+    tiers = db.query(EventTicketTier).filter(EventTicketTier.enquiry_id == enquiry.id).all()
+    attachments = db.query(EventEnquiryAttachment).filter(EventEnquiryAttachment.enquiry_id == enquiry.id).all()
+    return _to_out(enquiry, tiers, attachments)
+
+
+def _to_public_out(enquiry: EventEnquiry, tiers: list[EventTicketTier]) -> PublicEventListingOut:
+    return PublicEventListingOut(
+        id=enquiry.id,
+        event_title=enquiry.event_title,
+        event_category=enquiry.event_category,
+        event_description=enquiry.event_description,
+        proposed_date=enquiry.proposed_date,
+        proposed_time=enquiry.proposed_time,
+        venue=enquiry.venue,
+        poster_image_url=enquiry.poster_image_url,
+        org_name=enquiry.org_name,
+        ticket_tiers=[TicketTierOut(id=t.id, tier_name=t.tier_name, price=t.price, quantity=t.quantity) for t in tiers],
+    )
+
+
+@router.get("/approved", response_model=list[PublicEventListingOut])
+def list_approved_events(db: Session = Depends(get_db)):
+    """Public, no auth — powers the Ticketing/Theater listing page.
+    Only ever returns status='approved' rows, matching the model's
+    original intent (see EventEnquiry's docstring).
+    """
+    enquiries = (
+        db.query(EventEnquiry)
+        .filter(EventEnquiry.status == EnquiryStatus.approved)
+        .order_by(EventEnquiry.proposed_date.asc())
+        .all()
+    )
+    out = []
+    for e in enquiries:
+        tiers = db.query(EventTicketTier).filter(EventTicketTier.enquiry_id == e.id).all()
+        out.append(_to_public_out(e, tiers))
+    return out
+
+
+@router.get("/{enquiry_id}/public", response_model=PublicEventListingOut)
+def get_public_event(enquiry_id: str, db: Session = Depends(get_db)):
+    """The shareable single-event link — public, no auth. Only
+    resolves for approved enquiries; a pending/rejected/reviewed
+    enquiry's link 404s rather than leaking unapproved details.
+    """
+    enquiry = (
+        db.query(EventEnquiry)
+        .filter(EventEnquiry.id == enquiry_id, EventEnquiry.status == EnquiryStatus.approved)
+        .first()
+    )
+    if not enquiry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    tiers = db.query(EventTicketTier).filter(EventTicketTier.enquiry_id == enquiry.id).all()
+    return _to_public_out(enquiry, tiers)
+

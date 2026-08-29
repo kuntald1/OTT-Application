@@ -31,6 +31,7 @@ import MyLiveStreamsPage from './Profile/MyLiveStreamsPage'
 import RevenuePage from './Profile/RevenuePage'
 import HistoryPage from './Profile/HistoryPage'
 import EventEnquiryPage from './Profile/EventEnquiryPage'
+import EventDetailPage from './Community/EventDetailPage'
 import AdminApp from './admin/AdminApp'
 import VideoDetailPage from './VideoDetailPage'
 import PersonProfilePage from './People/PersonProfilePage'
@@ -58,6 +59,12 @@ function getInitialRoute() {
     const params = new URLSearchParams(window.location.search)
     const sessionId = params.get('session_id')
     return { view: 'stripeSuccess', params: { sessionId } }
+  }
+  if (window.location.pathname.startsWith('/event/')) {
+    const eventId = window.location.pathname.split('/event/')[1]?.split(/[/?#]/)[0]
+    if (eventId) {
+      return { view: 'eventDetail', params: { eventId } }
+    }
   }
   return { view: 'hero', params: {} }
 }
@@ -202,6 +209,8 @@ export default function App() {
           <HistoryPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'eventEnquiry' ? (
           <EventEnquiryPage onBack={goBack} />
+        ) : route.view === 'eventDetail' ? (
+          <EventDetailPage eventId={route.params.eventId} onBack={goBack} />
         ) : route.view === 'manageProfile' ? (
           <ManageProfilePage onBack={goBack} />
         ) : route.view === 'blogList' ? (

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { editEnquiry } from "./adminApi";
+import { Plus, Trash2, ImagePlus } from "lucide-react";
+import { editEnquiry, uploadAdminEventEnquiryPoster } from "./adminApi";
 
 const COLORS = { cream: "#f5ebdd", gold: "#D4AF37" };
 const inputStyle = {
@@ -12,7 +12,7 @@ const labelStyle = {
   textTransform: "uppercase", letterSpacing: "0.03em", color: "rgba(245,235,221,0.5)",
 };
 
-export default function AdminEnquiryEditForm({ enquiry, onSave, onCancel }) {
+export default function AdminEnquiryEditForm({ enquiry, onSave, onCancel, onFileUpdated }) {
   const [form, setForm] = useState({
     org_name: enquiry.org_name, org_about: enquiry.org_about || "",
     contact_person: enquiry.contact_person, contact_email: enquiry.contact_email, contact_phone: enquiry.contact_phone,
@@ -25,6 +25,22 @@ export default function AdminEnquiryEditForm({ enquiry, onSave, onCancel }) {
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [uploadingPoster, setUploadingPoster] = useState(false);
+
+  const handlePosterSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPoster(true);
+    setError("");
+    try {
+      const updated = await uploadAdminEventEnquiryPoster(enquiry.id, file);
+      onFileUpdated?.(updated);
+    } catch (err) {
+      setError(err.message || "Couldn't upload poster.");
+    } finally {
+      setUploadingPoster(false);
+    }
+  };
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   const updateTier = (key, field, value) => setTiers((list) => list.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
@@ -59,6 +75,25 @@ export default function AdminEnquiryEditForm({ enquiry, onSave, onCancel }) {
 
   return (
     <div className="mt-3 flex flex-col gap-3 rounded-lg p-3" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(212,175,55,0.2)" }}>
+      <div className="flex items-center gap-3">
+        <div
+          className="flex-shrink-0 overflow-hidden rounded-lg"
+          style={{ width: 60, aspectRatio: "3/4", background: "rgba(245,235,221,0.05)", border: "1px solid rgba(245,235,221,0.15)" }}
+        >
+          {enquiry.poster_image_url && (
+            <img src={enquiry.poster_image_url} alt="" className="h-full w-full object-cover" />
+          )}
+        </div>
+        <label
+          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+          style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+          {uploadingPoster ? "Uploading…" : enquiry.poster_image_url ? "Change poster (3:4)" : "Upload poster (3:4)"}
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPoster} onChange={handlePosterSelect} />
+        </label>
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
         <div><label style={labelStyle}>Organisation Name</label><input type="text" value={form.org_name} onChange={update("org_name")} style={inputStyle} /></div>
         <div><label style={labelStyle}>Event Title</label><input type="text" value={form.event_title} onChange={update("event_title")} style={inputStyle} /></div>

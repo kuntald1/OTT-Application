@@ -1,14 +1,15 @@
 import os
+import uuid as uuid_module
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, EventEnquiry, EventTicketTier, EventEnquiryAttachment, EnquiryStatus
 from app.schemas import EventEnquiryOut, AdminVideoRejectRequest, EventEnquiryEdit
-from app.routers.event_enquiries import _to_out, ALLOWED_CATEGORIES
+from app.routers.event_enquiries import _to_out, ALLOWED_CATEGORIES, POSTER_UPLOAD_DIR, ALLOWED_POSTER_TYPES, MAX_POSTER_BYTES
 from app.notifications import (
     send_enquiry_approved_email, send_enquiry_approved_whatsapp,
     send_enquiry_rejected_email, send_enquiry_rejected_whatsapp,
@@ -123,6 +124,32 @@ def reject_enquiry(
     send_enquiry_rejected_email(enquiry.contact_email, enquiry.contact_person, enquiry.event_title, payload.admin_note)
     send_enquiry_rejected_whatsapp(enquiry.contact_phone, enquiry.contact_person, enquiry.event_title, payload.admin_note)
 
+    return _full_out(enquiry, db)
+
+
+@router.post("/{enquiry_id}/upload-poster", response_model=EventEnquiryOut)
+async def upload_enquiry_poster_as_admin(
+    enquiry_id: str,
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    enquiry = _get_enquiry_or_404(enquiry_id, db)
+    if file.content_type not in ALLOWED_POSTER_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only JPEG, PNG, or WEBP images are allowed.")
+    contents = await file.read()
+    if len(contents) > MAX_POSTER_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Poster must be smaller than 5MB.")
+
+    POSTER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    stored_name = f"{uuid_module.uuid4()}{ext}"
+    with open(POSTER_UPLOAD_DIR / stored_name, "wb") as out_file:
+        out_file.write(contents)
+
+    enquiry.poster_image_url = f"/api/uploads/event_posters/{stored_name}"
+    db.commit()
+    db.refresh(enquiry)
     return _full_out(enquiry, db)
 
 

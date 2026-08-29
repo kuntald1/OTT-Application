@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, Upload, X, Plus, Trash2, ChevronDown, Paperclip } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { submitEventEnquiry, fetchMyEventEnquiries, fetchCategoryOptions } from "../api";
+import { submitEventEnquiry, uploadEventEnquiryPoster, fetchMyEventEnquiries, fetchCategoryOptions } from "../api";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const inputStyle = {
@@ -97,6 +97,41 @@ export default function EventEnquiryPage({ onBack }) {
   };
   const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
+  const [posterFile, setPosterFile] = useState(null);
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState(null);
+  const handlePosterChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPosterFile(file);
+    setPosterPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const [uploadingPosterForId, setUploadingPosterForId] = useState(null);
+  const handleHistoryPosterChange = async (enquiryId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPosterForId(enquiryId);
+    try {
+      await uploadEventEnquiryPoster(enquiryId, file);
+      loadHistory();
+    } catch (err) {
+      setError(err.message || "Couldn't upload poster. Please try again.");
+    } finally {
+      setUploadingPosterForId(null);
+    }
+  };
+
+  const [copiedLinkForId, setCopiedLinkForId] = useState(null);
+  const handleCopyPublicLink = async (enquiryId) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/event/${enquiryId}`);
+      setCopiedLinkForId(enquiryId);
+      setTimeout(() => setCopiedLinkForId(null), 2500);
+    } catch (err) {
+      // clipboard API unavailable — nothing more we can do here
+    }
+  };
+
   const tiersValid = tiers.every((t) => t.tier_name.trim() && Number(t.price) > 0 && Number(t.quantity) > 0);
 
   const requiredFilled =
@@ -115,6 +150,15 @@ export default function EventEnquiryPage({ onBack }) {
         quantity: Number(t.quantity),
       }));
       const result = await submitEventEnquiry(form, tierPayload, files);
+      if (posterFile) {
+        try {
+          await uploadEventEnquiryPoster(result.id, posterFile);
+        } catch (posterErr) {
+          // Enquiry itself was submitted successfully — a poster
+          // upload failure shouldn't block that acknowledgement.
+          // They can add/retry the poster later from their enquiry history.
+        }
+      }
       setAcknowledged(result);
       loadHistory();
     } catch (err) {
@@ -215,6 +259,31 @@ export default function EventEnquiryPage({ onBack }) {
               <div>
                 <label style={labelStyle}>Event Title *</label>
                 <input type="text" value={form.event_title} onChange={update("event_title")} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Event Poster (3:4)</label>
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex-shrink-0 overflow-hidden rounded-lg"
+                    style={{ width: 90, aspectRatio: "3/4", background: "rgba(245,235,221,0.05)", border: "1px solid rgba(245,235,221,0.15)" }}
+                  >
+                    {posterPreviewUrl && (
+                      <img src={posterPreviewUrl} alt="" className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                  <div>
+                    <label
+                      className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                      style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                    >
+                      {posterFile ? "Change poster" : "Upload poster"}
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePosterChange} />
+                    </label>
+                    <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                      Portrait, 3:4 ratio recommended (e.g. 900×1200px) — shown once approved.
+                    </p>
+                  </div>
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Category *</label>
@@ -416,6 +485,35 @@ export default function EventEnquiryPage({ onBack }) {
                         ))}
                       </div>
                     )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      {h.poster_image_url && (
+                        <img src={h.poster_image_url} alt="" className="h-16 w-12 rounded object-cover" style={{ border: "1px solid rgba(245,235,221,0.15)" }} />
+                      )}
+                      <label
+                        className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                        style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+                      >
+                        {uploadingPosterForId === h.id ? "Uploading…" : h.poster_image_url ? "Change poster" : "Upload poster"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          disabled={uploadingPosterForId === h.id}
+                          onChange={(e) => handleHistoryPosterChange(h.id, e)}
+                        />
+                      </label>
+                      {h.status === "approved" && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPublicLink(h.id)}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                          style={{ background: "rgba(212,175,55,0.1)", color: COLORS.gold, border: "1px solid rgba(212,175,55,0.25)" }}
+                        >
+                          {copiedLinkForId === h.id ? "Link copied!" : "Copy public link"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

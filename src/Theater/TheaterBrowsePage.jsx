@@ -1,16 +1,15 @@
-import React, { useMemo, useState } from "react";
-import { Ticket, Info, Plus, Check, X, Star, MapPin, Calendar, SlidersHorizontal, ChevronDown } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { Ticket, Info, Plus, Check, X, MapPin, Calendar, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
-import { SHOWS, CATEGORIES, VENUES } from "./showsData";
+import { fetchApprovedEvents } from "../api";
 import { useApp } from "../context/AppContext";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
 
 // ---------------------------------------------------------------------------
-// Theater Browse — exactly the 8 real shows from showsData.js (same ones
-// cycling in the Hero above), shown once each with no generated repeats,
-// and no genre-row categorization. Instead: a ticketing-style Filters panel
-// (category / date / venue / price) narrows the same fixed list, the way a
-// real booking site would.
+// Theater Browse ("Ticketing") — real, admin-approved events (from the
+// Event Listing Enquiry flow), not demo/fictional data. A ticketing-style
+// Filters panel (category / date / venue / price) narrows the live list,
+// the way a real booking site would.
 // ---------------------------------------------------------------------------
 
 const T = {
@@ -24,8 +23,73 @@ const T = {
   modalOverlay: "rgba(0,0,0,0.7)",
 };
 
+// Matches the fixed set the Event Listing Enquiry form (and its backend
+// validation) already constrains event_category to — see
+// ALLOWED_CATEGORIES in routers/event_enquiries.py.
+const CATEGORIES = [
+  "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
+  "Classical Theatre", "Experimental Theatre", "Popular Shows",
+];
+
 const DATE_TAGS = ["Today", "Tomorrow", "This Weekend"];
 const PRICE_TAGS = ["Free", "0-500", "501-2000", "Above 2000"];
+
+function getDateTag(dateStr) {
+  const eventDay = new Date(dateStr);
+  eventDay.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((eventDay - today) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays > 1 && diffDays <= 7) {
+    const day = today.getDay(); // 0=Sun..6=Sat
+    const daysUntilSat = (6 - day + 7) % 7;
+    const daysUntilSun = (7 - day) % 7 || 7;
+    if (diffDays === daysUntilSat || diffDays === daysUntilSun) return "This Weekend";
+  }
+  return null;
+}
+
+function getPriceTag(price) {
+  if (price === 0) return "Free";
+  if (price <= 500) return "0-500";
+  if (price <= 2000) return "501-2000";
+  return "Above 2000";
+}
+
+function formatEventDateLabel(proposedDate, proposedTime) {
+  const tag = getDateTag(proposedDate);
+  const timePart = proposedTime ? `, ${proposedTime}` : "";
+  if (tag === "Today" || tag === "Tomorrow") return `${tag}${timePart}`;
+  const d = new Date(proposedDate);
+  return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}${timePart}`;
+}
+
+// Normalizes a real PublicEventListingOut (from GET /event-enquiries/approved)
+// into the flat shape this page's rendering was already built around —
+// keeps the render logic itself close to its original form, minimizing
+// the surface area for new bugs while swapping the data source entirely.
+function toShowShape(event) {
+  const cheapestTier = event.ticket_tiers.length > 0
+    ? event.ticket_tiers.reduce((min, t) => (Number(t.price) < Number(min.price) ? t : min))
+    : null;
+  const cheapestPrice = cheapestTier ? Number(cheapestTier.price) : 0;
+  return {
+    id: event.id,
+    title: event.event_title,
+    poster: event.poster_image_url, // may be null — rendering falls back to a plain placeholder
+    synopsis: event.event_description || "",
+    category: event.event_category,
+    venue: event.venue,
+    orgName: event.org_name,
+    date: formatEventDateLabel(event.proposed_date, event.proposed_time),
+    dateTag: getDateTag(event.proposed_date),
+    price: cheapestTier ? `₹${cheapestPrice.toLocaleString("en-IN")}` : "Free",
+    priceTag: getPriceTag(cheapestPrice),
+    ticketTiers: event.ticket_tiers,
+  };
+}
 
 function FilterPill({ active, onClick, children }) {
   return (
@@ -59,15 +123,31 @@ export default function TheaterBrowsePage() {
   const [dateFilter, setDateFilter] = useState(null);
   const [priceFilter, setPriceFilter] = useState(null);
 
+  const [shows, setShows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchApprovedEvents()
+      .then((events) => setShows(events.map(toShowShape)))
+      .catch(() => setShows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const VENUES = useMemo(() => {
+    const unique = new Set(shows.map((s) => s.venue));
+    return Array.from(unique).sort();
+  }, [shows]);
+
   const filtered = useMemo(() => {
-    return SHOWS.filter((s) => {
+    return shows.filter((s) => {
       if (categoryFilter.size > 0 && !categoryFilter.has(s.category)) return false;
       if (venueFilter.size > 0 && !venueFilter.has(s.venue)) return false;
       if (dateFilter && s.dateTag !== dateFilter) return false;
       if (priceFilter && s.priceTag !== priceFilter) return false;
       return true;
     });
-  }, [categoryFilter, venueFilter, dateFilter, priceFilter]);
+  }, [shows, categoryFilter, venueFilter, dateFilter, priceFilter]);
 
   const activeFilterCount =
     categoryFilter.size + venueFilter.size + (dateFilter ? 1 : 0) + (priceFilter ? 1 : 0);
@@ -130,11 +210,15 @@ export default function TheaterBrowsePage() {
 
             <FilterSection title="Venue">
               <div className="flex flex-wrap gap-2">
-                {VENUES.map((v) => (
-                  <FilterPill key={v} active={venueFilter.has(v)} onClick={() => setVenueFilter((s) => toggleInSet(s, v))}>
-                    {v}
-                  </FilterPill>
-                ))}
+                {VENUES.length === 0 ? (
+                  <p className="text-xs" style={{ color: T.textFainter }}>No venues yet.</p>
+                ) : (
+                  VENUES.map((v) => (
+                    <FilterPill key={v} active={venueFilter.has(v)} onClick={() => setVenueFilter((s) => toggleInSet(s, v))}>
+                      {v}
+                    </FilterPill>
+                  ))
+                )}
               </div>
             </FilterSection>
 
@@ -153,11 +237,15 @@ export default function TheaterBrowsePage() {
           <div className="min-w-0 flex-1">
             <div className="mb-5 flex items-center justify-between">
               <p className="text-sm" style={{ color: T.textFaint }}>
-                {filtered.length} of {SHOWS.length} shows
+                {loading ? "Loading…" : `${filtered.length} of ${shows.length} shows`}
               </p>
             </div>
 
-            {filtered.length === 0 ? (
+            {!loading && shows.length === 0 ? (
+              <div className="rounded-2xl p-10 text-center" style={{ background: T.modalSurface, border: `1px solid ${T.border}` }}>
+                <p className="text-sm" style={{ color: T.textMuted }}>No events listed yet — check back soon.</p>
+              </div>
+            ) : filtered.length === 0 && !loading ? (
               <div className="rounded-2xl p-10 text-center" style={{ background: T.modalSurface, border: `1px solid ${T.border}` }}>
                 <p className="text-sm" style={{ color: T.textMuted }}>No shows match these filters.</p>
                 <button type="button" onClick={clearAll} className="mt-3 text-sm font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
@@ -175,17 +263,16 @@ export default function TheaterBrowsePage() {
                   >
                     <div
                       className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
-                      style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
+                      style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.04)" }}
                     >
-                      <img
-                        src={show.posterLarge}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-110"
-                      />
+                      {show.poster && (
+                        <img
+                          src={show.poster}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-110"
+                        />
+                      )}
                       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                      <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                        <Star className="h-2.5 w-2.5" style={{ fill: COLORS.gold, color: COLORS.gold }} /> {show.rating}
-                      </span>
                     </div>
                     <p className="mt-2.5 truncate text-sm font-medium" style={{ color: T.text }}>{show.title}</p>
                     <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: T.textFaint }}>
@@ -202,11 +289,8 @@ export default function TheaterBrowsePage() {
 
       {/* ---------------- Footer ---------------- */}
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${T.border}` }}>
-        <p className="text-sm font-semibold" style={{ color: T.text }}>Theater</p>
+        <p className="text-sm font-semibold" style={{ color: T.text }}>Ticketing</p>
         <p className="mt-1 text-xs" style={{ color: T.textFaint }}>Celebrating Kolkata's stages, one production at a time.</p>
-        <p className="mt-4 text-xs" style={{ color: T.textFainter }}>
-          Theater is a demo concept within theomy. Productions and cast listings are fictional; poster art is originally generated, not photography of real people or events.
-        </p>
       </footer>
 
       {modal.item && <ShowModal show={modal.item} closing={modal.closing} onClose={modal.close} />}
@@ -242,7 +326,7 @@ function ShowModal({ show, closing, onClose }) {
     toggleListItem({
       id: show.id,
       title: show.title,
-      image: show.posterLarge,
+      image: show.poster,
       meta: `${show.venue} · ${show.date}`,
       section: "Theater",
     });
@@ -268,8 +352,8 @@ function ShowModal({ show, closing, onClose }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative aspect-video w-full">
-          <img src={show.posterLarge} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+        <div className="relative aspect-video w-full" style={{ background: "rgba(255,255,255,0.04)" }}>
+          {show.poster && <img src={show.poster} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />}
           <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
           <button
             type="button"
@@ -290,7 +374,7 @@ function ShowModal({ show, closing, onClose }) {
               className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >
-              <Ticket className="h-4 w-4" /> Book Tickets — {show.price}
+              <Ticket className="h-4 w-4" /> Book Tickets — From {show.price}
             </button>
             <button
               type="button"
@@ -305,22 +389,27 @@ function ShowModal({ show, closing, onClose }) {
             >
               {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             </button>
-            <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
-              <Info className="h-4 w-4" />
-            </button>
           </div>
 
           <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: T.textMuted }}>
-            <span className="flex items-center gap-1" style={{ color: COLORS.gold }}>
-              <Star className="h-4 w-4" style={{ fill: COLORS.gold }} /> {show.rating}
-            </span>
             <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {show.venue}</span>
             <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {show.date}</span>
             <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: COLORS.gold }}>{show.category}</span>
           </div>
 
-          <p className="mb-4 text-sm leading-relaxed" style={{ color: T.textMuted }}>{show.synopsis}</p>
-          <p className="text-xs" style={{ color: T.textFaint }}>Featuring {show.lead}</p>
+          {show.synopsis && <p className="mb-4 text-sm leading-relaxed" style={{ color: T.textMuted }}>{show.synopsis}</p>}
+          <p className="text-xs" style={{ color: T.textFaint }}>Presented by {show.orgName}</p>
+
+          {show.ticketTiers.length > 0 && (
+            <div className="mt-4 flex flex-col gap-1.5">
+              {show.ticketTiers.map((t) => (
+                <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm" style={{ background: "rgba(255,255,255,0.04)" }}>
+                  <span style={{ color: T.text }}>{t.tier_name}</span>
+                  <span style={{ color: COLORS.gold }}>₹{Number(t.price).toLocaleString("en-IN")}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

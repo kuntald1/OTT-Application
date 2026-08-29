@@ -136,6 +136,7 @@ export default function AdminEventEnquiriesPage() {
                   <AdminEnquiryEditForm
                     enquiry={e}
                     onCancel={() => setEditingId(null)}
+                    onFileUpdated={(updated) => setEnquiries((list) => list.map((item) => (item.id === updated.id ? updated : item)))}
                     onSave={(updated) => { setEnquiries((list) => list.map((item) => (item.id === updated.id ? updated : item))); setEditingId(null); }}
                   />
                 )}

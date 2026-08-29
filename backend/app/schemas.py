@@ -620,12 +620,32 @@ class EventEnquiryOut(BaseModel):
     proposed_date: datetime
     proposed_time: Optional[str] = None
     venue: str
+    poster_image_url: Optional[str] = None
     remarks: Optional[str] = None
     status: str
     admin_note: Optional[str] = None
     ticket_tiers: List[TicketTierOut]
     attachments: List[EventEnquiryAttachmentOut]
     created_at: datetime
+
+
+class PublicEventListingOut(BaseModel):
+    """The public-facing shape — deliberately excludes internal fields
+    (submitted_by_user_id, admin_note, attachments, remarks, contact
+    details) that aren't anyone else's business once an event is public.
+    Used both for the shareable single-event link and the Ticketing
+    page's listing.
+    """
+    id: uuid.UUID
+    event_title: str
+    event_category: str
+    event_description: Optional[str] = None
+    proposed_date: datetime
+    proposed_time: Optional[str] = None
+    venue: str
+    poster_image_url: Optional[str] = None
+    org_name: str
+    ticket_tiers: List[TicketTierOut]
 
 
 class SendOtpRequest(BaseModel):

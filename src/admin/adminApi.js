@@ -112,6 +112,22 @@ export function editEnquiry(enquiryId, payload) {
   return request(`/admin/event-enquiries/${enquiryId}`, { method: "PUT", auth: true, body: payload });
 }
 
+export async function uploadAdminEventEnquiryPoster(enquiryId, file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/admin/event-enquiries/${enquiryId}/upload-poster`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload poster.");
+  }
+  return data;
+}
+
 export async function deleteEnquiry(enquiryId) {
   const token = getAdminToken();
   const res = await fetch(`${BASE_URL}/admin/event-enquiries/${enquiryId}`, {

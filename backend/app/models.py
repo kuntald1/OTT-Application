@@ -644,6 +644,9 @@ class EventEnquiry(Base):
     proposed_date = Column(DateTime(timezone=True), nullable=False)
     proposed_time = Column(String(20), nullable=True)  # free-text, e.g. "7:00 PM"
     venue = Column(String(255), nullable=False)
+    # 3:4 poster — shown on the public share link and, once approved, on
+    # the Ticketing/Theater listing page.
+    poster_image_url = Column(String(500), nullable=True)
 
     remarks = Column(Text, nullable=True)
 
