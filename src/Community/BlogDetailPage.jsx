@@ -15,7 +15,6 @@ export default function BlogDetailPage({ postId, onBack }) {
   const [commentText, setCommentText] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [confirmDeleteComment, setConfirmDeleteComment] = useState(null);
-  const [instagramCopied, setInstagramCopied] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -75,19 +74,36 @@ export default function BlogDetailPage({ postId, onBack }) {
     }
   };
 
+  const [instagramCopied, setInstagramCopied] = useState(false);
+
   const handleInstagramShare = async () => {
-    // Instagram has no public web share-intent like WhatsApp/Facebook do —
-    // sharing directly to a Story requires their native mobile SDK with a
-    // registered Meta App ID, which theomy doesn't have configured. This
-    // copies the link so the person can paste it into their Story manually,
-    // which is the honest, actually-working fallback rather than a broken
-    // deep link.
+    // Instagram has no public web share-intent at all (unlike Facebook's
+    // sharer.php below, which genuinely works for a feed post) — this
+    // copies the link so the person can paste it into their own post or
+    // Story. See the note further down about why a real "post directly to
+    // Story" button needs a native mobile app, not a website.
     try {
       await navigator.clipboard.writeText(window.location.href);
       setInstagramCopied(true);
       setTimeout(() => setInstagramCopied(false), 2500);
     } catch (err) {
       // clipboard API unavailable — nothing more we can do here
+    }
+  };
+
+  const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
+  const handleNativeShare = async () => {
+    // The browser's own Share Sheet — genuinely works today, no Meta App
+    // ID or review needed, since it's a web standard rather than a
+    // platform-specific integration. On mobile this lists whatever apps
+    // are installed (Instagram, WhatsApp, Messages, Mail, etc.), and many
+    // of those apps' own share extensions offer "Add to Story" once
+    // opened from here — this is the most capable option actually
+    // available from a website today.
+    try {
+      await navigator.share({ title: post.title, text: post.excerpt, url: window.location.href });
+    } catch (err) {
+      // user cancelled the share sheet — not an error worth surfacing
     }
   };
 
@@ -188,10 +204,20 @@ export default function BlogDetailPage({ postId, onBack }) {
           >
             <Instagram className="h-3.5 w-3.5" /> {instagramCopied ? "Link copied!" : "Instagram"}
           </button>
+          {canNativeShare && (
+            <button
+              type="button"
+              onClick={handleNativeShare}
+              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium hover:opacity-80"
+              style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.75)", border: "1px solid rgba(245,235,221,0.15)" }}
+            >
+              <Send className="h-3.5 w-3.5" /> Share…
+            </button>
+          )}
         </div>
         {instagramCopied && (
           <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
-            Link copied — paste it into your Instagram Story.
+            Link copied — paste it into your Instagram post or Story.
           </p>
         )}
 

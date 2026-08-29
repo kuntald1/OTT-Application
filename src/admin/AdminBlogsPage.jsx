@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare, X } from "lucide-react";
+import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare } from "lucide-react";
 import {
   createAdminBlog, fetchAdminBlogs, updateAdminBlog, deleteAdminBlog, uploadAdminBlogCover,
   fetchAllAdminBlogComments, editAdminBlogComment, deleteAdminBlogComment,
@@ -19,42 +19,8 @@ const labelStyle = {
 };
 
 export default function AdminBlogsPage() {
-  const [tab, setTab] = useState("posts"); // "posts" | "comments"
-
-  return (
-    <div>
-      <div className="mb-5 flex items-center gap-2">
-        <h1 className="flex items-center gap-2 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          <Newspaper className="h-5 w-5" style={{ color: COLORS.gold }} /> Blog
-        </h1>
-      </div>
-
-      <div className="mb-5 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTab("posts")}
-          className="rounded-full px-4 py-1.5 text-xs font-semibold"
-          style={{ background: tab === "posts" ? COLORS.gold : "rgba(245,235,221,0.06)", color: tab === "posts" ? "#0a0104" : "rgba(245,235,221,0.7)" }}
-        >
-          Posts
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("comments")}
-          className="rounded-full px-4 py-1.5 text-xs font-semibold"
-          style={{ background: tab === "comments" ? COLORS.gold : "rgba(245,235,221,0.06)", color: tab === "comments" ? "#0a0104" : "rgba(245,235,221,0.7)" }}
-        >
-          All Comments
-        </button>
-      </div>
-
-      {tab === "posts" ? <PostsTab /> : <CommentsTab />}
-    </div>
-  );
-}
-
-function PostsTab() {
   const [posts, setPosts] = useState([]);
+  const [allComments, setAllComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -71,13 +37,19 @@ function PostsTab() {
   const [saving, setSaving] = useState(false);
 
   const [uploadingCoverFor, setUploadingCoverFor] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDeletePost, setConfirmDeletePost] = useState(null);
+  const [confirmDeleteComment, setConfirmDeleteComment] = useState(null);
+
+  const [expandedComments, setExpandedComments] = useState(null); // blog id whose comments are shown
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentText, setEditCommentText] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
 
   const load = () => {
     setLoading(true);
-    fetchAdminBlogs()
-      .then(setPosts)
-      .catch(() => setPosts([]))
+    Promise.all([fetchAdminBlogs(), fetchAllAdminBlogComments()])
+      .then(([p, c]) => { setPosts(p); setAllComments(c); })
+      .catch(() => { setPosts([]); setAllComments([]); })
       .finally(() => setLoading(false));
   };
 
@@ -145,21 +117,62 @@ function PostsTab() {
     }
   };
 
-  const handleDeleteConfirmed = async () => {
-    setBusyId(confirmDelete.id);
+  const handleDeletePostConfirmed = async () => {
+    setBusyId(confirmDeletePost.id);
     try {
-      await deleteAdminBlog(confirmDelete.id);
+      await deleteAdminBlog(confirmDeletePost.id);
       load();
     } catch (err) {
       setError(err.message || "Couldn't delete post.");
     } finally {
       setBusyId(null);
-      setConfirmDelete(null);
+      setConfirmDeletePost(null);
     }
   };
 
+  const openEditComment = (c) => {
+    setEditingCommentId(c.id);
+    setEditCommentText(c.content);
+  };
+
+  const handleSaveCommentEdit = async () => {
+    if (!editCommentText.trim()) return;
+    setSavingComment(true);
+    setError("");
+    try {
+      await editAdminBlogComment(editingCommentId, editCommentText.trim());
+      setEditingCommentId(null);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't save changes.");
+    } finally {
+      setSavingComment(false);
+    }
+  };
+
+  const handleDeleteCommentConfirmed = async () => {
+    setBusyId(confirmDeleteComment.id);
+    try {
+      await deleteAdminBlogComment(confirmDeleteComment.id);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't delete comment.");
+    } finally {
+      setBusyId(null);
+      setConfirmDeleteComment(null);
+    }
+  };
+
+  const formatDate = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
   return (
     <div>
+      <div className="mb-5 flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-xl font-semibold" style={{ color: COLORS.cream }}>
+          <Newspaper className="h-5 w-5" style={{ color: COLORS.gold }} /> Blog
+        </h1>
+      </div>
+
       <button
         type="button"
         onClick={() => setShowCreateForm((v) => !v)}
@@ -211,7 +224,9 @@ function PostsTab() {
         <p style={{ color: "rgba(245,235,221,0.5)" }}>No posts yet.</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {posts.map((post) => (
+          {posts.map((post) => {
+            const postComments = allComments.filter((c) => c.blog_id === post.id);
+            return (
             <div key={post.id} className="rounded-xl p-4" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>
               {editingId === post.id ? (
                 <div>
@@ -244,7 +259,7 @@ function PostsTab() {
                     <div>
                       <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{post.title}</p>
                       <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                        {post.author_name} · {post.likes_count} likes · {post.comment_count} comments
+                        {post.author_name} · {post.likes_count} likes · {postComments.length} comments
                         {!post.is_published && <span style={{ color: "#f87171" }}> · Draft</span>}
                       </p>
                     </div>
@@ -264,7 +279,7 @@ function PostsTab() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConfirmDelete(post)}
+                        onClick={() => setConfirmDeletePost(post)}
                         disabled={busyId === post.id}
                         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                         style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
@@ -292,139 +307,87 @@ function PostsTab() {
                     </label>
                     <FilePreview type="image" src={post.cover_image_url} label="Cover" />
                   </div>
+
+                  {/* Comments for THIS post, right here — no separate tab */}
+                  <div className="mt-3 border-t pt-3" style={{ borderColor: "rgba(245,235,221,0.08)" }}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedComments(expandedComments === post.id ? null : post.id)}
+                      className="flex items-center gap-1.5 text-xs font-medium"
+                      style={{ color: "rgba(245,235,221,0.6)" }}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      {postComments.length} comment{postComments.length === 1 ? "" : "s"} {expandedComments === post.id ? "▲" : "▼"}
+                    </button>
+
+                    {expandedComments === post.id && (
+                      <div className="mt-2 flex flex-col gap-2">
+                        {postComments.length === 0 ? (
+                          <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>No comments yet.</p>
+                        ) : (
+                          postComments.map((c) => (
+                            <div key={c.id} className="rounded-lg p-2.5" style={{ background: "rgba(245,235,221,0.03)" }}>
+                              {editingCommentId === c.id ? (
+                                <div>
+                                  <textarea rows={2} value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} style={{ ...inputStyle, resize: "vertical" }} />
+                                  <div className="mt-1.5 flex gap-2">
+                                    <button type="button" onClick={handleSaveCommentEdit} disabled={savingComment} className="rounded-full px-3 py-1 text-[11px] font-semibold disabled:opacity-50" style={{ background: COLORS.gold, color: "#0a0104" }}>
+                                      {savingComment ? "Saving…" : "Save"}
+                                    </button>
+                                    <button type="button" onClick={() => setEditingCommentId(null)} className="text-[11px]" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-[11px] font-semibold" style={{ color: COLORS.gold }}>{c.user_name}</p>
+                                    <p className="text-xs" style={{ color: "rgba(245,235,221,0.85)" }}>{c.content}</p>
+                                    <p className="mt-0.5 text-[10px]" style={{ color: "rgba(245,235,221,0.4)" }}>{formatDate(c.created_at)}</p>
+                                  </div>
+                                  <div className="flex flex-shrink-0 gap-1">
+                                    <button type="button" onClick={() => openEditComment(c)} className="rounded p-1 hover:bg-white/5" style={{ color: COLORS.gold }}>
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                    <button type="button" onClick={() => setConfirmDeleteComment(c)} disabled={busyId === c.id} className="rounded p-1 hover:bg-white/5 disabled:opacity-50" style={{ color: "#f87171" }}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       <ConfirmDialog
-        open={!!confirmDelete}
+        open={!!confirmDeletePost}
         title="Delete post"
-        message={`Permanently delete "${confirmDelete?.title}"? Its comments and likes go with it. This can't be undone.`}
+        message={`Permanently delete "${confirmDeletePost?.title}"? Its comments and likes go with it. This can't be undone.`}
         confirmLabel="Delete"
         danger
-        busy={busyId === confirmDelete?.id}
-        onCancel={() => setConfirmDelete(null)}
-        onConfirm={handleDeleteConfirmed}
+        busy={busyId === confirmDeletePost?.id}
+        onCancel={() => setConfirmDeletePost(null)}
+        onConfirm={handleDeletePostConfirmed}
       />
-    </div>
-  );
-}
-
-function CommentsTab() {
-  const [comments, setComments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  const [busyId, setBusyId] = useState(null);
-
-  const load = () => {
-    setLoading(true);
-    fetchAllAdminBlogComments()
-      .then(setComments)
-      .catch(() => setComments([]))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, []);
-
-  const openEdit = (c) => {
-    setEditingId(c.id);
-    setEditText(c.content);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editText.trim()) return;
-    setSaving(true);
-    setError("");
-    try {
-      await editAdminBlogComment(editingId, editText.trim());
-      setEditingId(null);
-      load();
-    } catch (err) {
-      setError(err.message || "Couldn't save changes.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteConfirmed = async () => {
-    setBusyId(confirmDelete.id);
-    try {
-      await deleteAdminBlogComment(confirmDelete.id);
-      load();
-    } catch (err) {
-      setError(err.message || "Couldn't delete comment.");
-    } finally {
-      setBusyId(null);
-      setConfirmDelete(null);
-    }
-  };
-
-  const formatDate = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-  return (
-    <div>
-      {error && (
-        <div className="mb-4 rounded-lg px-3 py-2 text-sm" style={{ background: "rgba(255,255,255,0.95)", color: "#b91c1c", border: "1px solid rgba(185,28,28,0.3)" }}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <p style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
-      ) : comments.length === 0 ? (
-        <p style={{ color: "rgba(245,235,221,0.5)" }}>No comments yet.</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {comments.map((c) => (
-            <div key={c.id} className="rounded-xl p-3" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>
-              {editingId === c.id ? (
-                <div>
-                  <textarea rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} style={{ ...inputStyle, resize: "vertical" }} />
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" onClick={handleSaveEdit} disabled={saving} className="rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ background: COLORS.gold, color: "#0a0104" }}>
-                      {saving ? "Saving…" : "Save"}
-                    </button>
-                    <button type="button" onClick={() => setEditingId(null)} className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-semibold" style={{ color: COLORS.gold }}>{c.user_name}</p>
-                    <p className="text-sm" style={{ color: "rgba(245,235,221,0.85)" }}>{c.content}</p>
-                    <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>{formatDate(c.created_at)}</p>
-                  </div>
-                  <div className="flex flex-shrink-0 gap-1.5">
-                    <button type="button" onClick={() => openEdit(c)} className="rounded-lg p-1.5 hover:bg-white/5" style={{ color: COLORS.gold }}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" onClick={() => setConfirmDelete(c)} disabled={busyId === c.id} className="rounded-lg p-1.5 hover:bg-white/5 disabled:opacity-50" style={{ color: "#f87171" }}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
 
       <ConfirmDialog
-        open={!!confirmDelete}
+        open={!!confirmDeleteComment}
         title="Delete comment"
         message="Permanently delete this comment? This can't be undone."
         confirmLabel="Delete"
         danger
-        busy={busyId === confirmDelete?.id}
-        onCancel={() => setConfirmDelete(null)}
-        onConfirm={handleDeleteConfirmed}
+        busy={busyId === confirmDeleteComment?.id}
+        onCancel={() => setConfirmDeleteComment(null)}
+        onConfirm={handleDeleteCommentConfirmed}
       />
     </div>
   );
