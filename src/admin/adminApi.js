@@ -613,3 +613,11 @@ export function editAdminBlogComment(commentId, content) {
 export function deleteAdminBlogComment(commentId) {
   return request(`/admin/blogs/comments/${commentId}`, { method: "DELETE", auth: true });
 }
+
+export function toggleAdminBlogLike(blogId) {
+  return request(`/admin/blogs/${blogId}/like`, { method: "POST", auth: true });
+}
+
+export function addAdminBlogComment(blogId, content) {
+  return request(`/admin/blogs/${blogId}/comments`, { method: "POST", auth: true, body: { content } });
+}

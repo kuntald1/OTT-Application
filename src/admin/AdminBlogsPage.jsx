@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare } from "lucide-react";
+import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare, Heart, MessageCircle, Facebook, Instagram, Send } from "lucide-react";
 import {
   createAdminBlog, fetchAdminBlogs, updateAdminBlog, deleteAdminBlog, uploadAdminBlogCover,
   fetchAllAdminBlogComments, editAdminBlogComment, deleteAdminBlogComment,
+  toggleAdminBlogLike, addAdminBlogComment,
 } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import FilePreview from "../shared/FilePreview";
@@ -44,6 +45,11 @@ export default function AdminBlogsPage() {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editCommentText, setEditCommentText] = useState("");
   const [savingComment, setSavingComment] = useState(false);
+
+  const [likingId, setLikingId] = useState(null);
+  const [newCommentText, setNewCommentText] = useState({}); // { [postId]: text }
+  const [postingCommentFor, setPostingCommentFor] = useState(null);
+  const [shareCopiedId, setShareCopiedId] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -127,6 +133,46 @@ export default function AdminBlogsPage() {
     } finally {
       setBusyId(null);
       setConfirmDeletePost(null);
+    }
+  };
+
+  const handleToggleLike = async (post) => {
+    setLikingId(post.id);
+    setError("");
+    try {
+      const result = await toggleAdminBlogLike(post.id);
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, liked_by_me: result.liked, likes_count: result.likes_count } : p)));
+    } catch (err) {
+      setError(err.message || "Couldn't update like.");
+    } finally {
+      setLikingId(null);
+    }
+  };
+
+  const handleAddAdminComment = async (postId) => {
+    const text = (newCommentText[postId] || "").trim();
+    if (!text) return;
+    setPostingCommentFor(postId);
+    setError("");
+    try {
+      await addAdminBlogComment(postId, text);
+      setNewCommentText((prev) => ({ ...prev, [postId]: "" }));
+      load();
+      setExpandedComments(postId);
+    } catch (err) {
+      setError(err.message || "Couldn't post comment.");
+    } finally {
+      setPostingCommentFor(null);
+    }
+  };
+
+  const handleCopyShareLink = async (postId) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/blog/${postId}`);
+      setShareCopiedId(postId);
+      setTimeout(() => setShareCopiedId(null), 2500);
+    } catch (err) {
+      // clipboard API unavailable — nothing more we can do here
     }
   };
 
@@ -308,6 +354,50 @@ export default function AdminBlogsPage() {
                     <FilePreview type="image" src={post.cover_image_url} label="Cover" />
                   </div>
 
+                  {/* Like + Share — admin can interact the same way a visitor can */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3" style={{ borderColor: "rgba(245,235,221,0.08)" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLike(post)}
+                      disabled={likingId === post.id}
+                      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                      style={{
+                        background: post.liked_by_me ? "rgba(248,113,113,0.15)" : "rgba(245,235,221,0.06)",
+                        color: post.liked_by_me ? "#f87171" : "rgba(245,235,221,0.7)",
+                      }}
+                    >
+                      <Heart className="h-3.5 w-3.5" fill={post.liked_by_me ? "#f87171" : "none"} />
+                      {post.likes_count}
+                    </button>
+
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(`${post.title} — ${window.location.origin}/blog/${post.id}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                      style={{ background: "rgba(37,211,102,0.12)", color: "#25D366" }}
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                    </a>
+                    <a
+                      href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/blog/${post.id}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                      style={{ background: "rgba(24,119,242,0.12)", color: "#1877F2" }}
+                    >
+                      <Facebook className="h-3.5 w-3.5" /> Facebook
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyShareLink(post.id)}
+                      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium hover:opacity-80"
+                      style={{ background: "rgba(225,48,108,0.12)", color: "#E1306C" }}
+                    >
+                      <Instagram className="h-3.5 w-3.5" /> {shareCopiedId === post.id ? "Link copied!" : "Instagram"}
+                    </button>
+                  </div>
+
                   {/* Comments for THIS post, right here — no separate tab */}
                   <div className="mt-3 border-t pt-3" style={{ borderColor: "rgba(245,235,221,0.08)" }}>
                     <button
@@ -340,7 +430,14 @@ export default function AdminBlogsPage() {
                               ) : (
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
-                                    <p className="text-[11px] font-semibold" style={{ color: COLORS.gold }}>{c.user_name}</p>
+                                    <p className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: COLORS.gold }}>
+                                      {c.user_name}
+                                      {c.is_admin && (
+                                        <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}>
+                                          Admin
+                                        </span>
+                                      )}
+                                    </p>
                                     <p className="text-xs" style={{ color: "rgba(245,235,221,0.85)" }}>{c.content}</p>
                                     <p className="mt-0.5 text-[10px]" style={{ color: "rgba(245,235,221,0.4)" }}>{formatDate(c.created_at)}</p>
                                   </div>
@@ -357,6 +454,27 @@ export default function AdminBlogsPage() {
                             </div>
                           ))
                         )}
+
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newCommentText[post.id] || ""}
+                            onChange={(e) => setNewCommentText((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                            onKeyDown={(e) => e.key === "Enter" && handleAddAdminComment(post.id)}
+                            placeholder="Add a comment as admin…"
+                            className="flex-1 rounded-lg border px-2.5 py-1.5 text-xs outline-none"
+                            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddAdminComment(post.id)}
+                            disabled={postingCommentFor === post.id}
+                            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                            style={{ background: COLORS.gold, color: "#0a0104" }}
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

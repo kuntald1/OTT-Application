@@ -60,6 +60,12 @@ function getInitialRoute() {
     const sessionId = params.get('session_id')
     return { view: 'stripeSuccess', params: { sessionId } }
   }
+  if (window.location.pathname.startsWith('/blog/')) {
+    const postId = window.location.pathname.split('/blog/')[1]?.split(/[/?#]/)[0]
+    if (postId) {
+      return { view: 'blogDetail', params: { postId } }
+    }
+  }
   if (window.location.pathname.startsWith('/event/')) {
     const eventId = window.location.pathname.split('/event/')[1]?.split(/[/?#]/)[0]
     if (eventId) {

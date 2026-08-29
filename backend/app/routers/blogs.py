@@ -4,10 +4,33 @@ from sqlalchemy import func
 
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
-from app.models import Blog, BlogComment, BlogLike, User
+from app.models import Blog, BlogComment, BlogLike, User, AdminUser
 from app.schemas import BlogListItemOut, BlogDetailOut, BlogCommentCreate, BlogCommentOut, BlogLikeToggleOut
 
 router = APIRouter(prefix="/blogs", tags=["blogs"])
+
+
+def _comment_to_out(c: BlogComment, db: Session) -> BlogCommentOut:
+    """Resolves the author's name from whichever table actually has
+    them — a comment/like is authored by either a User or an AdminUser
+    (never both), since those are separate login systems in this app
+    (see AdminUser's docstring on the model). Per-row lookups instead
+    of one big JOIN, since a single JOIN can't cleanly express "match
+    User OR AdminUser depending on which id is set" without getting
+    much harder to read for a query that only ever returns a handful
+    of rows per post anyway.
+    """
+    if c.admin_id:
+        admin = db.query(AdminUser).filter(AdminUser.id == c.admin_id).first()
+        return BlogCommentOut(
+            id=c.id, blog_id=c.blog_id, user_id=None, user_name=admin.name if admin else "theomy Team",
+            is_admin=True, content=c.content, created_at=c.created_at,
+        )
+    user = db.query(User).filter(User.id == c.user_id).first()
+    return BlogCommentOut(
+        id=c.id, blog_id=c.blog_id, user_id=c.user_id, user_name=user.name if user else "Unknown",
+        is_admin=False, content=c.content, created_at=c.created_at,
+    )
 
 
 def _counts(blog_id, db: Session):
@@ -87,16 +110,12 @@ def toggle_blog_like(
 @router.get("/{blog_id}/comments", response_model=list[BlogCommentOut])
 def list_blog_comments(blog_id: str, db: Session = Depends(get_db)):
     rows = (
-        db.query(BlogComment, User.name)
-        .join(User, User.id == BlogComment.user_id)
+        db.query(BlogComment)
         .filter(BlogComment.blog_id == blog_id)
         .order_by(BlogComment.created_at.desc())
         .all()
     )
-    return [
-        BlogCommentOut(id=c.id, blog_id=c.blog_id, user_id=c.user_id, user_name=name, content=c.content, created_at=c.created_at)
-        for c, name in rows
-    ]
+    return [_comment_to_out(c, db) for c in rows]
 
 
 @router.post("/{blog_id}/comments", response_model=BlogCommentOut, status_code=status.HTTP_201_CREATED)
@@ -113,10 +132,7 @@ def add_blog_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    return BlogCommentOut(
-        id=comment.id, blog_id=comment.blog_id, user_id=comment.user_id,
-        user_name=current_user.name, content=comment.content, created_at=comment.created_at,
-    )
+    return _comment_to_out(comment, db)
 
 
 @router.delete("/{blog_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

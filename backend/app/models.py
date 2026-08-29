@@ -281,27 +281,36 @@ class BlogComment(Base):
     their own (not edit, to keep a comment's history honest once
     others may have replied to/read it — same reasoning as most
     platforms only allowing delete, not edit, on a public comment).
+
+    Exactly one of user_id / admin_id is set — admin and public-site
+    accounts are separate tables (see AdminUser's docstring), so a
+    comment made by an admin (from the admin panel's own Like/Comment
+    UI) records admin_id instead of user_id.
     """
     __tablename__ = "blog_comments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     blog_id = Column(UUID(as_uuid=True), ForeignKey("blogs.id"), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True, index=True)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class BlogLike(Base):
-    """One row per (user, blog) like — a user can only like a post
-    once, enforced by the unique constraint below (mirrors VideoLike's
-    pattern already used elsewhere in this file).
+    """One row per (user-or-admin, blog) like. A unique constraint
+    only on (blog_id, user_id) can't also cover the admin case
+    cleanly with a single constraint (user_id is null for
+    admin-authored likes), so uniqueness for admin likes is enforced
+    in application code instead (see admin_blogs.py's toggle handler).
     """
     __tablename__ = "blog_likes"
     __table_args__ = (UniqueConstraint("blog_id", "user_id", name="uq_blog_like_per_user"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     blog_id = Column(UUID(as_uuid=True), ForeignKey("blogs.id"), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

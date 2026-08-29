@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Blog, BlogComment, BlogLike, User
-from app.schemas import BlogCreate, BlogUpdate, BlogListItemOut, BlogDetailOut, BlogCommentOut, BlogCommentUpdate
+from app.schemas import BlogCreate, BlogUpdate, BlogListItemOut, BlogDetailOut, BlogCommentOut, BlogCommentUpdate, BlogCommentCreate, BlogLikeToggleOut
+from app.routers.blogs import _comment_to_out
 
 router = APIRouter(prefix="/admin/blogs", tags=["admin-blogs"])
 
@@ -23,21 +24,29 @@ def _counts(blog_id, db: Session):
     return likes_count, comment_count
 
 
-def _to_list_out(b: Blog, db: Session) -> BlogListItemOut:
+def _to_list_out(b: Blog, db: Session, current_admin: AdminUser) -> BlogListItemOut:
     likes_count, comment_count = _counts(b.id, db)
+    liked_by_me = (
+        db.query(BlogLike).filter(BlogLike.blog_id == b.id, BlogLike.admin_id == current_admin.id).first()
+        is not None
+    )
     return BlogListItemOut(
         id=b.id, title=b.title, excerpt=b.excerpt, author_name=b.author_name,
         published_at=b.published_at, cover_image_url=b.cover_image_url,
-        is_published=b.is_published, likes_count=likes_count, comment_count=comment_count,
+        is_published=b.is_published, likes_count=likes_count, liked_by_me=liked_by_me, comment_count=comment_count,
     )
 
 
-def _to_detail_out(b: Blog, db: Session) -> BlogDetailOut:
+def _to_detail_out(b: Blog, db: Session, current_admin: AdminUser) -> BlogDetailOut:
     likes_count, comment_count = _counts(b.id, db)
+    liked_by_me = (
+        db.query(BlogLike).filter(BlogLike.blog_id == b.id, BlogLike.admin_id == current_admin.id).first()
+        is not None
+    )
     return BlogDetailOut(
         id=b.id, title=b.title, excerpt=b.excerpt, body=b.body, author_name=b.author_name,
         published_at=b.published_at, cover_image_url=b.cover_image_url, is_published=b.is_published,
-        likes_count=likes_count, liked_by_me=False, comment_count=comment_count,
+        likes_count=likes_count, liked_by_me=liked_by_me, comment_count=comment_count,
     )
 
 
@@ -54,7 +63,7 @@ def create_blog(
     db.add(blog)
     db.commit()
     db.refresh(blog)
-    return _to_detail_out(blog, db)
+    return _to_detail_out(blog, db, current_admin)
 
 
 @router.get("", response_model=list[BlogListItemOut])
@@ -66,7 +75,7 @@ def list_all_blogs(
     admin needs to see and edit unpublished posts.
     """
     blogs = db.query(Blog).order_by(Blog.published_at.desc()).all()
-    return [_to_list_out(b, db) for b in blogs]
+    return [_to_list_out(b, db, current_admin) for b in blogs]
 
 
 @router.put("/{blog_id}", response_model=BlogDetailOut)
@@ -91,7 +100,7 @@ def update_blog(
         blog.is_published = payload.is_published
     db.commit()
     db.refresh(blog)
-    return _to_detail_out(blog, db)
+    return _to_detail_out(blog, db, current_admin)
 
 
 @router.delete("/{blog_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -134,7 +143,7 @@ async def upload_blog_cover(
     blog.cover_image_url = f"/api/uploads/blog_covers/{stored_name}"
     db.commit()
     db.refresh(blog)
-    return _to_detail_out(blog, db)
+    return _to_detail_out(blog, db, current_admin)
 
 
 # --- Comment moderation — every comment across every post, in one place ---
@@ -144,16 +153,47 @@ def list_all_comments(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    rows = (
-        db.query(BlogComment, User.name)
-        .join(User, User.id == BlogComment.user_id)
-        .order_by(BlogComment.created_at.desc())
-        .all()
-    )
-    return [
-        BlogCommentOut(id=c.id, blog_id=c.blog_id, user_id=c.user_id, user_name=name, content=c.content, created_at=c.created_at)
-        for c, name in rows
-    ]
+    rows = db.query(BlogComment).order_by(BlogComment.created_at.desc()).all()
+    return [_comment_to_out(c, db) for c in rows]
+
+
+@router.post("/{blog_id}/like", response_model=BlogLikeToggleOut)
+def toggle_blog_like_as_admin(
+    blog_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    existing = db.query(BlogLike).filter(BlogLike.blog_id == blog.id, BlogLike.admin_id == current_admin.id).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+        liked = False
+    else:
+        db.add(BlogLike(blog_id=blog.id, admin_id=current_admin.id))
+        db.commit()
+        liked = True
+    likes_count = db.query(BlogLike).filter(BlogLike.blog_id == blog.id).count()
+    return BlogLikeToggleOut(liked=liked, likes_count=likes_count)
+
+
+@router.post("/{blog_id}/comments", response_model=BlogCommentOut, status_code=status.HTTP_201_CREATED)
+def add_blog_comment_as_admin(
+    blog_id: str,
+    payload: BlogCommentCreate,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    comment = BlogComment(blog_id=blog.id, admin_id=current_admin.id, content=payload.content)
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return _comment_to_out(comment, db)
 
 
 @router.put("/comments/{comment_id}", response_model=BlogCommentOut)
@@ -169,11 +209,7 @@ def edit_comment_as_admin(
     comment.content = payload.content
     db.commit()
     db.refresh(comment)
-    user = db.query(User).filter(User.id == comment.user_id).first()
-    return BlogCommentOut(
-        id=comment.id, blog_id=comment.blog_id, user_id=comment.user_id,
-        user_name=user.name if user else "Unknown", content=comment.content, created_at=comment.created_at,
-    )
+    return _comment_to_out(comment, db)
 
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

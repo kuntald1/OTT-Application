@@ -28,6 +28,16 @@ export default function BlogDetailPage({ postId, onBack }) {
 
   useEffect(load, [postId]);
 
+  // navigate() (used to reach this page from BlogListPage) doesn't
+  // touch window.location at all — it's purely internal React state.
+  // Without this, the Share buttons below (which read
+  // window.location.href) would copy/share whatever URL happened to
+  // be in the address bar before the user clicked into this post,
+  // not a real link to it.
+  useEffect(() => {
+    if (postId) window.history.replaceState({}, "", `/blog/${postId}`);
+  }, [postId]);
+
   const handleLike = async () => {
     if (!isLoggedIn) {
       requestLogin();
@@ -253,7 +263,14 @@ export default function BlogDetailPage({ postId, onBack }) {
               {comments.map((c) => (
                 <div key={c.id} className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold" style={{ color: COLORS.cream }}>{c.user_name}</p>
+                    <p className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: COLORS.cream }}>
+                      {c.user_name}
+                      {c.is_admin && (
+                        <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}>
+                          Admin
+                        </span>
+                      )}
+                    </p>
                     <p className="text-sm" style={{ color: "rgba(245,235,221,0.75)" }}>{c.content}</p>
                     <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.35)" }}>{formatDate(c.created_at)}</p>
                   </div>

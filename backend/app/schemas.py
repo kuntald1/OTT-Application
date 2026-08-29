@@ -397,6 +397,7 @@ class BlogListItemOut(BaseModel):
     cover_image_url: Optional[str] = None
     is_published: bool = True
     likes_count: int = 0
+    liked_by_me: bool = False
     comment_count: int = 0
 
     model_config = {"from_attributes": True}
@@ -445,8 +446,9 @@ class BlogCommentUpdate(BaseModel):
 class BlogCommentOut(BaseModel):
     id: uuid.UUID
     blog_id: uuid.UUID
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
     user_name: str
+    is_admin: bool = False
     content: str
     created_at: datetime
 
