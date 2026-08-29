@@ -467,7 +467,6 @@ export default function MyVideoListPage({ onBack }) {
               <div className="flex flex-col gap-2">
                 {crew.map((c) => (
                   <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
-                    <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
                     <PersonAutocomplete
                       value={c.name}
                       onChange={(val) => { updateCrew(c.key, "name", val); updateCrew(c.key, "person_id", null); }}
@@ -475,6 +474,7 @@ export default function MyVideoListPage({ onBack }) {
                       placeholder="Name"
                       style={inputStyle}
                     />
+                    <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
                     <button type="button" onClick={() => removeCrew(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
                       <Trash2 className="h-4 w-4" />
                     </button>

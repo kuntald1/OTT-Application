@@ -390,28 +390,16 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
         <label style={labelStyle}>Cast</label>
         <div className="flex flex-col gap-2">
           {cast.map((c) => (
-            <div key={c.key} className="rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <div className="grid grid-cols-[1fr_1fr_28px] items-center gap-1.5 p-1">
-                <input type="text" placeholder="Name" value={c.name} onChange={(e) => updateCast(c.key, "name", e.target.value)} style={inputStyle} />
-                <input type="text" placeholder="Character" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
-                <button type="button" onClick={() => removeCast(c.key)} className="flex h-8 w-8 items-center justify-center" style={{ color: "#f87171" }}><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
-              <button type="button" onClick={() => updateCast(c.key, "showBio", !c.showBio)} className="px-1 pb-1.5 text-[11px] font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
-                {c.showBio ? "− Hide biography details" : "+ Add biography details"}
-              </button>
-              {c.showBio && (
-                <div className="grid gap-1.5 p-1 pt-0 sm:grid-cols-2">
-                  <input type="text" placeholder="Occupation (e.g. Actor, Writer)" value={c.occupation} onChange={(e) => updateCast(c.key, "occupation", e.target.value)} style={inputStyle} />
-                  <input type="date" value={c.date_of_birth} onChange={(e) => updateCast(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
-                  <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
-                  <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCast(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Early Life" value={c.early_life} onChange={(e) => updateCast(c.key, "early_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Personal Life" value={c.personal_life} onChange={(e) => updateCast(c.key, "personal_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Debut & Initial Years" value={c.debut_initial_years} onChange={(e) => updateCast(c.key, "debut_initial_years", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Breakthrough & Beyond" value={c.breakthrough_beyond} onChange={(e) => updateCast(c.key, "breakthrough_beyond", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Recent Projects" value={c.recent_projects} onChange={(e) => updateCast(c.key, "recent_projects", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                </div>
-              )}
+            <div key={c.key} className="grid grid-cols-[1fr_1fr_28px] items-center gap-1.5">
+              <PersonAutocomplete
+                value={c.name}
+                onChange={(val) => { updateCast(c.key, "name", val); updateCast(c.key, "person_id", null); }}
+                onSelect={(person) => { updateCast(c.key, "name", person.name); updateCast(c.key, "person_id", person.id); }}
+                placeholder="Name"
+                style={inputStyle}
+              />
+              <input type="text" placeholder="Character" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
+              <button type="button" onClick={() => removeCast(c.key)} className="flex h-8 w-8 items-center justify-center" style={{ color: "#f87171" }}><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}
         </div>
@@ -421,28 +409,16 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
         <label style={labelStyle}>Crew</label>
         <div className="flex flex-col gap-2">
           {crew.map((c) => (
-            <div key={c.key} className="rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <div className="grid grid-cols-[1fr_1fr_28px] items-center gap-1.5 p-1">
-                <input type="text" placeholder="Role" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
-                <input type="text" placeholder="Name" value={c.name} onChange={(e) => updateCrew(c.key, "name", e.target.value)} style={inputStyle} />
-                <button type="button" onClick={() => removeCrew(c.key)} className="flex h-8 w-8 items-center justify-center" style={{ color: "#f87171" }}><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
-              <button type="button" onClick={() => updateCrew(c.key, "showBio", !c.showBio)} className="px-1 pb-1.5 text-[11px] font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
-                {c.showBio ? "− Hide biography details" : "+ Add biography details"}
-              </button>
-              {c.showBio && (
-                <div className="grid gap-1.5 p-1 pt-0 sm:grid-cols-2">
-                  <input type="text" placeholder="Occupation (e.g. Director)" value={c.occupation} onChange={(e) => updateCrew(c.key, "occupation", e.target.value)} style={inputStyle} />
-                  <input type="date" value={c.date_of_birth} onChange={(e) => updateCrew(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
-                  <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
-                  <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCrew(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Early Life" value={c.early_life} onChange={(e) => updateCrew(c.key, "early_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Personal Life" value={c.personal_life} onChange={(e) => updateCrew(c.key, "personal_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Debut & Initial Years" value={c.debut_initial_years} onChange={(e) => updateCrew(c.key, "debut_initial_years", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Breakthrough & Beyond" value={c.breakthrough_beyond} onChange={(e) => updateCrew(c.key, "breakthrough_beyond", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                  <textarea rows={2} placeholder="Recent Projects" value={c.recent_projects} onChange={(e) => updateCrew(c.key, "recent_projects", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                </div>
-              )}
+            <div key={c.key} className="grid grid-cols-[1fr_1fr_28px] items-center gap-1.5">
+              <PersonAutocomplete
+                value={c.name}
+                onChange={(val) => { updateCrew(c.key, "name", val); updateCrew(c.key, "person_id", null); }}
+                onSelect={(person) => { updateCrew(c.key, "name", person.name); updateCrew(c.key, "person_id", person.id); }}
+                placeholder="Name"
+                style={inputStyle}
+              />
+              <input type="text" placeholder="Role" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
+              <button type="button" onClick={() => removeCrew(c.key)} className="flex h-8 w-8 items-center justify-center" style={{ color: "#f87171" }}><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}
         </div>

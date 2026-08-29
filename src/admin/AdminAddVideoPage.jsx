@@ -3,6 +3,7 @@ import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, I
 import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata } from "./adminApi";
 import SubtitleManager from "../shared/SubtitleManager";
 import FilePreview from "../shared/FilePreview";
+import PersonAutocomplete from "../shared/PersonAutocomplete";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions } from "../api";
 
@@ -47,20 +48,10 @@ function makeEmptyTier() {
   return { key: Math.random().toString(36).slice(2), min_minutes: "", max_minutes: "", rate_per_minute_inr: "" };
 }
 function makeEmptyCast() {
-  return {
-    key: Math.random().toString(36).slice(2), name: "", character_role: "", showBio: false,
-    occupation: "", date_of_birth: "", birthplace: "", about: "",
-    early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
-    photoFile: null, photoFileName: "",
-  };
+  return { key: Math.random().toString(36).slice(2), person_id: null, name: "", character_role: "" };
 }
 function makeEmptyCrew() {
-  return {
-    key: Math.random().toString(36).slice(2), role: "", name: "", showBio: false,
-    occupation: "", date_of_birth: "", birthplace: "", about: "",
-    early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
-    photoFile: null, photoFileName: "",
-  };
+  return { key: Math.random().toString(36).slice(2), person_id: null, role: "", name: "" };
 }
 
 function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions }) {
@@ -237,41 +228,13 @@ export default function AdminAddVideoPage() {
           rate_per_minute_inr: Number(t.rate_per_minute_inr),
         })),
         cast: filteredCast.map((c) => ({
-          name: c.name.trim(), character_role: c.character_role.trim() || null,
-          occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
-          about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
-          debut_initial_years: c.debut_initial_years.trim() || null, breakthrough_beyond: c.breakthrough_beyond.trim() || null,
-          recent_projects: c.recent_projects.trim() || null,
+          person_id: c.person_id, name: c.name.trim(), character_role: c.character_role.trim() || null,
         })),
         crew: filteredCrew.map((c) => ({
-          role: c.role.trim(), name: c.name.trim(),
-          occupation: c.occupation.trim() || null, date_of_birth: c.date_of_birth || null, birthplace: c.birthplace.trim() || null,
-          about: c.about.trim() || null, early_life: c.early_life.trim() || null, personal_life: c.personal_life.trim() || null,
-          debut_initial_years: c.debut_initial_years.trim() || null, breakthrough_beyond: c.breakthrough_beyond.trim() || null,
-          recent_projects: c.recent_projects.trim() || null,
+          person_id: c.person_id, role: c.role.trim(), name: c.name.trim(),
         })),
       };
       let newVideo = await createAdminVideo(payload);
-
-      // Photos picked in the form upload automatically now that real
-      // Person IDs exist — index-matched against the response, same
-      // order as submitted. One failing doesn't block the others or the
-      // video itself, which is already created successfully by now.
-      const [uploadedCastPhotos, uploadedCrewPhotos] = await Promise.all([
-        Promise.all(filteredCast.map((c, i) =>
-          c.photoFile && newVideo.cast[i] ? uploadAdminPersonPhoto(newVideo.cast[i].person.id, c.photoFile).catch(() => null) : Promise.resolve(null)
-        )),
-        Promise.all(filteredCrew.map((c, i) =>
-          c.photoFile && newVideo.crew[i] ? uploadAdminPersonPhoto(newVideo.crew[i].person.id, c.photoFile).catch(() => null) : Promise.resolve(null)
-        )),
-      ]);
-      // Patch the real uploaded photo_url into the local video object so
-      // the card shows the photo immediately, no page refresh needed.
-      newVideo = {
-        ...newVideo,
-        cast: newVideo.cast.map((c, i) => (uploadedCastPhotos[i] ? { ...c, person: uploadedCastPhotos[i] } : c)),
-        crew: newVideo.crew.map((c, i) => (uploadedCrewPhotos[i] ? { ...c, person: uploadedCrewPhotos[i] } : c)),
-      };
 
       resetForm();
       setAddedVideos((prev) => [newVideo, ...prev]);
@@ -632,51 +595,24 @@ export default function AdminAddVideoPage() {
               <label style={labelStyle}>Cast (optional, up to 10)</label>
               <div className="flex flex-col gap-2">
                 {cast.map((c) => (
-                  <div key={c.key} className="rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
-                    <div className="grid grid-cols-[1fr_1fr_32px] items-center gap-2 p-1">
-                      <input type="text" placeholder="Actor name" value={c.name} onChange={(e) => updateCast(c.key, "name", e.target.value)} style={inputStyle} />
-                      <input type="text" placeholder="Character (optional)" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
-                      <button type="button" onClick={() => removeCast(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => updateCast(c.key, "showBio", !c.showBio)}
-                      className="px-1 pb-1.5 text-[11px] font-medium hover:opacity-80"
-                      style={{ color: COLORS.gold }}
-                    >
-                      {c.showBio ? "− Hide biography details" : "+ Add biography details"}
+                  <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
+                    <PersonAutocomplete
+                      value={c.name}
+                      onChange={(val) => { updateCast(c.key, "name", val); updateCast(c.key, "person_id", null); }}
+                      onSelect={(person) => { updateCast(c.key, "name", person.name); updateCast(c.key, "person_id", person.id); }}
+                      placeholder="Actor name"
+                      style={inputStyle}
+                    />
+                    <input type="text" placeholder="Character (optional)" value={c.character_role} onChange={(e) => updateCast(c.key, "character_role", e.target.value)} style={inputStyle} />
+                    <button type="button" onClick={() => removeCast(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
+                      <Trash2 className="h-4 w-4" />
                     </button>
-                    {c.showBio && (
-                      <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
-                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs sm:col-span-2" style={{ borderColor: "rgba(212,175,55,0.3)", color: c.photoFileName ? COLORS.cream : COLORS.gold }}>
-                          <ImagePlus className="h-3.5 w-3.5 flex-shrink-0" />
-                          {c.photoFileName || "Upload photo (uploads automatically once you submit)"}
-                          <input
-                            type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              updateCast(c.key, "photoFile", file);
-                              updateCast(c.key, "photoFileName", file.name);
-                            }}
-                          />
-                        </label>
-                        <input type="text" placeholder="Occupation (e.g. Actor, Writer)" value={c.occupation} onChange={(e) => updateCast(c.key, "occupation", e.target.value)} style={inputStyle} />
-                        <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCast(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
-                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCast(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
-                        <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCast(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Early Life" value={c.early_life} onChange={(e) => updateCast(c.key, "early_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Personal Life" value={c.personal_life} onChange={(e) => updateCast(c.key, "personal_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Debut & Initial Years" value={c.debut_initial_years} onChange={(e) => updateCast(c.key, "debut_initial_years", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Breakthrough & Beyond" value={c.breakthrough_beyond} onChange={(e) => updateCast(c.key, "breakthrough_beyond", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Recent Projects" value={c.recent_projects} onChange={(e) => updateCast(c.key, "recent_projects", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
+              <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                Type a name to reuse an existing profile, or enter a new one — full bios are managed on Cast/Crew Master.
+              </p>
               {cast.length < 10 && (
                 <button type="button" onClick={addCast} className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
                   <Plus className="h-3.5 w-3.5" /> Add cast member
@@ -688,48 +624,18 @@ export default function AdminAddVideoPage() {
               <label style={labelStyle}>Crew (optional, up to 5)</label>
               <div className="flex flex-col gap-2">
                 {crew.map((c) => (
-                  <div key={c.key} className="rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
-                    <div className="grid grid-cols-[1fr_1fr_32px] items-center gap-2 p-1">
-                      <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
-                      <input type="text" placeholder="Name" value={c.name} onChange={(e) => updateCrew(c.key, "name", e.target.value)} style={inputStyle} />
-                      <button type="button" onClick={() => removeCrew(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => updateCrew(c.key, "showBio", !c.showBio)}
-                      className="px-1 pb-1.5 text-[11px] font-medium hover:opacity-80"
-                      style={{ color: COLORS.gold }}
-                    >
-                      {c.showBio ? "− Hide biography details" : "+ Add biography details"}
+                  <div key={c.key} className="grid grid-cols-[1fr_1fr_32px] items-center gap-2">
+                    <PersonAutocomplete
+                      value={c.name}
+                      onChange={(val) => { updateCrew(c.key, "name", val); updateCrew(c.key, "person_id", null); }}
+                      onSelect={(person) => { updateCrew(c.key, "name", person.name); updateCrew(c.key, "person_id", person.id); }}
+                      placeholder="Name"
+                      style={inputStyle}
+                    />
+                    <input type="text" placeholder="Role (e.g. Director)" value={c.role} onChange={(e) => updateCrew(c.key, "role", e.target.value)} style={inputStyle} />
+                    <button type="button" onClick={() => removeCrew(c.key)} className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "#f87171" }}>
+                      <Trash2 className="h-4 w-4" />
                     </button>
-                    {c.showBio && (
-                      <div className="grid gap-2 p-1 pt-0 sm:grid-cols-2">
-                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs sm:col-span-2" style={{ borderColor: "rgba(212,175,55,0.3)", color: c.photoFileName ? COLORS.cream : COLORS.gold }}>
-                          <ImagePlus className="h-3.5 w-3.5 flex-shrink-0" />
-                          {c.photoFileName || "Upload photo (uploads automatically once you submit)"}
-                          <input
-                            type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              updateCrew(c.key, "photoFile", file);
-                              updateCrew(c.key, "photoFileName", file.name);
-                            }}
-                          />
-                        </label>
-                        <input type="text" placeholder="Occupation (e.g. Director)" value={c.occupation} onChange={(e) => updateCrew(c.key, "occupation", e.target.value)} style={inputStyle} />
-                        <input type="date" placeholder="Date of birth" value={c.date_of_birth} onChange={(e) => updateCrew(c.key, "date_of_birth", e.target.value)} style={inputStyle} />
-                        <input type="text" placeholder="Birthplace" value={c.birthplace} onChange={(e) => updateCrew(c.key, "birthplace", e.target.value)} className="sm:col-span-2" style={inputStyle} />
-                        <textarea rows={2} placeholder="About" value={c.about} onChange={(e) => updateCrew(c.key, "about", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Early Life" value={c.early_life} onChange={(e) => updateCrew(c.key, "early_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Personal Life" value={c.personal_life} onChange={(e) => updateCrew(c.key, "personal_life", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Debut & Initial Years" value={c.debut_initial_years} onChange={(e) => updateCrew(c.key, "debut_initial_years", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Breakthrough & Beyond" value={c.breakthrough_beyond} onChange={(e) => updateCrew(c.key, "breakthrough_beyond", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                        <textarea rows={2} placeholder="Recent Projects" value={c.recent_projects} onChange={(e) => updateCrew(c.key, "recent_projects", e.target.value)} className="sm:col-span-2" style={{ ...inputStyle, resize: "vertical" }} />
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
