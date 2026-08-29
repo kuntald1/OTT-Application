@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -12,6 +12,7 @@ import AdminUsersPage from "./AdminUsersPage";
 import AdminLiveStreamsPage from "./AdminLiveStreamsPage";
 import AdminSpecialCategoriesPage from "./AdminSpecialCategoriesPage";
 import AdminBlogsPage from "./AdminBlogsPage";
+import AdminCastCrewPage from "./AdminCastCrewPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -32,6 +33,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
   const NAV_ITEMS = [
     { id: "videos", label: "Video Review", icon: Clapperboard, visible: true },
     { id: "add-video", label: "Add Video", icon: PlusCircle, visible: true },
+    { id: "cast-crew", label: "Cast/Crew Master", icon: Contact, visible: true },
     { id: "special-categories", label: "Special Categories", icon: Sparkles, visible: true },
     { id: "blog", label: "Blog", icon: Newspaper, visible: true },
     { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
@@ -100,6 +102,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
         <div className="mx-auto max-w-3xl">
           {activePage === "videos" && <AdminVideoReviewPage />}
           {activePage === "add-video" && <AdminAddVideoPage />}
+          {activePage === "cast-crew" && <AdminCastCrewPage />}
           {activePage === "special-categories" && <AdminSpecialCategoriesPage />}
           {activePage === "blog" && <AdminBlogsPage />}
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}

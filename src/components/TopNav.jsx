@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp } from "../api";
+import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp, fetchMyOrganiserRequestStatus } from "../api";
 import { COUNTRIES } from "../shared/countries";
+import OrganiserRequestModal from "./OrganiserRequestModal";
 
 // ---------------------------------------------------------------------------
 // Login backdrop video — its own dedicated folder, completely independent
@@ -49,6 +50,20 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
     isLoggedIn, isSubscribed, profile, showLoginModal,
     requestLogin, closeLoginModal, login, logout, changePhoto,
   } = useApp();
+
+  const [showOrganiserRequestLink, setShowOrganiserRequestLink] = useState(false);
+  const [showOrganiserModal, setShowOrganiserModal] = useState(false);
+  const [organiserRequestSubmitted, setOrganiserRequestSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn || !profile || profile.role !== "User") {
+      setShowOrganiserRequestLink(false);
+      return;
+    }
+    fetchMyOrganiserRequestStatus()
+      .then((res) => setShowOrganiserRequestLink(!res.has_pending_or_approved))
+      .catch(() => setShowOrganiserRequestLink(false));
+  }, [isLoggedIn, profile?.role]);
 
   // Menus are public (no auth needed) and rarely change, so one fetch on
   // mount is enough — no need to refetch on every login/logout.
@@ -246,6 +261,8 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                   onClose={() => setShowProfileMenu(false)}
                   onNavigate={onNavigate}
                   onLogout={logout}
+                  showOrganiserRequestLink={showOrganiserRequestLink}
+                  onRequestOrganiser={() => { setShowOrganiserModal(true); setShowProfileMenu(false); }}
                 />
               )}
             </div>
@@ -402,6 +419,16 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               >
                 Watch History
               </button>
+              {showOrganiserRequestLink && (
+                <button
+                  type="button"
+                  onClick={() => { setShowOrganiserModal(true); setMenuOpen(false); }}
+                  className="rounded-full px-4 py-2.5 text-sm font-medium"
+                  style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                >
+                  Request as Organiser
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { onNavigate?.("subscription"); setMenuOpen(false); }}
@@ -482,6 +509,26 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
 
       {showLoginModal && (
         <LoginModal onClose={closeLoginModal} />
+      )}
+
+      {showOrganiserModal && (
+        <OrganiserRequestModal
+          onClose={() => setShowOrganiserModal(false)}
+          onSubmitted={() => {
+            setShowOrganiserModal(false);
+            setShowOrganiserRequestLink(false);
+            setOrganiserRequestSubmitted(true);
+            setTimeout(() => setOrganiserRequestSubmitted(false), 4000);
+          }}
+        />
+      )}
+      {organiserRequestSubmitted && (
+        <div
+          className="fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 rounded-full px-5 py-2.5 text-sm font-medium"
+          style={{ background: COLORS.gold, color: "#0a0104" }}
+        >
+          Request submitted — we'll be in touch soon.
+        </div>
       )}
     </>
   );
@@ -945,7 +992,7 @@ function FacebookMark({ className }) {
   );
 }
 
-function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout }) {
+function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, showOrganiserRequestLink, onRequestOrganiser }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -969,6 +1016,16 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout }) 
         >
           Watch History
         </button>
+        {showOrganiserRequestLink && (
+          <button
+            type="button"
+            onClick={onRequestOrganiser}
+            className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+            style={{ color: COLORS.gold }}
+          >
+            Request as Organiser
+          </button>
+        )}
         <button
           type="button"
           onClick={() => { onNavigate?.("subscription"); onClose(); }}

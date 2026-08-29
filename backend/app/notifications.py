@@ -534,6 +534,78 @@ def send_enquiry_rejected_whatsapp(to_phone: str, contact_person: str, event_tit
         pass
 
 
+def send_organiser_request_approved_email(to_email: str, name: str) -> None:
+    subject = "Your Plays Organiser request has been approved"
+    text_body = (
+        f"Hi {name},\n\nYour request to become a Plays Organiser on theomy has been approved. "
+        f"You can now create and manage event listings.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "You're now a Plays Organiser! \U0001F389",
+        [f"Hi {name},", "Your request to become a Plays Organiser has been approved.", "You can now create and manage event listings."],
+        "#6FCF97",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_organiser_request_rejected_email(to_email: str, name: str, reason: str | None) -> None:
+    subject = "Update on your Plays Organiser request"
+    reason_line = f"Reason: {reason}\n\n" if reason else ""
+    text_body = (
+        f"Hi {name},\n\nYour request to become a Plays Organiser on theomy was not approved.\n\n"
+        f"{reason_line}You're welcome to submit another request.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Plays Organiser request not approved",
+        [f"Hi {name},", "Your request to become a Plays Organiser was not approved."]
+        + ([f"<b>Reason:</b> {reason}"] if reason else [])
+        + ["You're welcome to submit another request."],
+        "#f87171",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_organiser_request_approved_whatsapp(to_phone: str, name: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Great news, {name}! Your request to become a Plays Organiser has been "
+        f"approved. You can now create and manage event listings."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_organiser_request_rejected_whatsapp(to_phone: str, name: str, reason: str | None) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    reason_part = f" Reason: {reason}." if reason else ""
+    body = (
+        f"theomy: Hi {name}, your request to become a Plays Organiser was not approved."
+        f"{reason_part} You're welcome to submit another request."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
 def send_live_streaming_enabled_whatsapp(to_phone: str, name: str) -> None:
     """Tells a Content Creator / Plays Organiser their account can now
     broadcast — the actual RTMP URL + Stream Key aren't known yet at

@@ -619,6 +619,37 @@ class EnquiryStatus(str, enum.Enum):
     rejected = "rejected"
 
 
+class OrganiserRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class OrganiserRequest(Base):
+    """A regular User's request to be upgraded to Plays Organiser —
+    reachable from the profile dropdown's "Request as Organiser" link.
+    On approval, the requester's User.role is changed to
+    UserRole.plays_organiser and the link disappears from their
+    dropdown going forward (the frontend checks GET
+    /organiser-requests/mine's status). On rejection, the link stays
+    available so they can submit again — rejection_reason is optional,
+    matching event enquiries' same optional-reason pattern.
+    """
+    __tablename__ = "organiser_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    subject = Column(String(255), nullable=False)
+    group_name = Column(String(255), nullable=False)
+    phone = Column(String(20), nullable=False)
+    email = Column(String(255), nullable=False)
+    remarks = Column(Text, nullable=True)
+    status = Column(Enum(OrganiserRequestStatus), nullable=False, default=OrganiserRequestStatus.pending)
+    rejection_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class EventEnquiry(Base):
     """Event listing enquiry -- Content Creator / Plays Organiser only.
     Only becomes a real, publicly visible event once status='approved' --

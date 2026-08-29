@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Users, Search, Key, Video, UserX, UserCheck, X, Send } from "lucide-react";
 import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -111,6 +112,8 @@ export default function AdminUsersPage({ currentAdmin }) {
     }
   };
 
+  const [tab, setTab] = useState("users");
+
   return (
     <div>
       <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold" style={{ color: COLORS.cream }}>
@@ -120,6 +123,29 @@ export default function AdminUsersPage({ currentAdmin }) {
         Regular platform accounts (User / Content Creator / Plays Organiser) — separate from Admin Accounts.
       </p>
 
+      <div className="mb-6 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setTab("users")}
+          className="rounded-full px-4 py-1.5 text-xs font-semibold"
+          style={{ background: tab === "users" ? COLORS.gold : "rgba(245,235,221,0.06)", color: tab === "users" ? "#0a0104" : "rgba(245,235,221,0.7)" }}
+        >
+          Users
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("requests")}
+          className="rounded-full px-4 py-1.5 text-xs font-semibold"
+          style={{ background: tab === "requests" ? COLORS.gold : "rgba(245,235,221,0.06)", color: tab === "requests" ? "#0a0104" : "rgba(245,235,221,0.7)" }}
+        >
+          Organiser Requests
+        </button>
+      </div>
+
+      {tab === "requests" ? (
+        <AdminOrganiserRequestsTab />
+      ) : (
+        <>
       <form onSubmit={handleSearch} className="mb-6 flex gap-2">
         <input
           type="text"
@@ -286,6 +312,8 @@ export default function AdminUsersPage({ currentAdmin }) {
         onCancel={() => setConfirmToggleUser(null)}
         onConfirm={handleToggleActiveConfirmed}
       />
+        </>
+      )}
     </div>
   );
 }

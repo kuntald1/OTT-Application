@@ -609,6 +609,46 @@ class TicketTierOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OrganiserRequestCreate(BaseModel):
+    subject: str = Field(min_length=1, max_length=255)
+    group_name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=1, max_length=20)
+    email: str = Field(min_length=1, max_length=255)
+    remarks: Optional[str] = None
+
+
+class OrganiserRequestRejectRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class OrganiserRequestOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    user_name: str
+    subject: str
+    group_name: str
+    phone: str
+    email: str
+    remarks: Optional[str] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MyOrganiserRequestStatusOut(BaseModel):
+    """What the profile dropdown checks to decide whether to show
+    "Request as Organiser" at all — has_pending_or_approved covers
+    both cases the link should hide for (a decision already approved,
+    or one still awaiting review); it stays visible only when the
+    latest request was rejected or none exists yet.
+    """
+    has_pending_or_approved: bool
+    latest_status: Optional[str] = None
+
+
 class EventEnquiryOut(BaseModel):
     id: uuid.UUID
     org_name: str

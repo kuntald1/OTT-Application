@@ -563,6 +563,10 @@ export function fetchPerson(personId) {
   return request(`/people/${personId}`);
 }
 
+export function searchPeople(q) {
+  return request(`/people/search?q=${encodeURIComponent(q)}`);
+}
+
 export async function uploadPersonPhoto(personId, file) {
   const token = getToken();
   const formData = new FormData();
@@ -794,4 +798,12 @@ export function fetchSpecialCategories(section) {
 
 export function fetchLiveStream(liveStreamId) {
   return request(`/videos/live/${liveStreamId}`, { auth: true });
+}
+
+export function submitOrganiserRequest(payload) {
+  return request("/organiser-requests", { method: "POST", auth: true, body: payload });
+}
+
+export function fetchMyOrganiserRequestStatus() {
+  return request("/organiser-requests/mine", { auth: true });
 }

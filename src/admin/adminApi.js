@@ -621,3 +621,43 @@ export function toggleAdminBlogLike(blogId) {
 export function addAdminBlogComment(blogId, content) {
   return request(`/admin/blogs/${blogId}/comments`, { method: "POST", auth: true, body: { content } });
 }
+
+// --- Cast/Crew Master (Person profiles) ---
+
+export function searchAdminPeople(q) {
+  return request(`/admin/people${q ? `?q=${encodeURIComponent(q)}` : ""}`, { auth: true });
+}
+
+export function createAdminPerson(payload) {
+  return request(`/admin/people`, { method: "POST", auth: true, body: payload });
+}
+
+export function updateAdminPerson(personId, payload) {
+  return request(`/admin/people/${personId}`, { method: "PUT", auth: true, body: payload });
+}
+
+export async function deleteAdminPerson(personId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/people/${personId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete this person — they may still be credited on a video.");
+  }
+}
+
+// --- Organiser Requests ---
+
+export function fetchAdminOrganiserRequests(statusFilter = "") {
+  return request(`/admin/organiser-requests${statusFilter ? `?status_filter=${statusFilter}` : ""}`, { auth: true });
+}
+
+export function approveOrganiserRequest(requestId) {
+  return request(`/admin/organiser-requests/${requestId}/approve`, { method: "POST", auth: true });
+}
+
+export function rejectOrganiserRequest(requestId, reason) {
+  return request(`/admin/organiser-requests/${requestId}/reject`, { method: "POST", auth: true, body: { reason: reason || null } });
+}
