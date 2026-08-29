@@ -317,8 +317,21 @@ function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = false }) {
   const videoRef = useRef(null);
   const [hovering, setHovering] = useState(autoPlay);
   const [trailerReady, setTrailerReady] = useState(false);
+  const [titleVisible, setTitleVisible] = useState(true);
   const hoverTimerRef = useRef(null);
+  const titleTimerRef = useRef(null);
   const hlsRef = useRef(null);
+
+  // Title shows the moment the trailer starts playing, then fades out
+  // on its own after 5s — even if the mouse is still hovering and the
+  // trailer keeps playing. Resets to visible+timed every time a fresh
+  // hover session starts the trailer again.
+  useEffect(() => {
+    if (!trailerReady) return;
+    setTitleVisible(true);
+    titleTimerRef.current = setTimeout(() => setTitleVisible(false), 5000);
+    return () => clearTimeout(titleTimerRef.current);
+  }, [trailerReady]);
 
   // If trailerUrl arrives AFTER mount (video data loads async) and
   // this is the autoPlay (modal) usage, start playing once it shows
@@ -396,10 +409,13 @@ function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = false }) {
         />
       )}
       {hovering && trailerReady && title && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10">
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10"
+          style={{ transition: "opacity 500ms", opacity: titleVisible ? 1 : 0 }}
+        >
           <p
-            className="truncate text-2xl font-black uppercase text-white sm:text-3xl"
-            style={{ letterSpacing: "0.02em", textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
+            className="truncate text-3xl uppercase text-white sm:text-4xl"
+            style={{ fontFamily: POSTER_TITLE_FONT, letterSpacing: "0.03em", textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
           >
             {title}
           </p>
@@ -734,6 +750,18 @@ function loadScriptOnce(src, isLoadedCheck) {
     script.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(script);
   });
+}
+
+// A bold, condensed display font for card/modal titles — matching the
+// "movie poster title card" look (tight tracking, all-caps by design),
+// rather than reusing the body font at a heavier weight. Injected once
+// at module load, before any component using it renders.
+const POSTER_TITLE_FONT = "'Bebas Neue', sans-serif";
+if (typeof document !== "undefined" && !document.querySelector('link[href*="Bebas+Neue"]')) {
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap";
+  document.head.appendChild(link);
 }
 
 function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSeconds }) {
