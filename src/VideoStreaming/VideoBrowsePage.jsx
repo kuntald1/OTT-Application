@@ -313,7 +313,7 @@ function useReveal() {
 // delay so a quick mouse pass-by doesn't trigger playback. Reuses the
 // same hls.js loader as AdEnabledVideoPlayer.
 // ---------------------------------------------------------------------------
-function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = false }) {
+export function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = false }) {
   const videoRef = useRef(null);
   const [hovering, setHovering] = useState(autoPlay);
   const [trailerReady, setTrailerReady] = useState(false);
@@ -508,6 +508,14 @@ export function GenreRow({ category, cards, onSelect, showCaption = false }) {
                   </div>
                 )}
               </div>
+              {showCaption && (
+                <div className="mt-2">
+                  <p className="truncate text-sm font-medium" style={{ color: T.text }}>{card.title}</p>
+                  <p className="truncate text-xs" style={{ color: T.textFaint }}>
+                    {[card.releaseYear, card.durationLabel].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+              )}
             </button>
           ))}
         </div>
