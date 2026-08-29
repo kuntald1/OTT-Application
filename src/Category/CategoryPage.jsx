@@ -5,7 +5,7 @@ import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions, fetchPublishedVideos } from "../api";
 import { useApp } from "../context/AppContext";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { HoverTrailerPreview, RealDetailModal } from "../VideoStreaming/VideoBrowsePage";
+import { HoverTrailerPreview, RealDetailModal, formatDuration } from "../VideoStreaming/VideoBrowsePage";
 
 // ---------------------------------------------------------------------------
 // Category — reached by clicking a category in the nav's Category dropdown.
@@ -84,6 +84,8 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
             videoId: v.id,
             trailerUrl: v.trailer_playback_url || null,
             categories: v.categories || [],
+            releaseYear: v.release_year,
+            durationLabel: v.duration_seconds ? formatDuration(Math.round(v.duration_seconds / 60)) : null,
           }))
         );
       })
@@ -149,6 +151,12 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
                       style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)", background: POSTER_POOL[hashStr(card.id) % POSTER_POOL.length] }}
                     >
                       <HoverTrailerPreview poster={card.poster} trailerUrl={card.trailerUrl} title={card.title} />
+                    </div>
+                    <div className="mt-2">
+                      <p className="truncate text-sm font-medium" style={{ color: COLORS.cream }}>{card.title}</p>
+                      <p className="truncate text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                        {[card.releaseYear, card.durationLabel].filter(Boolean).join(" · ")}
+                      </p>
                     </div>
                   </button>
                 ))}

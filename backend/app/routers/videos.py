@@ -404,33 +404,34 @@ def _sync_cast_and_crew(
     existing_cast = {c.person_id: c for c in db.query(VideoCast).filter(VideoCast.video_id == video.id).all()}
     existing_crew = {c.person_id: c for c in db.query(VideoCrew).filter(VideoCrew.video_id == video.id).all()}
 
-    def _apply_person_fields(person: Person, member) -> None:
-        person.name = member.name
-        person.occupation = member.occupation
-        person.date_of_birth = member.date_of_birth
-        person.birthplace = member.birthplace
-        person.about = member.about
-        person.early_life = member.early_life
-        person.personal_life = member.personal_life
-        person.debut_initial_years = member.debut_initial_years
-        person.breakthrough_beyond = member.breakthrough_beyond
-        person.recent_projects = member.recent_projects
-
     kept_cast_person_ids = set()
     for i, member in enumerate(payload.cast):
-        if member.person_id and member.person_id in existing_cast:
+        if member.person_id:
+            # Reusing an existing Person — whether already linked to
+            # this video (an edit) or picked via autocomplete from
+            # another video entirely (the actual reuse case this was
+            # missing before — a person_id not already in
+            # existing_cast used to silently fall through below and
+            # create a DUPLICATE Person, defeating the whole point of
+            # autocomplete). Never overwrites their bio here — that's
+            # the Cast/Crew Master page's job now, not Add Video's.
             person = db.query(Person).filter(Person.id == member.person_id).first()
             if person:
-                _apply_person_fields(person, member)
-                vc = existing_cast[member.person_id]
-                vc.character_role = member.character_role
-                vc.display_order = i
+                if member.person_id in existing_cast:
+                    vc = existing_cast[member.person_id]
+                    vc.character_role = member.character_role
+                    vc.display_order = i
+                else:
+                    db.add(VideoCast(video_id=video.id, person_id=person.id, character_role=member.character_role, display_order=i))
                 kept_cast_person_ids.add(member.person_id)
                 continue
+        # No person_id (or it didn't resolve to a real Person) — a
+        # brand new name typed with no autocomplete match. Creates a
+        # minimal Person (name only); full bio details are added later
+        # via the Cast/Crew Master page, not here.
         person = Person(
-            created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
+            name=member.name, created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
         )
-        _apply_person_fields(person, member)
         db.add(person)
         db.flush()
         db.add(VideoCast(video_id=video.id, person_id=person.id, character_role=member.character_role, display_order=i))
@@ -439,25 +440,23 @@ def _sync_cast_and_crew(
         if old_person_id not in kept_cast_person_ids:
             db.delete(vc)
     db.flush()
-    for old_person_id in existing_cast:
-        if old_person_id not in kept_cast_person_ids:
-            db.query(Person).filter(Person.id == old_person_id).delete()
 
     kept_crew_person_ids = set()
     for i, member in enumerate(payload.crew):
-        if member.person_id and member.person_id in existing_crew:
+        if member.person_id:
             person = db.query(Person).filter(Person.id == member.person_id).first()
             if person:
-                _apply_person_fields(person, member)
-                vc = existing_crew[member.person_id]
-                vc.role = member.role
-                vc.display_order = i
+                if member.person_id in existing_crew:
+                    vc = existing_crew[member.person_id]
+                    vc.role = member.role
+                    vc.display_order = i
+                else:
+                    db.add(VideoCrew(video_id=video.id, person_id=person.id, role=member.role, display_order=i))
                 kept_crew_person_ids.add(member.person_id)
                 continue
         person = Person(
-            created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
+            name=member.name, created_by_user_id=person_created_by_user_id, created_by_admin_id=person_created_by_admin_id,
         )
-        _apply_person_fields(person, member)
         db.add(person)
         db.flush()
         db.add(VideoCrew(video_id=video.id, person_id=person.id, role=member.role, display_order=i))
@@ -465,10 +464,6 @@ def _sync_cast_and_crew(
     for old_person_id, vc in existing_crew.items():
         if old_person_id not in kept_crew_person_ids:
             db.delete(vc)
-    db.flush()
-    for old_person_id in existing_crew:
-        if old_person_id not in kept_crew_person_ids:
-            db.query(Person).filter(Person.id == old_person_id).delete()
     db.flush()
 
 

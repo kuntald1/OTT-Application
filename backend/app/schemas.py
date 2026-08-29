@@ -933,6 +933,32 @@ class PersonOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PersonCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+
+
 class VideoCastIn(BaseModel):
     # person_id, when provided and matching an existing cast member on
     # this same video, tells the backend to UPDATE that Person's fields

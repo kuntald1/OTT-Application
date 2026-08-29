@@ -17,6 +17,26 @@ ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
+@router.get("/search", response_model=list[PersonOut])
+def search_people(q: str = "", db: Session = Depends(get_db)):
+    """Powers cast/crew name autocomplete in both the creator and admin
+    Add Video forms — typing a name suggests existing Person profiles
+    to reuse instead of creating a duplicate (see Person's docstring on
+    the model for why this matters). Empty/short queries return
+    nothing rather than the whole table.
+    """
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    return (
+        db.query(Person)
+        .filter(Person.name.ilike(f"%{q}%"))
+        .order_by(Person.name.asc())
+        .limit(10)
+        .all()
+    )
+
+
 @router.get("/{person_id}", response_model=PersonOut)
 def get_person(person_id: str, db: Session = Depends(get_db)):
     # Public — this is the actual bio page a viewer lands on when
