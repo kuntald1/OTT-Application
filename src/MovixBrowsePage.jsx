@@ -5,6 +5,7 @@ import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
 import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories } from "./api";
+import { GenreRow as RealGenreRow, RealDetailModal, formatDuration } from "./VideoStreaming/VideoBrowsePage";
 
 import filmsPoster from "./assets/posters/films.jpg";
 import seriesPoster from "./assets/posters/series.jpg";
@@ -112,12 +113,6 @@ function buildCard(category, i) {
   };
 }
 
-function formatDuration(min) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${h}h ${m.toString().padStart(2, "0")}m`;
-}
-
 export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNavigate, openVideoId }) {
   const t = THEMES[theme] ?? THEMES.dark;
   const isLight = theme === "light";
@@ -155,23 +150,35 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       .catch(() => setSpecialCategories([]));
   }, []);
 
-  const [realVideos, setRealVideos] = useState([]);
+  // Real, published videos with section "archive" — grouped by category,
+  // the exact same pattern VideoStreaming/VideoBrowsePage.jsx (Play) uses,
+  // so Archive's rows behave identically (hover trailer, 4-per-row sizing,
+  // real playback/ads/revenue tracking via the imported RealGenreRow +
+  // RealDetailModal below) rather than a separate re-implementation.
+  const [realVideosByCategory, setRealVideosByCategory] = useState({});
   useEffect(() => {
     fetchPublishedVideos("archive")
       .then((videos) => {
-        setRealVideos(
-          videos.map((v) => ({
+        const grouped = {};
+        videos.forEach((v) => {
+          const card = {
             id: v.id,
             title: v.title,
-            category: v.categories[0] || "",
             poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
-            year: v.release_year,
             isReal: true,
             videoId: v.id,
-          }))
-        );
+            trailerUrl: v.trailer_playback_url || null,
+            releaseYear: v.release_year,
+            durationLabel: v.duration_seconds ? formatDuration(Math.round(v.duration_seconds / 60)) : null,
+          };
+          (v.categories || []).forEach((cat) => {
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(card);
+          });
+        });
+        setRealVideosByCategory(grouped);
       })
-      .catch(() => setRealVideos([]));
+      .catch(() => setRealVideosByCategory({}));
   }, []);
 
   const handleSelectCard = (card) => {
@@ -202,7 +209,7 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
     >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
         {specialCategories.map((sc) => (
-          <GenreRow
+          <RealGenreRow
             key={sc.id}
             category={sc.title}
             cards={sc.videos.map((v) => ({
@@ -214,16 +221,18 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
               trailerUrl: v.trailer_playback_url || null,
             }))}
             onSelect={handleSelectCard}
-            t={t}
+            showCaption
           />
         ))}
-        {realVideos.length > 0 && (
-          <GenreRow category="Recently Uploaded" cards={realVideos} onSelect={handleSelectCard} t={t} />
+        {Object.keys(realVideosByCategory).length === 0 ? (
+          <div className="rounded-2xl p-10 text-center" style={{ background: t.modalSurface, border: `1px solid ${t.border}` }}>
+            <p className="text-sm" style={{ color: t.textMuted }}>No videos in Archive yet — check back soon.</p>
+          </div>
+        ) : (
+          Object.entries(realVideosByCategory).map(([category, cards]) => (
+            <RealGenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} showCaption />
+          ))
         )}
-        {CATEGORIES.map((category) => {
-          const cards = Array.from({ length: 6 }, (_, i) => buildCard(category, i));
-          return <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} t={t} />;
-        })}
       </main>
 
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${t.border}` }}>
@@ -263,7 +272,7 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       </footer>
 
       {modal.item && modal.item.isReal ? (
-        <RealDetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} />
+        <RealDetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} onSelectRelated={(relatedCard) => modal.open(relatedCard)} />
       ) : modal.item ? (
         <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} t={t} isLight={isLight} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />
       ) : null}
@@ -290,104 +299,6 @@ function useReveal() {
     return () => observer.disconnect();
   }, []);
   return [ref, visible];
-}
-
-function GenreRow({ category, cards, onSelect, t }) {
-  const [ref, visible] = useReveal();
-  const scrollerRef = React.useRef(null);
-  const drag = React.useRef({ active: false, startX: 0, startScroll: 0, moved: false });
-
-  const onMouseDown = (e) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    drag.current = { active: true, startX: e.pageX, startScroll: el.scrollLeft, moved: false };
-    el.style.cursor = "grabbing";
-    el.style.scrollSnapType = "none"; // disable snap while dragging — it was fighting each mousemove tick, causing jerk
-  };
-  const onMouseMove = (e) => {
-    const el = scrollerRef.current;
-    if (!el || !drag.current.active) return;
-    e.preventDefault();
-    const dx = e.pageX - drag.current.startX;
-    if (Math.abs(dx) > 4) drag.current.moved = true;
-    el.scrollLeft = drag.current.startScroll - dx;
-  };
-  const endDrag = () => {
-    const el = scrollerRef.current;
-    if (el) {
-      el.style.cursor = "grab";
-      el.style.scrollSnapType = "x mandatory"; // re-enable snap once released, so the row still settles cleanly
-    }
-    drag.current.active = false;
-  };
-  // Suppress the click that would otherwise fire on a card right after a drag
-  const onCardClick = (card) => {
-    if (drag.current.moved) {
-      drag.current.moved = false;
-      return;
-    }
-    onSelect(card);
-  };
-
-  return (
-    <section
-      ref={ref}
-      className="mb-6 transition-all duration-700 ease-out"
-      style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(28px)" }}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="group flex cursor-default items-center gap-1.5 text-2xl font-semibold" style={{ color: t.text }}>
-          {category}
-          <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" style={{ color: t.textFaint }} />
-        </h2>
-        <span className="text-xs" style={{ color: t.textFainter }}>{cards.length} titles</span>
-      </div>
-
-      <div className="relative">
-        <div
-          ref={scrollerRef}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={endDrag}
-          onMouseLeave={endDrag}
-          className="flex select-none gap-4 overflow-x-auto pb-3 [scroll-snap-type:x_mandatory] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          style={{ cursor: "grab" }}
-        >
-          {cards.map((card, i) => (
-            <button
-              type="button"
-              key={i}
-              onClick={() => onCardClick(card)}
-              className="group relative w-52 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-60 lg:w-64"
-              style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start" }}
-            >
-              <div
-                className="relative aspect-[2/3] overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
-                style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
-              >
-                <img
-                  src={card.poster}
-                  alt=""
-                  draggable={false}
-                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-                {/* subtle bottom scrim so the badges/title always read cleanly */}
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                <div className="pointer-events-none absolute inset-0 rounded-xl opacity-0 shadow-[0_12px_32px_rgba(0,0,0,0.45)] transition-opacity duration-300 group-hover:opacity-100" />
-                <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                  {card.category}
-                </span>
-              </div>
-              <p className="mt-2.5 truncate text-sm font-medium transition-colors duration-200" style={{ color: t.text }}>{card.title}</p>
-              <p className="text-xs" style={{ color: t.textFaint }}>
-                {card.year}{card.durationMin ? ` · ${formatDuration(card.durationMin)}` : ""}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
 }
 
 function DetailModal({ card, closing, onClose, t, isLight, onOpenPerson, onNavigate }) {
@@ -584,190 +495,6 @@ function DetailModal({ card, closing, onClose, t, isLight, onOpenPerson, onNavig
   );
 }
 
-function RealDetailModal({ card, closing, onClose, onNavigate }) {
-  const t = THEMES.dark; // Archive is always rendered with theme="dark" in production (see App.jsx)
-  const [video, setVideo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [entered, setEntered] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const { isInList, toggleListItem } = useApp();
-  const saved = isInList(card.id);
-
-  React.useEffect(() => {
-    const raf = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  const shown = entered && !closing;
-
-  useEffect(() => {
-    fetchVideoById(card.videoId)
-      .then(setVideo)
-      .catch(() => setVideo(null))
-      .finally(() => setLoading(false));
-  }, [card.videoId]);
-
-  const isPayPerVideo = video?.monetization_type === "pay_per_video";
-  const canPlay = video?.has_file && !isPayPerVideo;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: t.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
-      onClick={onClose}
-    >
-      <style>{`
-        .movix-real-modal-scroll::-webkit-scrollbar { display: none; }
-        .movix-real-modal-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
-      <div
-        className="movix-real-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{
-          background: t.modalSurface, maxHeight: "90vh", overflowY: "auto",
-          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
-          opacity: shown ? 1 : 0,
-          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative aspect-video w-full" style={{ background: "#000" }}>
-          {playing && canPlay ? (
-            <iframe
-              src={video.embed_url}
-              loading="lazy"
-              style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
-              allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
-              allowFullScreen
-            />
-          ) : (
-            <>
-              {card.poster && <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />}
-              <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${t.modalSurface}FF 100%)` }} />
-              <h2 className="absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ fontFamily: "Georgia, 'Times New Roman', serif", color: t.text }}>{card.title}</h2>
-            </>
-          )}
-          <button type="button" onClick={onClose} className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="px-6 py-6">
-          {loading ? (
-            <p className="text-sm" style={{ color: t.textFaint }}>Loading…</p>
-          ) : !video ? (
-            <p className="text-sm" style={{ color: t.textFaint }}>Couldn't load this video.</p>
-          ) : (
-            <>
-              <div className="mb-4 flex items-center gap-3">
-                {!video.has_file ? (
-                  <p className="text-sm" style={{ color: t.textFaint }}>This video is still processing — check back soon.</p>
-                ) : isPayPerVideo ? (
-                  <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.2)", color: t.textMuted }}>
-                    Pay-Per-Video — ₹{video.pricing?.price_inr} / ${video.pricing?.price_usd}. Purchase flow coming soon.
-                  </div>
-                ) : !playing ? (
-                  <button
-                    type="button"
-                    onClick={() => setPlaying(true)}
-                    className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
-                    style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-                  >
-                    <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
-                  </button>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Movies" })}
-                  aria-label={saved ? "Remove from My List" : "Add to My List"}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
-                  style={{
-                    borderColor: saved ? COLORS.gold : "rgba(255,255,255,0.3)",
-                    color: saved ? COLORS.gold : "#fff",
-                    background: saved ? "rgba(212,175,55,0.12)" : "transparent",
-                  }}
-                >
-                  {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                </button>
-                <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
-                  <ThumbsUp className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: t.textMuted }}>
-                <span>{video.release_year}</span>
-                {video.duration_seconds > 0 && <span>{formatDuration(Math.round(video.duration_seconds / 60))}</span>}
-                <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: COLORS.gold, color: COLORS.gold }}>{video.age_rating}</span>
-                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: COLORS.gold }}>{video.categories[0]}</span>
-              </div>
-
-              <div className="grid gap-6 sm:grid-cols-3">
-                <p className="text-sm leading-relaxed sm:col-span-2" style={{ color: t.textMuted }}>{video.description}</p>
-                <div className="flex flex-col gap-3 text-xs">
-                  {video.categories.length > 0 && (
-                    <div>
-                      <p className="mb-1" style={{ color: t.textFainter }}>GENRES</p>
-                      <p style={{ color: t.textMuted }}>{video.categories.join(", ")}</p>
-                    </div>
-                  )}
-                  {video.languages.length > 0 && (
-                    <div>
-                      <p className="mb-1" style={{ color: t.textFainter }}>AVAILABLE IN</p>
-                      <p style={{ color: t.textMuted }}>{video.languages.join(", ")}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {(video.cast.length > 0 || video.crew.length > 0) && (
-                <div className="mt-6 grid gap-6 border-t pt-6 sm:grid-cols-2" style={{ borderColor: t.border }}>
-                  {video.cast.length > 0 && (
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: t.textFainter }}>Cast</p>
-                      <div className="flex flex-col gap-2.5">
-                        {video.cast.map((c) => (
-                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="flex w-fit items-center gap-2 text-left">
-                            {c.person.photo_url ? (
-                              <img src={c.person.photo_url} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
-                            ) : (
-                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs" style={{ color: t.textFainter }}>{c.person.name[0]}</span>
-                            )}
-                            <span className="text-sm font-medium hover:underline" style={{ color: COLORS.gold }}>
-                              {c.person.name}{c.character_role ? <span style={{ color: t.textFainter }}> as {c.character_role}</span> : null}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {video.crew.length > 0 && (
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: t.textFainter }}>Crew</p>
-                      <div className="flex flex-col gap-2.5">
-                        {video.crew.map((c) => (
-                          <button key={c.id} type="button" onClick={() => { onClose(); onNavigate?.("personProfile", { personId: c.person.id }); }} className="flex w-fit items-center gap-2 text-left">
-                            {c.person.photo_url ? (
-                              <img src={c.person.photo_url} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
-                            ) : (
-                              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs" style={{ color: t.textFainter }}>{c.person.name[0]}</span>
-                            )}
-                            <span className="text-sm">
-                              <span style={{ color: t.textFainter }}>{c.role}: </span>
-                              <span className="font-medium hover:underline" style={{ color: COLORS.gold }}>{c.person.name}</span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function MovixMark({ className, style }) {
   return (

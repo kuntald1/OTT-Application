@@ -66,7 +66,7 @@ function hashStr(s) {
   return h;
 }
 
-function formatDuration(min) {
+export function formatDuration(min) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${h}h ${m.toString().padStart(2, "0")}m`;
@@ -425,7 +425,7 @@ function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = false }) {
   );
 }
 
-function GenreRow({ category, cards, onSelect }) {
+export function GenreRow({ category, cards, onSelect, showCaption = false }) {
   const [ref, visible] = useReveal();
   const scrollerRef = React.useRef(null);
   const drag = React.useRef({ active: false, startX: 0, startScroll: 0, moved: false });
@@ -950,7 +950,7 @@ function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSec
 }
 
 
-function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }) {
+export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }) {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [entered, setEntered] = useState(false);
