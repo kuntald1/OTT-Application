@@ -658,6 +658,41 @@ class OrganiserRequest(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class DonationRegistrationStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    disabled = "disabled"
+
+
+class DonationRegistration(Base):
+    """A Plays Organiser's request to register payout details so
+    supporters can donate to them — reachable from the "Support a
+    Plays Organiser" page's "Register for Donation" link, which only
+    shows for accounts with role plays_organiser (see UserRole).
+
+    Payout details are given as EITHER bank account + IFSC OR a QR
+    code image, not necessarily both — both fields stay nullable and
+    the submit endpoint validates that at least one form is present.
+    disabled is a separate state from rejected: an admin can disable a
+    previously-APPROVED registration later (e.g. suspicious activity)
+    without it looking like the original submission was rejected.
+    """
+    __tablename__ = "donation_registrations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    group_name = Column(String(255), nullable=False)
+    account_number = Column(String(50), nullable=True)
+    ifsc_code = Column(String(20), nullable=True)
+    qr_code_url = Column(String(500), nullable=True)
+    document_url = Column(String(500), nullable=False)
+    status = Column(Enum(DonationRegistrationStatus), nullable=False, default=DonationRegistrationStatus.pending)
+    rejection_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class EventEnquiry(Base):
     """Event listing enquiry -- Content Creator / Plays Organiser only.
     Only becomes a real, publicly visible event once status='approved' --
