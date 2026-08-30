@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
-from app.models import User, CommunityRoom, RoomPost, PostReply, PostLike
+from app.models import User, AdminUser, CommunityRoom, RoomPost, PostReply, PostLike
 from app.schemas import (
     RoomSummaryOut, RoomDetailOut, RoomCreate,
     PostOut, PostCreate, ReplyOut, ReplyCreate, LikeToggleOut,
@@ -18,6 +18,26 @@ router = APIRouter(prefix="/community/rooms", tags=["community"])
 UPLOAD_DIR = Path("uploads/room_posts")
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def _room_creator_name(room: CommunityRoom, db: Session) -> tuple[str, bool]:
+    """Resolves whichever of created_by_user_id / created_by_admin_id
+    is actually set — a room is created by either a User or an
+    AdminUser, never both (see CommunityRoom's docstring).
+    """
+    if room.created_by_admin_id:
+        admin = db.query(AdminUser).filter(AdminUser.id == room.created_by_admin_id).first()
+        return (admin.name if admin else "theomy Team"), True
+    user = db.query(User).filter(User.id == room.created_by_user_id).first()
+    return (user.name if user else "Unknown"), False
+
+
+def _post_author_name(post: RoomPost, db: Session) -> tuple[str, bool]:
+    if post.author_admin_id:
+        admin = db.query(AdminUser).filter(AdminUser.id == post.author_admin_id).first()
+        return (admin.name if admin else "theomy Team"), True
+    user = db.query(User).filter(User.id == post.author_user_id).first()
+    return (user.name if user else "Unknown"), False
 
 
 def _post_to_out(post: RoomPost, db: Session, viewer: User | None) -> PostOut:
@@ -46,11 +66,12 @@ def _post_to_out(post: RoomPost, db: Session, viewer: User | None) -> PostOut:
         )
         for r in replies
     ]
-    author = db.query(User).filter(User.id == post.author_user_id).first()
+    author_name, is_admin = _post_author_name(post, db)
     return PostOut(
         id=post.id,
         author_user_id=post.author_user_id,
-        author_name=author.name if author else "Unknown",
+        author_name=author_name,
+        is_admin=is_admin,
         text=post.text,
         image_url=post.image_url,
         likes_count=likes_count,
@@ -65,12 +86,13 @@ def list_rooms(db: Session = Depends(get_db)):
     rooms = db.query(CommunityRoom).order_by(CommunityRoom.created_at.desc()).all()
     out = []
     for room in rooms:
-        creator = db.query(User).filter(User.id == room.created_by_user_id).first()
+        creator_name, is_admin = _room_creator_name(room, db)
         post_count = db.query(RoomPost).filter(RoomPost.room_id == room.id).count()
         out.append(RoomSummaryOut(
             id=room.id,
             title=room.title,
-            created_by_name=creator.name if creator else "Unknown",
+            created_by_name=creator_name,
+            is_admin_created=is_admin,
             post_count=post_count,
             created_at=room.created_at,
         ))
@@ -103,7 +125,7 @@ def get_room(
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
 
-    creator = db.query(User).filter(User.id == room.created_by_user_id).first()
+    creator_name, is_admin = _room_creator_name(room, db)
     posts = (
         db.query(RoomPost)
         .filter(RoomPost.room_id == room.id)
@@ -113,7 +135,8 @@ def get_room(
     return RoomDetailOut(
         id=room.id,
         title=room.title,
-        created_by_name=creator.name if creator else "Unknown",
+        created_by_name=creator_name,
+        is_admin_created=is_admin,
         posts=[_post_to_out(p, db, viewer) for p in posts],
         created_at=room.created_at,
     )

@@ -472,8 +472,9 @@ class ReplyOut(BaseModel):
 
 class PostOut(BaseModel):
     id: uuid.UUID
-    author_user_id: uuid.UUID
+    author_user_id: Optional[uuid.UUID] = None
     author_name: str
+    is_admin: bool = False
     text: str
     image_url: Optional[str] = None
     likes_count: int
@@ -486,6 +487,7 @@ class RoomSummaryOut(BaseModel):
     id: uuid.UUID
     title: str
     created_by_name: str
+    is_admin_created: bool = False
     post_count: int
     created_at: datetime
 
@@ -494,6 +496,7 @@ class RoomDetailOut(BaseModel):
     id: uuid.UUID
     title: str
     created_by_name: str
+    is_admin_created: bool = False
     posts: List[PostOut]
     created_at: datetime
 

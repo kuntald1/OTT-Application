@@ -315,11 +315,18 @@ class BlogLike(Base):
 
 
 class CommunityRoom(Base):
+    """A discussion room within Community. Exactly one of
+    created_by_user_id / created_by_admin_id is set — admin and
+    public-site accounts are separate login systems (see AdminUser's
+    docstring), so a room created from the admin panel records
+    created_by_admin_id instead.
+    """
     __tablename__ = "community_rooms"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(255), nullable=False)
-    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_by_admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -330,7 +337,8 @@ class RoomPost(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     room_id = Column(UUID(as_uuid=True), ForeignKey("community_rooms.id"), nullable=False, index=True)
-    author_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    author_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    author_admin_id = Column(UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True)
     text = Column(Text, nullable=False)
     # Relative URL, e.g. "/api/uploads/room_posts/<uuid>.jpg" — null if no
     # image attached. Video attachments aren't supported yet.
