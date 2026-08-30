@@ -56,7 +56,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
   const [organiserRequestSubmitted, setOrganiserRequestSubmitted] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn || !profile || profile.role !== "User") {
+    if (!isLoggedIn || !profile || profile.role !== "user") {
       setShowOrganiserRequestLink(false);
       return;
     }
@@ -445,7 +445,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               >
                 Help Center
               </button>
-              {(profile.role === "Content Creator" || profile.role === "Plays Organiser") && (
+              {(profile.role === "content_creator" || profile.role === "plays_organiser") && (
                 <>
                   <button
                     type="button"
@@ -552,7 +552,7 @@ function LoginModal({ onClose }) {
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("India");
   const [countryOpen, setCountryOpen] = useState(false);
-  const [role, setRole] = useState("User");
+  const [role, setRole] = useState("user");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
@@ -570,7 +570,11 @@ function LoginModal({ onClose }) {
   const [otpLoginCode, setOtpLoginCode] = useState("");
 
   const isIndia = country === "India";
-  const ROLES = ["User", "Content Creator", "Plays Organiser"];
+  const ROLES = [
+    { value: "user", label: "User" },
+    { value: "content_creator", label: "Content Creator" },
+    { value: "plays_organiser", label: "Plays Organiser" },
+  ];
 
   const resetRegOtp = () => { setRegOtpSent(false); setRegOtpCode(""); };
 
@@ -910,17 +914,17 @@ function LoginModal({ onClose }) {
               <div className="flex flex-wrap gap-2">
                 {ROLES.map((r) => (
                   <button
-                    key={r}
+                    key={r.value}
                     type="button"
-                    onClick={() => setRole(r)}
+                    onClick={() => setRole(r.value)}
                     className="rounded-full border px-3 py-1.5 text-xs font-medium"
                     style={{
-                      borderColor: role === r ? COLORS.gold : "rgba(245,235,221,0.15)",
-                      background: role === r ? "rgba(212,175,55,0.14)" : "transparent",
-                      color: role === r ? COLORS.gold : "rgba(245,235,221,0.7)",
+                      borderColor: role === r.value ? COLORS.gold : "rgba(245,235,221,0.15)",
+                      background: role === r.value ? "rgba(212,175,55,0.14)" : "transparent",
+                      color: role === r.value ? COLORS.gold : "rgba(245,235,221,0.7)",
                     }}
                   >
-                    {r}
+                    {r.label}
                   </button>
                 ))}
               </div>
@@ -1042,7 +1046,7 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, sh
         >
           Help Center
         </button>
-        {(profile.role === "Content Creator" || profile.role === "Plays Organiser") && (
+        {(profile.role === "content_creator" || profile.role === "plays_organiser") && (
           <>
             <button
               type="button"

@@ -77,7 +77,7 @@ function toTicketDisplay(ticket) {
 
 export function AppProvider({ children }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [profile, setProfile] = useState({ id: null, name: "", email: "", photo: null, role: "User", country: "India" });
+  const [profile, setProfile] = useState({ id: null, name: "", email: "", photo: null, role: "user", country: "India" });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(true); // true while we check for an existing session
   const [authError, setAuthError] = useState("");
@@ -243,7 +243,7 @@ export function AppProvider({ children }) {
   const logout = useCallback(() => {
     setToken(null);
     setIsLoggedIn(false);
-    setProfile({ id: null, name: "", email: "", photo: null, role: "User", country: "India" });
+    setProfile({ id: null, name: "", email: "", photo: null, role: "user", country: "India" });
     setTickets([]);
     setMyList([]);
     setIsSubscribed(false);

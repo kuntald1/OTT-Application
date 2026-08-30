@@ -10,10 +10,11 @@ const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 // glance — User (neutral gray), Content Creator (gold, matches the
 // site's accent), Plays Organiser (blue, visually distinct from gold).
 const ROLE_STYLES = {
-  User: { bg: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" },
-  "Content Creator": { bg: "rgba(212,175,55,0.15)", color: COLORS.gold },
-  "Plays Organiser": { bg: "rgba(96,165,250,0.15)", color: "#60a5fa" },
+  user: { bg: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" },
+  content_creator: { bg: "rgba(212,175,55,0.15)", color: COLORS.gold },
+  plays_organiser: { bg: "rgba(96,165,250,0.15)", color: "#60a5fa" },
 };
+const ROLE_LABELS = { user: "User", content_creator: "Content Creator", plays_organiser: "Plays Organiser" };
 
 export default function AdminUsersPage({ currentAdmin }) {
   const isSuperadmin = currentAdmin?.role === "superadmin";
@@ -182,10 +183,10 @@ export default function AdminUsersPage({ currentAdmin }) {
                 <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: COLORS.cream }}>
                   {u.name}
                   <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
-                    style={ROLE_STYLES[u.role] || ROLE_STYLES.User}
+                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                    style={ROLE_STYLES[u.role] || ROLE_STYLES.user}
                   >
-                    {u.role}
+                    {ROLE_LABELS[u.role] || u.role}
                   </span>
                   {!u.is_active && (
                     <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase" style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}>
@@ -207,7 +208,7 @@ export default function AdminUsersPage({ currentAdmin }) {
                     <Key className="h-3.5 w-3.5" /> Password
                   </button>
                 )}
-                {(u.role === "Content Creator" || u.role === "Plays Organiser") && (
+                {(u.role === "content_creator" || u.role === "plays_organiser") && (
                   <button
                     type="button"
                     onClick={() => handleToggleLiveStreaming(u)}
@@ -221,7 +222,7 @@ export default function AdminUsersPage({ currentAdmin }) {
                     <Video className="h-3.5 w-3.5" /> {u.can_live_stream ? "Live: On" : "Live: Off"}
                   </button>
                 )}
-                {(u.role === "Content Creator" || u.role === "Plays Organiser") && u.can_live_stream && (
+                {(u.role === "content_creator" || u.role === "plays_organiser") && u.can_live_stream && (
                   <button
                     type="button"
                     onClick={() => handleNotify(u)}

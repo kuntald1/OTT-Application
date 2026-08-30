@@ -6,7 +6,7 @@ import annaLarge from "../Theater/assets/portraits/large/anna.jpg";
 // ---------------------------------------------------------------------------
 // Fictional Plays Organiser directory for the Donation page. In a real
 // system this would be the set of registered users whose account role is
-// "Plays Organiser" — since there's no backend here, this is a small fixed
+// "plays_organiser" — since there's no backend here, this is a small fixed
 // demo list instead.
 // ---------------------------------------------------------------------------
 

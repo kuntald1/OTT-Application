@@ -17,9 +17,9 @@ class AuthProvider(str, enum.Enum):
 
 
 class UserRole(str, enum.Enum):
-    user = "User"
-    content_creator = "Content Creator"
-    plays_organiser = "Plays Organiser"
+    user = "user"
+    content_creator = "content_creator"
+    plays_organiser = "plays_organiser"
 
 
 class User(Base):

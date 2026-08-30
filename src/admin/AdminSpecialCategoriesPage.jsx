@@ -233,7 +233,7 @@ function VideoPicker({ category, onChanged }) {
     Promise.all([fetchAdminVideos("published"), fetchAdminUsers()])
       .then(([videos, users]) => {
         setAllVideos(videos);
-        setCreators((users || []).filter((u) => u.role === "Content Creator" || u.role === "Plays Organiser"));
+        setCreators((users || []).filter((u) => u.role === "content_creator" || u.role === "plays_organiser"));
       })
       .catch(() => { setAllVideos([]); setCreators([]); })
       .finally(() => setLoading(false));

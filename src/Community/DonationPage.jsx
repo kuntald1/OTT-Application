@@ -6,7 +6,7 @@ import { fetchOrganisers, createDonationOrder, verifyDonationPayment } from "../
 
 // ---------------------------------------------------------------------------
 // Donation — the directory now lists real registered users whose account
-// role is "Plays Organiser" (via GET /api/organisers), not a fixed
+// role is "plays_organiser" (via GET /api/organisers), not a fixed
 // fictional list. Donating opens a real Razorpay checkout (test mode),
 // same signature-verification pattern as subscription checkout.
 // ---------------------------------------------------------------------------
