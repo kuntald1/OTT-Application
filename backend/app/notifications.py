@@ -606,6 +606,74 @@ def send_organiser_request_rejected_whatsapp(to_phone: str, name: str, reason: s
         pass
 
 
+def send_donation_registration_approved_email(to_email: str, name: str, group_name: str) -> None:
+    subject = "Your donation registration has been approved"
+    text_body = (
+        f"Hi {name},\n\nYour donation registration for \"{group_name}\" on theomy has been approved. "
+        f"Supporters can now find and donate to you.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Your donation registration is approved! \U0001F389",
+        [f"Hi {name},", f"Your donation registration for \"{group_name}\" has been approved.", "Supporters can now find and donate to you."],
+        "#6FCF97",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_donation_registration_rejected_email(to_email: str, name: str, group_name: str, reason: str) -> None:
+    subject = "Update on your donation registration"
+    text_body = (
+        f"Hi {name},\n\nYour donation registration for \"{group_name}\" on theomy was not approved.\n\n"
+        f"Reason: {reason}\n\nYou're welcome to submit another registration.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Donation registration not approved",
+        [f"Hi {name},", f"Your donation registration for \"{group_name}\" was not approved.", f"<b>Reason:</b> {reason}", "You're welcome to submit another registration."],
+        "#f87171",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_donation_registration_approved_whatsapp(to_phone: str, name: str, group_name: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Great news, {name}! Your donation registration for \"{group_name}\" has been "
+        f"approved. Supporters can now find and donate to you."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_donation_registration_rejected_whatsapp(to_phone: str, name: str, group_name: str, reason: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    body = (
+        f"theomy: Hi {name}, your donation registration for \"{group_name}\" was not approved. "
+        f"Reason: {reason}. You're welcome to submit another registration."
+    )
+    try:
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
 def send_live_streaming_enabled_whatsapp(to_phone: str, name: str) -> None:
     """Tells a Content Creator / Plays Organiser their account can now
     broadcast — the actual RTMP URL + Stream Key aren't known yet at

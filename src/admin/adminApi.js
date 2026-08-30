@@ -715,14 +715,47 @@ export function fetchAdminDonationRegistrations(statusFilter = "") {
   return request(`/admin/donation-registrations${statusFilter ? `?status_filter=${statusFilter}` : ""}`, { auth: true });
 }
 
+export async function createAdminDonationRegistration({ userId, groupName, accountNumber, ifscCode, qrCodeFile, documentFile }) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("user_id", userId);
+  formData.append("group_name", groupName);
+  formData.append("account_number", accountNumber || "");
+  formData.append("ifsc_code", ifscCode || "");
+  if (qrCodeFile) formData.append("qr_code", qrCodeFile);
+  formData.append("document", documentFile);
+  const res = await fetch(`${BASE_URL}/admin/donation-registrations`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't create registration.");
+  }
+  return data;
+}
+
 export function approveDonationRegistration(requestId) {
   return request(`/admin/donation-registrations/${requestId}/approve`, { method: "POST", auth: true });
 }
 
 export function rejectDonationRegistration(requestId, reason) {
-  return request(`/admin/donation-registrations/${requestId}/reject`, { method: "POST", auth: true, body: { reason: reason || null } });
+  return request(`/admin/donation-registrations/${requestId}/reject`, { method: "POST", auth: true, body: { reason } });
 }
 
 export function disableDonationRegistration(requestId) {
   return request(`/admin/donation-registrations/${requestId}/disable`, { method: "POST", auth: true });
+}
+
+export async function deleteAdminDonationRegistration(requestId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/donation-registrations/${requestId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete registration.");
+  }
 }

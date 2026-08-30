@@ -639,7 +639,7 @@ class MyDonationRegistrationStatusOut(BaseModel):
 
 
 class DonationRegistrationRejectRequest(BaseModel):
-    reason: Optional[str] = None
+    reason: str = Field(min_length=1)
 
 
 class OrganiserRequestCreate(BaseModel):
