@@ -552,7 +552,6 @@ function LoginModal({ onClose }) {
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("India");
   const [countryOpen, setCountryOpen] = useState(false);
-  const [role, setRole] = useState("user");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
@@ -570,11 +569,6 @@ function LoginModal({ onClose }) {
   const [otpLoginCode, setOtpLoginCode] = useState("");
 
   const isIndia = country === "India";
-  const ROLES = [
-    { value: "user", label: "User" },
-    { value: "content_creator", label: "Content Creator" },
-    { value: "plays_organiser", label: "Plays Organiser" },
-  ];
 
   const resetRegOtp = () => { setRegOtpSent(false); setRegOtpCode(""); };
 
@@ -646,7 +640,7 @@ function LoginModal({ onClose }) {
           phone: phone.trim(),
           country,
           otp: isIndia ? regOtpCode.trim() : null,
-          role,
+          role: "user",
         });
       }
     } catch (err) {
@@ -908,29 +902,6 @@ function LoginModal({ onClose }) {
             </>
           )}
 
-          {mode === "register" && !regOtpSent && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium" style={{ color: "rgba(245,235,221,0.6)" }}>I am a...</p>
-              <div className="flex flex-wrap gap-2">
-                {ROLES.map((r) => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setRole(r.value)}
-                    className="rounded-full border px-3 py-1.5 text-xs font-medium"
-                    style={{
-                      borderColor: role === r.value ? COLORS.gold : "rgba(245,235,221,0.15)",
-                      background: role === r.value ? "rgba(212,175,55,0.14)" : "transparent",
-                      color: role === r.value ? COLORS.gold : "rgba(245,235,221,0.7)",
-                    }}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {(formError || authError) && (
             <p className="text-xs font-medium" style={{ color: "#f87171" }}>{formError || authError}</p>
           )}
@@ -995,6 +966,8 @@ function FacebookMark({ className }) {
     </svg>
   );
 }
+
+const ROLE_DISPLAY_LABELS = { user: "User", content_creator: "Content Creator", plays_organiser: "Plays Organiser" };
 
 function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, showOrganiserRequestLink, onRequestOrganiser }) {
   return (
@@ -1089,7 +1062,7 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, sh
           <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{profile.email || "—"}</p>
           {profile.role && (
             <span className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}>
-              {profile.role}
+              {ROLE_DISPLAY_LABELS[profile.role] || profile.role}
             </span>
           )}
         </div>
