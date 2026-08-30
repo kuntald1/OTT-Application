@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -12,6 +12,7 @@ import AdminUsersPage from "./AdminUsersPage";
 import AdminLiveStreamsPage from "./AdminLiveStreamsPage";
 import AdminSpecialCategoriesPage from "./AdminSpecialCategoriesPage";
 import AdminBlogsPage from "./AdminBlogsPage";
+import AdminCommunityPage from "./AdminCommunityPage";
 import AdminCastCrewPage from "./AdminCastCrewPage";
 
 const COLORS = {
@@ -36,6 +37,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "cast-crew", label: "Cast/Crew Master", icon: Contact, visible: true },
     { id: "special-categories", label: "Special Categories", icon: Sparkles, visible: true },
     { id: "blog", label: "Blog", icon: Newspaper, visible: true },
+    { id: "community", label: "Community", icon: MessagesSquare, visible: true },
     { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
     { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
@@ -105,6 +107,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "cast-crew" && <AdminCastCrewPage />}
           {activePage === "special-categories" && <AdminSpecialCategoriesPage />}
           {activePage === "blog" && <AdminBlogsPage />}
+          {activePage === "community" && <AdminCommunityPage />}
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}
           {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "categories" && isSuperadmin && <AdminCategoriesPage />}

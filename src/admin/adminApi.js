@@ -661,3 +661,50 @@ export function approveOrganiserRequest(requestId) {
 export function rejectOrganiserRequest(requestId, reason) {
   return request(`/admin/organiser-requests/${requestId}/reject`, { method: "POST", auth: true, body: { reason: reason || null } });
 }
+
+// --- Community Rooms ---
+
+export function createAdminCommunityRoom(title) {
+  return request(`/admin/community/rooms`, { method: "POST", auth: true, body: { title } });
+}
+
+export async function createAdminRoomPost(roomId, text, imageFile) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("text", text);
+  if (imageFile) formData.append("image", imageFile);
+  const res = await fetch(`${BASE_URL}/admin/community/rooms/${roomId}/posts`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't post comment.");
+  }
+  return data;
+}
+
+export async function deleteAdminRoomPost(roomId, postId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/community/rooms/${roomId}/posts/${postId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete comment.");
+  }
+}
+
+export async function deleteAdminCommunityRoom(roomId) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/community/rooms/${roomId}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete room.");
+  }
+}
