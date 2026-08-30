@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, HandCoins, CheckCircle2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchOrganisers, createDonationOrder, verifyDonationPayment } from "../api";
+import { fetchOrganisers, createDonationOrder, verifyDonationPayment, fetchMyDonationRegistrationStatus } from "../api";
+import DonationRegistrationModal from "./DonationRegistrationModal";
 
 // ---------------------------------------------------------------------------
 // Donation — the directory now lists real registered users whose account
@@ -17,6 +18,21 @@ export default function DonationPage({ onBack }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [confirmed, setConfirmed] = useState(null);
+
+  const [showRegisterLink, setShowRegisterLink] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registrationSubmitted, setRegistrationSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn || !profile || profile.role !== "plays_organiser") {
+      setShowRegisterLink(false);
+      return;
+    }
+    fetchMyDonationRegistrationStatus()
+      .then((res) => setShowRegisterLink(!res.has_pending_or_approved))
+      .catch(() => setShowRegisterLink(false));
+  }, [isLoggedIn, profile?.role]);
+
 
   useEffect(() => {
     fetchOrganisers()
@@ -57,9 +73,27 @@ export default function DonationPage({ onBack }) {
         </button>
 
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Support a Plays Organiser</h1>
-        <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+        <p className="mb-2 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
           Donate directly to registered organisers on theomy.
         </p>
+        {showRegisterLink && (
+          <button
+            type="button"
+            onClick={() => setShowRegisterModal(true)}
+            className="mb-8 text-sm font-medium hover:opacity-80"
+            style={{ color: COLORS.gold }}
+          >
+            Register for Donation →
+          </button>
+        )}
+        {!showRegisterLink && <div className="mb-8" />}
+
+        {registrationSubmitted && (
+          <div className="mb-6 flex items-center gap-2 rounded-xl p-4" style={{ background: "rgba(111,207,151,0.1)", border: "1px solid rgba(111,207,151,0.35)" }}>
+            <CheckCircle2 className="h-5 w-5" style={{ color: "#6FCF97" }} />
+            <p className="text-sm" style={{ color: "#6FCF97" }}>Registration submitted — we'll review it and get back to you.</p>
+          </div>
+        )}
 
         {confirmed && (
           <div className="mb-6 flex items-center gap-2 rounded-xl p-4" style={{ background: "rgba(111,207,151,0.1)", border: "1px solid rgba(111,207,151,0.35)" }}>
@@ -113,6 +147,17 @@ export default function DonationPage({ onBack }) {
           onSuccess={(amount) => {
             setSelected(null);
             setConfirmed(amount);
+          }}
+        />
+      )}
+
+      {showRegisterModal && (
+        <DonationRegistrationModal
+          onClose={() => setShowRegisterModal(false)}
+          onSubmitted={() => {
+            setShowRegisterModal(false);
+            setShowRegisterLink(false);
+            setRegistrationSubmitted(true);
           }}
         />
       )}

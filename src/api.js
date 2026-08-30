@@ -807,3 +807,27 @@ export function submitOrganiserRequest(payload) {
 export function fetchMyOrganiserRequestStatus() {
   return request("/organiser-requests/mine", { auth: true });
 }
+
+export function fetchMyDonationRegistrationStatus() {
+  return request("/donation-registrations/mine", { auth: true });
+}
+
+export async function submitDonationRegistration({ groupName, accountNumber, ifscCode, qrCodeFile, documentFile }) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("group_name", groupName);
+  formData.append("account_number", accountNumber || "");
+  formData.append("ifsc_code", ifscCode || "");
+  if (qrCodeFile) formData.append("qr_code", qrCodeFile);
+  formData.append("document", documentFile);
+  const res = await fetch(`${BASE_URL}/donation-registrations`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't submit your registration. Please try again.");
+  }
+  return data;
+}

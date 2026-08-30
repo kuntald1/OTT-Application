@@ -708,3 +708,21 @@ export async function deleteAdminCommunityRoom(roomId) {
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete room.");
   }
 }
+
+// --- Donation Registrations ---
+
+export function fetchAdminDonationRegistrations(statusFilter = "") {
+  return request(`/admin/donation-registrations${statusFilter ? `?status_filter=${statusFilter}` : ""}`, { auth: true });
+}
+
+export function approveDonationRegistration(requestId) {
+  return request(`/admin/donation-registrations/${requestId}/approve`, { method: "POST", auth: true });
+}
+
+export function rejectDonationRegistration(requestId, reason) {
+  return request(`/admin/donation-registrations/${requestId}/reject`, { method: "POST", auth: true, body: { reason: reason || null } });
+}
+
+export function disableDonationRegistration(requestId) {
+  return request(`/admin/donation-registrations/${requestId}/disable`, { method: "POST", auth: true });
+}
