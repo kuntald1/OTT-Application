@@ -6,10 +6,12 @@ import { fetchOrganisers, createDonationOrder, verifyDonationPayment, fetchMyDon
 import DonationRegistrationModal from "./DonationRegistrationModal";
 
 // ---------------------------------------------------------------------------
-// Donation — the directory now lists real registered users whose account
-// role is "plays_organiser" (via GET /api/organisers), not a fixed
-// fictional list. Donating opens a real Razorpay checkout (test mode),
-// same signature-verification pattern as subscription checkout.
+// Donation — the directory lists Plays Organisers who both hold that
+// role AND have an admin-approved DonationRegistration (via GET
+// /api/organisers) — role alone used to be enough, but payout details
+// now need admin review first. Donating opens a real Razorpay checkout
+// (test mode), same signature-verification pattern as subscription
+// checkout.
 // ---------------------------------------------------------------------------
 
 export default function DonationPage({ onBack }) {
