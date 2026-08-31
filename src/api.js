@@ -823,7 +823,7 @@ export async function submitDonationRegistration({ groupName, accountNumber, ifs
   formData.append("account_number", accountNumber || "");
   formData.append("ifsc_code", ifscCode || "");
   if (qrCodeFile) formData.append("qr_code", qrCodeFile);
-  formData.append("document", documentFile);
+  if (documentFile) formData.append("document", documentFile);
   const res = await fetch(`${BASE_URL}/donation-registrations`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -834,4 +834,20 @@ export async function submitDonationRegistration({ groupName, accountNumber, ifs
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't submit your registration. Please try again.");
   }
   return data;
+}
+
+export function deactivateMyDonationRegistration() {
+  return request("/donation-registrations/mine/deactivate", { method: "PATCH", auth: true });
+}
+
+export async function deleteMyDonationRegistration() {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/donation-registrations/mine`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete your registration. Please try again.");
+  }
 }

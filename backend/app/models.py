@@ -686,7 +686,7 @@ class DonationRegistration(Base):
     account_number = Column(String(50), nullable=True)
     ifsc_code = Column(String(20), nullable=True)
     qr_code_url = Column(String(500), nullable=True)
-    document_url = Column(String(500), nullable=False)
+    document_url = Column(String(500), nullable=True)
     status = Column(Enum(DonationRegistrationStatus), nullable=False, default=DonationRegistrationStatus.pending)
     rejection_reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

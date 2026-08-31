@@ -33,10 +33,6 @@ export default function DonationRegistrationModal({ onClose, onSubmitted }) {
       setError("Provide either bank details (account number + IFSC) or a QR code.");
       return;
     }
-    if (!documentFile) {
-      setError("Please upload a supporting document.");
-      return;
-    }
     setError("");
     setSubmitting(true);
     try {
@@ -104,13 +100,13 @@ export default function DonationRegistrationModal({ onClose, onSubmitted }) {
           </div>
 
           <div>
-            <label style={labelStyle}>Upload Document *</label>
+            <label style={labelStyle}>Upload Document</label>
             <label
               className="flex w-full cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm hover:opacity-80"
               style={{ borderColor: "rgba(245,235,221,0.15)", color: documentFile ? COLORS.cream : "rgba(245,235,221,0.5)" }}
             >
               <Upload className="h-4 w-4 flex-shrink-0" />
-              {documentFile ? documentFile.name : "Choose file (PDF or image)…"}
+              {documentFile ? documentFile.name : "Choose file (PDF or image, optional)…"}
               <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setDocumentFile(e.target.files?.[0] || null)} />
             </label>
           </div>

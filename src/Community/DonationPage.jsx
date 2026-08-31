@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, HandCoins, CheckCircle2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchOrganisers, createDonationOrder, verifyDonationPayment, fetchMyDonationRegistrationStatus } from "../api";
+import { fetchOrganisers, createDonationOrder, verifyDonationPayment, fetchMyDonationRegistrationStatus, deactivateMyDonationRegistration, deleteMyDonationRegistration } from "../api";
 import DonationRegistrationModal from "./DonationRegistrationModal";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Donation — the directory lists Plays Organisers who both hold that
@@ -24,16 +25,27 @@ export default function DonationPage({ onBack }) {
   const [showRegisterLink, setShowRegisterLink] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registrationSubmitted, setRegistrationSubmitted] = useState(false);
+  const [myRegistration, setMyRegistration] = useState(null);
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [registrationActionBusy, setRegistrationActionBusy] = useState(false);
+  const [registrationActionError, setRegistrationActionError] = useState("");
 
-  useEffect(() => {
+  const loadMyRegistrationStatus = () => {
     if (!isLoggedIn || !profile || profile.role !== "plays_organiser") {
       setShowRegisterLink(false);
+      setMyRegistration(null);
       return;
     }
     fetchMyDonationRegistrationStatus()
-      .then((res) => setShowRegisterLink(!res.has_pending_or_approved))
-      .catch(() => setShowRegisterLink(false));
-  }, [isLoggedIn, profile?.role]);
+      .then((res) => {
+        setShowRegisterLink(!res.has_pending_or_approved);
+        setMyRegistration(res.latest_status ? res : null);
+      })
+      .catch(() => { setShowRegisterLink(false); setMyRegistration(null); });
+  };
+
+  useEffect(() => { loadMyRegistrationStatus(); }, [isLoggedIn, profile?.role]);
 
 
   useEffect(() => {
@@ -62,6 +74,34 @@ export default function DonationPage({ onBack }) {
     setConfirmed(null);
   };
 
+  const handleDeactivateRegistration = async () => {
+    setRegistrationActionBusy(true);
+    setRegistrationActionError("");
+    try {
+      await deactivateMyDonationRegistration();
+      loadMyRegistrationStatus();
+    } catch (err) {
+      setRegistrationActionError(err.message || "Couldn't deactivate your registration.");
+    } finally {
+      setRegistrationActionBusy(false);
+      setConfirmDeactivate(false);
+    }
+  };
+
+  const handleDeleteRegistration = async () => {
+    setRegistrationActionBusy(true);
+    setRegistrationActionError("");
+    try {
+      await deleteMyDonationRegistration();
+      loadMyRegistrationStatus();
+    } catch (err) {
+      setRegistrationActionError(err.message || "Couldn't delete your registration.");
+    } finally {
+      setRegistrationActionBusy(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
@@ -82,13 +122,50 @@ export default function DonationPage({ onBack }) {
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
-            className="mb-8 text-sm font-medium hover:opacity-80"
+            className="mb-4 text-sm font-medium hover:opacity-80"
             style={{ color: COLORS.gold }}
           >
             Register for Donation →
           </button>
         )}
-        {!showRegisterLink && <div className="mb-8" />}
+
+        {myRegistration && (
+          <div className="mb-8 rounded-xl p-4" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.2)" }}>
+            <p className="text-sm font-medium" style={{ color: COLORS.cream }}>
+              {myRegistration.latest_status === "pending" && "Your donation registration is pending review."}
+              {myRegistration.latest_status === "approved" && "Your donation registration is approved — you're listed above for supporters to donate to."}
+              {myRegistration.latest_status === "rejected" && "Your last donation registration was rejected."}
+              {myRegistration.latest_status === "disabled" && "Your donation registration is currently deactivated."}
+            </p>
+            {myRegistration.latest_status === "rejected" && myRegistration.rejection_reason && (
+              <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Reason: {myRegistration.rejection_reason}</p>
+            )}
+            {registrationActionError && (
+              <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{registrationActionError}</p>
+            )}
+            {myRegistration.latest_status === "approved" && (
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeactivate(true)}
+                  className="rounded-full px-4 py-1.5 text-xs font-medium"
+                  style={{ border: "1px solid rgba(245,235,221,0.2)", color: "rgba(245,235,221,0.7)" }}
+                >
+                  Deactivate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="rounded-full px-4 py-1.5 text-xs font-medium"
+                  style={{ border: "1px solid rgba(248,113,113,0.4)", color: "#f87171" }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {!showRegisterLink && !myRegistration && <div className="mb-8" />}
 
         {registrationSubmitted && (
           <div className="mb-6 flex items-center gap-2 rounded-xl p-4" style={{ background: "rgba(111,207,151,0.1)", border: "1px solid rgba(111,207,151,0.35)" }}>
@@ -160,9 +237,32 @@ export default function DonationPage({ onBack }) {
             setShowRegisterModal(false);
             setShowRegisterLink(false);
             setRegistrationSubmitted(true);
+            loadMyRegistrationStatus();
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmDeactivate}
+        title="Deactivate registration"
+        message="Deactivate your donation registration? Supporters won't be able to donate to you until you register again."
+        confirmLabel="Deactivate"
+        danger
+        busy={registrationActionBusy}
+        onCancel={() => setConfirmDeactivate(false)}
+        onConfirm={handleDeactivateRegistration}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete registration"
+        message="Permanently delete your donation registration? This can't be undone — you'll need to submit a new registration and wait for approval again."
+        confirmLabel="Delete"
+        danger
+        busy={registrationActionBusy}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={handleDeleteRegistration}
+      />
     </div>
   );
 }

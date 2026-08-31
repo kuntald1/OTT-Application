@@ -1,5 +1,6 @@
 import os
 import uuid as uuid_module
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
@@ -48,7 +49,7 @@ async def submit_donation_registration(
     account_number: str = Form(""),
     ifsc_code: str = Form(""),
     qr_code: UploadFile | None = File(None),
-    document: UploadFile = File(...),
+    document: UploadFile | None = File(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -71,7 +72,9 @@ async def submit_donation_registration(
     qr_code_url = None
     if has_qr:
         qr_code_url = await _save_upload(qr_code, QR_UPLOAD_DIR, ALLOWED_QR_TYPES, "donation_qr_codes")
-    document_url = await _save_upload(document, DOCUMENT_UPLOAD_DIR, ALLOWED_DOCUMENT_TYPES, "donation_documents")
+    document_url = None
+    if document is not None and document.filename:
+        document_url = await _save_upload(document, DOCUMENT_UPLOAD_DIR, ALLOWED_DOCUMENT_TYPES, "donation_documents")
 
     reg = DonationRegistration(
         user_id=current_user.id, group_name=group_name,
@@ -82,6 +85,18 @@ async def submit_donation_registration(
     db.commit()
     db.refresh(reg)
     return _to_out(reg, current_user.name)
+
+
+def _get_my_latest(current_user: User, db: Session) -> DonationRegistration:
+    latest = (
+        db.query(DonationRegistration)
+        .filter(DonationRegistration.user_id == current_user.id)
+        .order_by(DonationRegistration.created_at.desc())
+        .first()
+    )
+    if not latest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No registration found.")
+    return latest
 
 
 @router.get("/mine", response_model=MyDonationRegistrationStatusOut)
@@ -98,4 +113,36 @@ def my_donation_registration_status(
     if not latest:
         return MyDonationRegistrationStatusOut(has_pending_or_approved=False, latest_status=None)
     has_pending_or_approved = latest.status in (DonationRegistrationStatus.pending, DonationRegistrationStatus.approved)
-    return MyDonationRegistrationStatusOut(has_pending_or_approved=has_pending_or_approved, latest_status=latest.status.value)
+    return MyDonationRegistrationStatusOut(
+        has_pending_or_approved=has_pending_or_approved, latest_status=latest.status.value,
+        rejection_reason=latest.rejection_reason,
+    )
+
+
+@router.patch("/mine/deactivate", response_model=DonationRegistrationOut)
+def deactivate_my_donation_registration(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Self-service pause — an organiser taking a break from receiving
+    donations, distinct from admin's own disable action but landing on
+    the same status value (see DonationRegistration's docstring).
+    """
+    latest = _get_my_latest(current_user, db)
+    if latest.status != DonationRegistrationStatus.approved:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only an approved registration can be deactivated.")
+    latest.status = DonationRegistrationStatus.disabled
+    latest.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(latest)
+    return _to_out(latest, current_user.name)
+
+
+@router.delete("/mine", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_donation_registration(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    latest = _get_my_latest(current_user, db)
+    db.delete(latest)
+    db.commit()

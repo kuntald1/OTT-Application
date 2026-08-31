@@ -620,7 +620,7 @@ class DonationRegistrationOut(BaseModel):
     account_number: Optional[str] = None
     ifsc_code: Optional[str] = None
     qr_code_url: Optional[str] = None
-    document_url: str
+    document_url: Optional[str] = None
     status: str
     rejection_reason: Optional[str] = None
     created_at: datetime
@@ -632,10 +632,13 @@ class DonationRegistrationOut(BaseModel):
 class MyDonationRegistrationStatusOut(BaseModel):
     """What the "Register for Donation" link checks before showing
     itself — same hide-on-pending-or-approved rule as
-    MyOrganiserRequestStatusOut.
+    MyOrganiserRequestStatusOut. Also backs the status card shown on
+    the Donation page itself, so an applied user can see where their
+    registration stands without visiting the admin panel.
     """
     has_pending_or_approved: bool
     latest_status: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
 
 class DonationRegistrationRejectRequest(BaseModel):
