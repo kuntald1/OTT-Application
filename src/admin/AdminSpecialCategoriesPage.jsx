@@ -13,6 +13,7 @@ const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 const inputStyle = {
   width: "100%", borderRadius: 8, border: "1px solid rgba(245,235,221,0.15)",
   background: "rgba(245,235,221,0.05)", color: COLORS.cream, padding: "8px 12px", fontSize: 13, outline: "none",
+  colorScheme: "dark",
 };
 const labelStyle = {
   marginBottom: 4, display: "block", fontSize: 11, fontWeight: 600,
