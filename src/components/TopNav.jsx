@@ -513,6 +513,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
 
       {showOrganiserModal && (
         <OrganiserRequestModal
+          profile={profile}
           onClose={() => setShowOrganiserModal(false)}
           onSubmitted={() => {
             setShowOrganiserModal(false);

@@ -12,8 +12,10 @@ const labelStyle = {
   textTransform: "uppercase", letterSpacing: "0.03em", color: "rgba(245,235,221,0.5)",
 };
 
-export default function OrganiserRequestModal({ onClose, onSubmitted }) {
-  const [form, setForm] = useState({ subject: "", group_name: "", phone: "", email: "", remarks: "" });
+export default function OrganiserRequestModal({ profile, onClose, onSubmitted }) {
+  const [form, setForm] = useState({
+    subject: "", group_name: profile?.name || "", phone: profile?.phone || "", email: profile?.email || "", remarks: "",
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -74,7 +76,13 @@ export default function OrganiserRequestModal({ onClose, onSubmitted }) {
           </div>
           <div>
             <label style={labelStyle}>Email *</label>
-            <input type="email" value={form.email} onChange={set("email")} style={inputStyle} />
+            <input
+              type="email"
+              value={form.email}
+              readOnly
+              disabled
+              style={{ ...inputStyle, opacity: 0.6, cursor: "not-allowed" }}
+            />
           </div>
           <div>
             <label style={labelStyle}>Remarks</label>
