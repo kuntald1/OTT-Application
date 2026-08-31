@@ -29,6 +29,13 @@ class User(Base):
     name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
 
+    # Set only for a sub-account created from a parent's Manage Profile
+    # page (a "family account" sharing the parent's subscription — see
+    # routers/sub_accounts.py). Null for every regular, self-registered
+    # account. A sub-account can never itself have sub-accounts (no
+    # nested chains) — enforced in routers/sub_accounts.py, not here.
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+
     # Optional (null allowed — required only for India registrations, see
     # UserRegister). Unique when set: Postgres unique constraints allow
     # any number of NULLs, they only reject duplicate non-null values, so

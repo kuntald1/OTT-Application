@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Users, Search, Key, Video, UserX, UserCheck, X, Send } from "lucide-react";
+import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight } from "lucide-react";
 import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
@@ -195,6 +195,11 @@ export default function AdminUsersPage({ currentAdmin }) {
                   )}
                 </p>
                 <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{u.email}</p>
+                {u.parent_id && (
+                  <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: COLORS.gold }}>
+                    <CornerDownRight className="h-3 w-3" /> Sub-account of {u.parent_name} ({u.parent_email})
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-shrink-0 items-center gap-2">

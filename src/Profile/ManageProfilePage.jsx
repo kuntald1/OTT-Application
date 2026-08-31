@@ -1,7 +1,9 @@
-import React, { useState } from "react";
-import { CheckCircle2, ArrowLeft } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CheckCircle2, ArrowLeft, Users, Plus, UserX } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
+import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount } from "../api";
+import ConfirmDialog from "../shared/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Manage Profile — reached from the profile menu. Edits photo, name, email,
@@ -45,6 +47,60 @@ export default function ManageProfilePage({ onBack }) {
       setPhotoError(err.message || "Couldn't upload photo. Please try again.");
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  // --- Family Accounts (sub-account sharing this user's subscription screens) ---
+  const [myParent, setMyParent] = useState(null);
+  const [subAccountsInfo, setSubAccountsInfo] = useState(null);
+  const [showCreateSubForm, setShowCreateSubForm] = useState(false);
+  const [subName, setSubName] = useState("");
+  const [subEmail, setSubEmail] = useState("");
+  const [subPassword, setSubPassword] = useState("");
+  const [creatingSub, setCreatingSub] = useState(false);
+  const [subError, setSubError] = useState("");
+  const [confirmDeactivateSub, setConfirmDeactivateSub] = useState(null);
+  const [deactivatingSubId, setDeactivatingSubId] = useState(null);
+
+  const loadFamilyInfo = () => {
+    fetchMyParent()
+      .then((res) => {
+        setMyParent(res);
+        if (!res.has_parent) {
+          fetchMySubAccounts().then(setSubAccountsInfo).catch(() => setSubAccountsInfo(null));
+        }
+      })
+      .catch(() => setMyParent(null));
+  };
+
+  useEffect(() => { loadFamilyInfo(); }, []);
+
+  const handleCreateSubAccount = async () => {
+    if (!subName.trim() || !subEmail.trim() || subPassword.length < 8) return;
+    setSubError("");
+    setCreatingSub(true);
+    try {
+      await createSubAccount({ name: subName.trim(), email: subEmail.trim(), password: subPassword });
+      setSubName(""); setSubEmail(""); setSubPassword("");
+      setShowCreateSubForm(false);
+      loadFamilyInfo();
+    } catch (err) {
+      setSubError(err.message || "Couldn't create the account. Please try again.");
+    } finally {
+      setCreatingSub(false);
+    }
+  };
+
+  const handleDeactivateSubConfirmed = async () => {
+    setDeactivatingSubId(confirmDeactivateSub.id);
+    try {
+      await deactivateSubAccount(confirmDeactivateSub.id);
+      loadFamilyInfo();
+    } catch (err) {
+      // best-effort UI; loadFamilyInfo() reflects the real state either way
+    } finally {
+      setDeactivatingSubId(null);
+      setConfirmDeactivateSub(null);
     }
   };
 
@@ -148,7 +204,102 @@ export default function ManageProfilePage({ onBack }) {
             )}
           </div>
         </div>
+
+        {myParent?.has_parent && (
+          <div className="mt-6 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              <Users className="h-4 w-4" style={{ color: COLORS.gold }} /> Managed Account
+            </h2>
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+              This account is managed by <span style={{ color: COLORS.cream }}>{myParent.parent_name}</span> ({myParent.parent_email}).
+            </p>
+          </div>
+        )}
+
+        {!myParent?.has_parent && subAccountsInfo && (subAccountsInfo.max_allowed > 0 || subAccountsInfo.sub_accounts.length > 0) && (
+          <div className="mt-6 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              <Users className="h-4 w-4" style={{ color: COLORS.gold }} /> Family Accounts
+            </h2>
+            <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+              {subAccountsInfo.sub_accounts.filter((s) => s.is_active).length} of {subAccountsInfo.max_allowed} additional account{subAccountsInfo.max_allowed === 1 ? "" : "s"} created — shares your plan's extra screens.
+            </p>
+
+            {subAccountsInfo.sub_accounts.length > 0 && (
+              <div className="mb-4 flex flex-col gap-2">
+                {subAccountsInfo.sub_accounts.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "rgba(245,235,221,0.03)", opacity: s.is_active ? 1 : 0.5 }}>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium" style={{ color: COLORS.cream }}>
+                        {s.name} {!s.is_active && <span className="ml-1 text-[10px] font-semibold uppercase" style={{ color: "#f87171" }}>Deactivated</span>}
+                      </p>
+                      <p className="truncate text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{s.email}</p>
+                    </div>
+                    {s.is_active && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeactivateSub(s)}
+                        disabled={deactivatingSubId === s.id}
+                        className="flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                        style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
+                      >
+                        <UserX className="h-3.5 w-3.5" /> Deactivate
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {subAccountsInfo.sub_accounts.filter((s) => s.is_active).length < subAccountsInfo.max_allowed && (
+              showCreateSubForm ? (
+                <div className="rounded-lg p-4" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(212,175,55,0.2)" }}>
+                  <div className="mb-3">
+                    <input type="text" placeholder="Name" value={subName} onChange={(e) => setSubName(e.target.value)} style={inputStyle} className="mb-2" />
+                    <input type="email" placeholder="Email" value={subEmail} onChange={(e) => setSubEmail(e.target.value)} style={inputStyle} className="mb-2" />
+                    <input type="password" placeholder="Password (min. 8 characters)" value={subPassword} onChange={(e) => setSubPassword(e.target.value)} style={inputStyle} />
+                  </div>
+                  {subError && <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{subError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCreateSubAccount}
+                      disabled={creatingSub || !subName.trim() || !subEmail.trim() || subPassword.length < 8}
+                      className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ background: COLORS.gold, color: "#0a0104" }}
+                    >
+                      {creatingSub ? "Creating…" : "Create"}
+                    </button>
+                    <button type="button" onClick={() => { setShowCreateSubForm(false); setSubError(""); }} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateSubForm(true)}
+                  className="flex items-center gap-1.5 text-sm font-medium hover:opacity-80"
+                  style={{ color: COLORS.gold }}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add account
+                </button>
+              )
+            )}
+          </div>
+        )}
       </main>
+
+      <ConfirmDialog
+        open={!!confirmDeactivateSub}
+        title="Deactivate account"
+        message={`Deactivate ${confirmDeactivateSub?.name}'s account? They won't be able to log in anymore, but this frees up a slot to add someone else.`}
+        confirmLabel="Deactivate"
+        danger
+        busy={deactivatingSubId === confirmDeactivateSub?.id}
+        onCancel={() => setConfirmDeactivateSub(null)}
+        onConfirm={handleDeactivateSubConfirmed}
+      />
     </div>
   );
 }

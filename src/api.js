@@ -851,3 +851,21 @@ export async function deleteMyDonationRegistration() {
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete your registration. Please try again.");
   }
 }
+
+// --- Family sub-accounts (Manage Profile) ---
+
+export function fetchMySubAccounts() {
+  return request("/sub-accounts/mine", { auth: true });
+}
+
+export function fetchMyParent() {
+  return request("/sub-accounts/my-parent", { auth: true });
+}
+
+export function createSubAccount({ name, email, password }) {
+  return request("/sub-accounts", { method: "POST", auth: true, body: { name, email, password } });
+}
+
+export function deactivateSubAccount(subAccountId) {
+  return request(`/sub-accounts/${subAccountId}/deactivate`, { method: "PATCH", auth: true });
+}

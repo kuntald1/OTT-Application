@@ -27,7 +27,23 @@ def list_users(
         pattern = f"%{search}%"
         query = query.filter((User.name.ilike(pattern)) | (User.email.ilike(pattern)))
     users = query.order_by(User.created_at.desc()).all()
-    return users
+
+    parent_ids = {u.parent_id for u in users if u.parent_id}
+    parents_by_id = {}
+    if parent_ids:
+        for p in db.query(User).filter(User.id.in_(parent_ids)).all():
+            parents_by_id[p.id] = p
+
+    out = []
+    for u in users:
+        parent = parents_by_id.get(u.parent_id) if u.parent_id else None
+        out.append(AdminUserAccountOut(
+            id=u.id, name=u.name, email=u.email, role=u.role.value, is_active=u.is_active,
+            can_live_stream=u.can_live_stream, created_at=u.created_at,
+            parent_id=u.parent_id, parent_name=parent.name if parent else None,
+            parent_email=parent.email if parent else None,
+        ))
+    return out
 
 
 def _get_user_or_404(user_id: str, db: Session) -> User:

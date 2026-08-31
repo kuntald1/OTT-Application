@@ -88,12 +88,27 @@ def _fetch_and_cache_duration(video: Video, db: Session) -> None:
 _SECTION_TO_PLAN = {VideoSection.play: "Play", VideoSection.archive: "Archive"}
 
 
+def _billing_owner(user: User, db: Session) -> User:
+    """Sub-accounts (User.parent_id set — see Manage Profile's Family
+    Accounts) don't hold subscriptions of their own; they share
+    whichever plan their parent currently holds. Every other account
+    is its own billing owner. Used anywhere access/screens depend on
+    "this account's active subscription."
+    """
+    if user.parent_id:
+        parent = db.query(User).filter(User.id == user.parent_id).first()
+        if parent:
+            return parent
+    return user
+
+
 def _has_active_subscription_for_section(user: User, section: VideoSection, db: Session) -> bool:
     required_plan = _SECTION_TO_PLAN[section]
+    owner = _billing_owner(user, db)
     return (
         db.query(Subscription)
         .filter(
-            Subscription.user_id == user.id,
+            Subscription.user_id == owner.id,
             Subscription.is_active == True,  # noqa: E712
             Subscription.expires_at > datetime.now(timezone.utc),
             Subscription.plan_name.in_([required_plan, "Both"]),
@@ -110,10 +125,11 @@ def _has_active_subscription_any(user: User, db: Session) -> bool:
     subscription is the gate to purchasing at all, not a specific-plan
     match like the subscription_only case above).
     """
+    owner = _billing_owner(user, db)
     return (
         db.query(Subscription)
         .filter(
-            Subscription.user_id == user.id,
+            Subscription.user_id == owner.id,
             Subscription.is_active == True,  # noqa: E712
             Subscription.expires_at > datetime.now(timezone.utc),
         )

@@ -208,6 +208,11 @@ class AdminUserAccountOut(BaseModel):
     is_active: bool
     can_live_stream: bool
     created_at: datetime
+    parent_id: Optional[uuid.UUID] = None
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None
+
+    model_config = {"from_attributes": True}
 
 
 class AdminUserSetPasswordRequest(BaseModel):
@@ -1264,3 +1269,42 @@ class EventEnquiryEdit(BaseModel):
     venue: str = Field(min_length=1, max_length=255)
     remarks: Optional[str] = None
     ticket_tiers: List[TicketTierIn] = Field(min_length=1)
+
+
+class SubAccountCreate(BaseModel):
+    """Created by an already-logged-in parent from Manage Profile — no
+    OTP/phone step, unlike the main UserRegister flow, since the parent
+    is already a verified account vouching for this one.
+    """
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class SubAccountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MySubAccountsOut(BaseModel):
+    """Powers the parent's Manage Profile "Family Accounts" section —
+    max_allowed is (their active subscription's screens - 1); 0 for a
+    sub-account itself (no nested chains) or a parent with no
+    multi-screen plan.
+    """
+    max_allowed: int
+    sub_accounts: List[SubAccountOut]
+
+
+class MyParentOut(BaseModel):
+    """What a sub-account's OWN Manage Profile checks to show "Managed
+    by <parent>" instead of the family-accounts section.
+    """
+    has_parent: bool
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None

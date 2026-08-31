@@ -8,6 +8,7 @@ from app.deps import get_current_user
 from app.models import (
     User, Video, VideoStatus, VideoMonetization, Subscription, PlaybackSession,
 )
+from app.routers.videos import _billing_owner
 from app.schemas import (
     PlaybackSessionStartRequest, PlaybackSessionStartResponse, PlaybackSessionEndRequest,
 )
@@ -22,20 +23,24 @@ ACTIVE_WINDOW_SECONDS = 50
 
 
 def _get_max_screens(video: Video, user: User, db: Session) -> int:
-    """How many concurrent devices this user is allowed for THIS video.
-    Pay-Per-Video purchases don't have a "screens" concept at all (no
-    screens selector exists at checkout) — a single stream is the
-    reasonable default there. Subscription-gated videos use whatever
-    screens count that subscription was actually bought with.
+    """How many concurrent devices this user's FAMILY (see
+    User.parent_id / _billing_owner) is allowed for THIS video —
+    shared across the billing owner and every sub-account under them,
+    not per-account. Pay-Per-Video purchases don't have a "screens"
+    concept at all (no screens selector exists at checkout) — a single
+    stream is the reasonable default there. Subscription-gated videos
+    use whatever screens count that subscription was actually bought
+    with.
     """
     if video.monetization_type == VideoMonetization.pay_per_video:
         return 1
 
+    owner = _billing_owner(user, db)
     required_plan = {"play": "Play", "archive": "Archive"}[video.section.value]
     sub = (
         db.query(Subscription)
         .filter(
-            Subscription.user_id == user.id,
+            Subscription.user_id == owner.id,
             Subscription.is_active == True,  # noqa: E712
             Subscription.expires_at > datetime.now(timezone.utc),
             Subscription.plan_name.in_([required_plan, "Both"]),
@@ -65,6 +70,15 @@ def start_playback_session(
     max_screens = _get_max_screens(video, current_user, db)
     active_cutoff = datetime.now(timezone.utc) - timedelta(seconds=ACTIVE_WINDOW_SECONDS)
 
+    # Screens are shared across the whole family (billing owner + every
+    # sub-account under them, see User.parent_id) — one person on the
+    # family plan and one on their sub-account both count against the
+    # SAME screens limit, not two separate limits.
+    owner = _billing_owner(current_user, db)
+    family_ids = [owner.id] + [
+        row.id for row in db.query(User.id).filter(User.parent_id == owner.id).all()
+    ]
+
     own_session = (
         db.query(PlaybackSession)
         .filter(PlaybackSession.user_id == current_user.id, PlaybackSession.session_token == payload.session_token)
@@ -74,7 +88,7 @@ def start_playback_session(
     other_active_count = (
         db.query(PlaybackSession)
         .filter(
-            PlaybackSession.user_id == current_user.id,
+            PlaybackSession.user_id.in_(family_ids),
             PlaybackSession.session_token != payload.session_token,
             PlaybackSession.last_heartbeat_at >= active_cutoff,
         )
