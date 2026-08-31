@@ -7,14 +7,37 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User, Person
-from app.schemas import PersonOut
+from app.models import User, UserRole, Person
+from app.schemas import PersonOut, PersonCreate
 
 router = APIRouter(prefix="/people", tags=["people"])
 
 PHOTO_UPLOAD_DIR = Path("uploads/person_photos")
 ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
+def create_person(
+    payload: PersonCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The main-site equivalent of Admin > Cast/Crew Master's "New
+    Profile" — lets a Content Creator or Plays Organiser create a full
+    profile (not just a bare name) directly from their Add Video form,
+    instead of only being able to add bios via the admin page.
+    """
+    if current_user.role not in (UserRole.content_creator, UserRole.plays_organiser):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Content Creator or Plays Organiser accounts can create profiles.",
+        )
+    person = Person(created_by_user_id=current_user.id, **payload.model_dump())
+    db.add(person)
+    db.commit()
+    db.refresh(person)
+    return person
 
 
 @router.get("/search", response_model=list[PersonOut])

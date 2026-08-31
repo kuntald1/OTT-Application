@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoFile, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, fetchMyVideos, fetchCategoryOptions } from "../api";
+import { uploadVideo, uploadVideoFile, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, createPerson, fetchMyVideos, fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
+import PersonFormFields, { EMPTY_PERSON_FORM } from "../shared/PersonFormFields";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
@@ -111,6 +112,15 @@ export default function MyVideoListPage({ onBack }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  // "New Profile" — same full profile form as Admin > Cast/Crew Master,
+  // reachable from Cast/Crew here so organisers aren't limited to a
+  // bare name; newProfileTarget is which list ("cast"/"crew") the
+  // created person gets appended to.
+  const [newProfileTarget, setNewProfileTarget] = useState(null);
+  const [newProfileForm, setNewProfileForm] = useState(EMPTY_PERSON_FORM);
+  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [newProfileError, setNewProfileError] = useState("");
+
   const [uploadingFileFor, setUploadingFileFor] = useState(null);
   const [hoveredVideoId, setHoveredVideoId] = useState(null);
   const [playingVideoId, setPlayingVideoId] = useState(null);
@@ -145,6 +155,29 @@ export default function MyVideoListPage({ onBack }) {
   const updateCrew = (key, field, value) => setCrew((list) => list.map((c) => (c.key === key ? { ...c, [field]: value } : c)));
   const addCrew = () => crew.length < 5 && setCrew((list) => [...list, makeEmptyCrew()]);
   const removeCrew = (key) => setCrew((list) => list.filter((c) => c.key !== key));
+
+  const handleCreateNewProfile = async () => {
+    if (!newProfileForm.name.trim()) return;
+    setNewProfileError("");
+    setCreatingProfile(true);
+    try {
+      const person = await createPerson({
+        ...newProfileForm,
+        date_of_birth: newProfileForm.date_of_birth ? new Date(newProfileForm.date_of_birth).toISOString() : null,
+      });
+      if (newProfileTarget === "crew" && crew.length < 5) {
+        setCrew((list) => [...list, { ...makeEmptyCrew(), person_id: person.id, name: person.name }]);
+      } else if (cast.length < 10) {
+        setCast((list) => [...list, { ...makeEmptyCast(), person_id: person.id, name: person.name }]);
+      }
+      setNewProfileForm(EMPTY_PERSON_FORM);
+      setNewProfileTarget(null);
+    } catch (err) {
+      setNewProfileError(err.message || "Couldn't create profile.");
+    } finally {
+      setCreatingProfile(false);
+    }
+  };
 
   const isPayPerVideo = form.monetization_type === "pay_per_video";
   const tiersValid = tiers.every((t) => t.min_minutes !== "" && Number(t.rate_per_minute_inr) > 0);
@@ -455,10 +488,30 @@ export default function MyVideoListPage({ onBack }) {
               <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
                 Type a name to reuse an existing profile, or enter a new one — full bios are managed on Cast/Crew Master.
               </p>
-              {cast.length < 10 && (
-                <button type="button" onClick={addCast} className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
-                  <Plus className="h-3.5 w-3.5" /> Add cast member
+              <div className="mt-2 flex flex-wrap gap-4">
+                {cast.length < 10 && (
+                  <button type="button" onClick={addCast} className="flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
+                    <Plus className="h-3.5 w-3.5" /> Add cast member
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setNewProfileTarget("cast"); setNewProfileForm(EMPTY_PERSON_FORM); setNewProfileError(""); }}
+                  className="flex items-center gap-1 text-xs font-medium hover:opacity-80"
+                  style={{ color: "rgba(245,235,221,0.6)" }}
+                >
+                  <Plus className="h-3.5 w-3.5" /> New Profile
                 </button>
+              </div>
+              {newProfileTarget === "cast" && (
+                <NewProfileForm
+                  form={newProfileForm}
+                  setForm={setNewProfileForm}
+                  creating={creatingProfile}
+                  error={newProfileError}
+                  onCreate={handleCreateNewProfile}
+                  onCancel={() => setNewProfileTarget(null)}
+                />
               )}
             </div>
 
@@ -481,10 +534,30 @@ export default function MyVideoListPage({ onBack }) {
                   </div>
                 ))}
               </div>
-              {crew.length < 5 && (
-                <button type="button" onClick={addCrew} className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
-                  <Plus className="h-3.5 w-3.5" /> Add crew member
+              <div className="mt-2 flex flex-wrap gap-4">
+                {crew.length < 5 && (
+                  <button type="button" onClick={addCrew} className="flex items-center gap-1 text-xs font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
+                    <Plus className="h-3.5 w-3.5" /> Add crew member
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setNewProfileTarget("crew"); setNewProfileForm(EMPTY_PERSON_FORM); setNewProfileError(""); }}
+                  className="flex items-center gap-1 text-xs font-medium hover:opacity-80"
+                  style={{ color: "rgba(245,235,221,0.6)" }}
+                >
+                  <Plus className="h-3.5 w-3.5" /> New Profile
                 </button>
+              </div>
+              {newProfileTarget === "crew" && (
+                <NewProfileForm
+                  form={newProfileForm}
+                  setForm={setNewProfileForm}
+                  creating={creatingProfile}
+                  error={newProfileError}
+                  onCreate={handleCreateNewProfile}
+                  onCancel={() => setNewProfileTarget(null)}
+                />
               )}
             </div>
 
@@ -733,6 +806,31 @@ export default function MyVideoListPage({ onBack }) {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function NewProfileForm({ form, setForm, creating, error, onCreate, onCancel }) {
+  return (
+    <div className="mt-3 rounded-xl p-4" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(212,175,55,0.25)" }}>
+      <PersonFormFields form={form} setForm={setForm} />
+      {error && (
+        <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+      )}
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={creating || !form.name.trim()}
+          className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ background: COLORS.gold, color: "#0a0104" }}
+        >
+          {creating ? "Creating…" : "Create"}
+        </button>
+        <button type="button" onClick={onCancel} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

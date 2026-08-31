@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2, ImagePlus, Search, X } from "lucide-react";
 import { searchAdminPeople, createAdminPerson, updateAdminPerson, deleteAdminPerson, uploadAdminPersonPhoto } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import PersonFormFields, { EMPTY_PERSON_FORM as EMPTY_FORM } from "../shared/PersonFormFields";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -12,11 +13,6 @@ const inputStyle = {
 const labelStyle = {
   marginBottom: 4, display: "block", fontSize: 11, fontWeight: 600,
   textTransform: "uppercase", letterSpacing: "0.03em", color: "rgba(245,235,221,0.5)",
-};
-
-const EMPTY_FORM = {
-  name: "", occupation: "", date_of_birth: "", birthplace: "",
-  about: "", early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
 };
 
 export default function AdminCastCrewPage() {
@@ -263,54 +259,6 @@ export default function AdminCastCrewPage() {
         onCancel={() => setConfirmDelete(null)}
         onConfirm={handleDeleteConfirmed}
       />
-    </div>
-  );
-}
-
-function PersonFormFields({ form, setForm }) {
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
-  return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      <div>
-        <label style={labelStyle}>Name *</label>
-        <input type="text" value={form.name} onChange={set("name")} style={inputStyle} />
-      </div>
-      <div>
-        <label style={labelStyle}>Occupation</label>
-        <input type="text" placeholder="e.g. Actor, Director" value={form.occupation} onChange={set("occupation")} style={inputStyle} />
-      </div>
-      <div>
-        <label style={labelStyle}>Date of Birth</label>
-        <input type="date" value={form.date_of_birth} onChange={set("date_of_birth")} style={inputStyle} />
-      </div>
-      <div>
-        <label style={labelStyle}>Birthplace</label>
-        <input type="text" value={form.birthplace} onChange={set("birthplace")} style={inputStyle} />
-      </div>
-      <div className="sm:col-span-2">
-        <label style={labelStyle}>About</label>
-        <textarea rows={2} value={form.about} onChange={set("about")} style={{ ...inputStyle, resize: "vertical" }} />
-      </div>
-      <div className="sm:col-span-2">
-        <label style={labelStyle}>Early Life</label>
-        <textarea rows={2} value={form.early_life} onChange={set("early_life")} style={{ ...inputStyle, resize: "vertical" }} />
-      </div>
-      <div className="sm:col-span-2">
-        <label style={labelStyle}>Personal Life</label>
-        <textarea rows={2} value={form.personal_life} onChange={set("personal_life")} style={{ ...inputStyle, resize: "vertical" }} />
-      </div>
-      <div className="sm:col-span-2">
-        <label style={labelStyle}>Debut & Initial Years</label>
-        <textarea rows={2} value={form.debut_initial_years} onChange={set("debut_initial_years")} style={{ ...inputStyle, resize: "vertical" }} />
-      </div>
-      <div className="sm:col-span-2">
-        <label style={labelStyle}>Breakthrough & Beyond</label>
-        <textarea rows={2} value={form.breakthrough_beyond} onChange={set("breakthrough_beyond")} style={{ ...inputStyle, resize: "vertical" }} />
-      </div>
-      <div className="sm:col-span-2">
-        <label style={labelStyle}>Recent Projects</label>
-        <textarea rows={2} value={form.recent_projects} onChange={set("recent_projects")} style={{ ...inputStyle, resize: "vertical" }} />
-      </div>
     </div>
   );
 }

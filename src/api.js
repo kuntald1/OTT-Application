@@ -563,6 +563,10 @@ export function fetchPerson(personId) {
   return request(`/people/${personId}`);
 }
 
+export function createPerson(payload) {
+  return request(`/people`, { method: "POST", auth: true, body: payload });
+}
+
 export function searchPeople(q) {
   return request(`/people/search?q=${encodeURIComponent(q)}`);
 }
