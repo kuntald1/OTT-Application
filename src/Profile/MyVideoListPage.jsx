@@ -118,6 +118,7 @@ export default function MyVideoListPage({ onBack }) {
   // created person gets appended to.
   const [newProfileTarget, setNewProfileTarget] = useState(null);
   const [newProfileForm, setNewProfileForm] = useState(EMPTY_PERSON_FORM);
+  const [newProfilePhoto, setNewProfilePhoto] = useState(null);
   const [creatingProfile, setCreatingProfile] = useState(false);
   const [newProfileError, setNewProfileError] = useState("");
 
@@ -161,16 +162,27 @@ export default function MyVideoListPage({ onBack }) {
     setNewProfileError("");
     setCreatingProfile(true);
     try {
-      const person = await createPerson({
+      let person = await createPerson({
         ...newProfileForm,
         date_of_birth: newProfileForm.date_of_birth ? new Date(newProfileForm.date_of_birth).toISOString() : null,
       });
+      if (newProfilePhoto) {
+        try {
+          person = await uploadPersonPhoto(person.id, newProfilePhoto);
+        } catch (photoErr) {
+          // Profile is already created at this point — don't block the
+          // rest of the flow on this; just let them know the photo needs
+          // a retry (they can add it later, same as any other profile).
+          alert(photoErr.message || "Profile created, but the photo couldn't be uploaded. You can add it later.");
+        }
+      }
       if (newProfileTarget === "crew" && crew.length < 5) {
         setCrew((list) => [...list, { ...makeEmptyCrew(), person_id: person.id, name: person.name }]);
       } else if (cast.length < 10) {
         setCast((list) => [...list, { ...makeEmptyCast(), person_id: person.id, name: person.name }]);
       }
       setNewProfileForm(EMPTY_PERSON_FORM);
+      setNewProfilePhoto(null);
       setNewProfileTarget(null);
     } catch (err) {
       setNewProfileError(err.message || "Couldn't create profile.");
@@ -496,7 +508,7 @@ export default function MyVideoListPage({ onBack }) {
                 )}
                 <button
                   type="button"
-                  onClick={() => { setNewProfileTarget("cast"); setNewProfileForm(EMPTY_PERSON_FORM); setNewProfileError(""); }}
+                  onClick={() => { setNewProfileTarget("cast"); setNewProfileForm(EMPTY_PERSON_FORM); setNewProfilePhoto(null); setNewProfileError(""); }}
                   className="flex items-center gap-1 text-xs font-medium hover:opacity-80"
                   style={{ color: "rgba(245,235,221,0.6)" }}
                 >
@@ -507,6 +519,8 @@ export default function MyVideoListPage({ onBack }) {
                 <NewProfileForm
                   form={newProfileForm}
                   setForm={setNewProfileForm}
+                  photo={newProfilePhoto}
+                  setPhoto={setNewProfilePhoto}
                   creating={creatingProfile}
                   error={newProfileError}
                   onCreate={handleCreateNewProfile}
@@ -542,7 +556,7 @@ export default function MyVideoListPage({ onBack }) {
                 )}
                 <button
                   type="button"
-                  onClick={() => { setNewProfileTarget("crew"); setNewProfileForm(EMPTY_PERSON_FORM); setNewProfileError(""); }}
+                  onClick={() => { setNewProfileTarget("crew"); setNewProfileForm(EMPTY_PERSON_FORM); setNewProfilePhoto(null); setNewProfileError(""); }}
                   className="flex items-center gap-1 text-xs font-medium hover:opacity-80"
                   style={{ color: "rgba(245,235,221,0.6)" }}
                 >
@@ -553,6 +567,8 @@ export default function MyVideoListPage({ onBack }) {
                 <NewProfileForm
                   form={newProfileForm}
                   setForm={setNewProfileForm}
+                  photo={newProfilePhoto}
+                  setPhoto={setNewProfilePhoto}
                   creating={creatingProfile}
                   error={newProfileError}
                   onCreate={handleCreateNewProfile}
@@ -810,9 +826,28 @@ export default function MyVideoListPage({ onBack }) {
   );
 }
 
-function NewProfileForm({ form, setForm, creating, error, onCreate, onCancel }) {
+function NewProfileForm({ form, setForm, photo, setPhoto, creating, error, onCreate, onCancel }) {
+  const photoPreviewUrl = photo ? URL.createObjectURL(photo) : null;
   return (
     <div className="mt-3 rounded-xl p-4" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(212,175,55,0.25)" }}>
+      <div className="mb-3 flex items-center gap-3">
+        <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full" style={{ background: "rgba(245,235,221,0.06)" }}>
+          {photoPreviewUrl && <img src={photoPreviewUrl} alt="" className="h-full w-full object-cover" />}
+        </div>
+        <label
+          className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:opacity-80"
+          style={{ borderColor: "rgba(245,235,221,0.15)", color: "rgba(245,235,221,0.7)" }}
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+          {photo ? "Change photo" : "Add photo"}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => setPhoto(e.target.files?.[0] || null)}
+          />
+        </label>
+      </div>
       <PersonFormFields form={form} setForm={setForm} />
       {error && (
         <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
