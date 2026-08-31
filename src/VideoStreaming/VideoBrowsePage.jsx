@@ -4,7 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories } from "../api";
+import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -979,6 +979,21 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
   }, []);
   const shown = entered && !closing;
 
+  // Single-session enforcement (see AppContext's "auth:sessionEnded"
+  // listener) clears login state, but that alone doesn't stop an
+  // ALREADY-PLAYING video — the player has no reason to notice on its
+  // own. Force it to stop the instant this account gets signed out
+  // elsewhere, rather than letting playback silently continue until
+  // the next unrelated action.
+  useEffect(() => {
+    const handleSessionEnded = () => {
+      setPlaying(false);
+      onClose();
+    };
+    window.addEventListener("auth:sessionEnded", handleSessionEnded);
+    return () => window.removeEventListener("auth:sessionEnded", handleSessionEnded);
+  }, [onClose]);
+
   // Razorpay's checkout widget, loaded once lazily — same pattern as
   // SubscriptionPage.jsx / DonationPage.jsx, so it's available the
   // moment someone hits "Buy" here without depending on having visited
@@ -1122,8 +1137,21 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
       }
     };
     const interval = setInterval(sendHeartbeat, 20000);
+
+    // Separate, much faster probe just for single-session detection
+    // (see User.active_session_token) — kept independent of the
+    // revenue heartbeat above so that stays on its own 20s cadence.
+    // GET /auth/me is already a lightweight existing endpoint; a 401
+    // here is caught by api.js's global interceptor, which fires
+    // "auth:sessionEnded" — this component's listener for that event
+    // is what actually stops playback.
+    const sessionCheckInterval = setInterval(() => {
+      fetchCurrentUser().catch(() => {});
+    }, 5000);
+
     return () => {
       clearInterval(interval);
+      clearInterval(sessionCheckInterval);
       sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
       endPlaybackSession(sessionToken).catch(() => {}); // frees this device's screens-limit slot immediately
     };
