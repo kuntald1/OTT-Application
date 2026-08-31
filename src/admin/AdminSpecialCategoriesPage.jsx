@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sparkles, Plus, Check, EyeOff, Eye, Trash2, X } from "lucide-react";
+import { Sparkles, Plus, Check, EyeOff, Eye, Trash2, X, Pencil } from "lucide-react";
 import {
   createAdminSpecialCategory, fetchAdminSpecialCategories, updateAdminSpecialCategory,
   toggleAdminSpecialCategoryDisabled, deleteAdminSpecialCategory,
@@ -34,6 +34,13 @@ export default function AdminSpecialCategoriesPage() {
 
   const [managingId, setManagingId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editVisibleFrom, setEditVisibleFrom] = useState("");
+  const [editVisibleTo, setEditVisibleTo] = useState("");
+  const [editSection, setEditSection] = useState("play");
+  const [saving, setSaving] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -85,6 +92,31 @@ export default function AdminSpecialCategoriesPage() {
     } finally {
       setBusyId(null);
       setConfirmDelete(null);
+    }
+  };
+
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setEditTitle(c.title);
+    setEditVisibleFrom(c.visible_from);
+    setEditVisibleTo(c.visible_to);
+    setEditSection(c.section);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim() || !editVisibleFrom || !editVisibleTo) return;
+    setError("");
+    setSaving(true);
+    try {
+      await updateAdminSpecialCategory(editingId, {
+        title: editTitle.trim(), visible_from: editVisibleFrom, visible_to: editVisibleTo, section: editSection,
+      });
+      setEditingId(null);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't save changes.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -160,6 +192,51 @@ export default function AdminSpecialCategoriesPage() {
         <div className="flex flex-col gap-3">
           {categories.map((c) => (
             <div key={c.id} className="rounded-xl p-4" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>
+              {editingId === c.id ? (
+                <div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label style={labelStyle}>Title</label>
+                      <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Visible In</label>
+                      <select value={editSection} onChange={(e) => setEditSection(e.target.value)} style={inputStyle}>
+                        <option value="play" style={{ background: COLORS.panel }}>Play</option>
+                        <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+                        <option value="both" style={{ background: COLORS.panel }}>Both</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Visible From</label>
+                      <input type="date" value={editVisibleFrom} onChange={(e) => setEditVisibleFrom(e.target.value)} style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Visible To</label>
+                      <input type="date" value={editVisibleTo} onChange={(e) => setEditVisibleTo(e.target.value)} style={inputStyle} />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      disabled={saving || !editTitle.trim() || !editVisibleFrom || !editVisibleTo}
+                      className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ background: COLORS.gold, color: "#0a0104" }}
+                    >
+                      {saving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="rounded-full px-4 py-2 text-xs font-medium"
+                      style={{ color: "rgba(245,235,221,0.5)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{c.title}</p>
@@ -169,6 +246,14 @@ export default function AdminSpecialCategoriesPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(c)}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+                    style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
                   <button
                     type="button"
                     onClick={() => setManagingId(managingId === c.id ? null : c.id)}
@@ -198,6 +283,7 @@ export default function AdminSpecialCategoriesPage() {
                   </button>
                 </div>
               </div>
+              )}
 
               {managingId === c.id && (
                 <VideoPicker category={c} onChanged={load} />
