@@ -3,6 +3,7 @@ import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
 import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle } from "./adminApi";
 import { fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
+import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
