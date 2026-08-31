@@ -66,6 +66,16 @@ class User(Base):
 
     is_active = Column(Boolean, default=True, nullable=False)
 
+    # Netflix-style single-session enforcement: set to a fresh random
+    # value on every login/register, and embedded in that login's JWT
+    # (the "sid" claim — see security.py). get_current_user rejects any
+    # token whose "sid" no longer matches this column, which is what
+    # actually signs the OLD device out the moment a NEW login happens
+    # elsewhere on the same account. Null means "no session-pinning yet"
+    # (accounts that haven't logged in since this was added) — treated
+    # as unrestricted, not as a mismatch.
+    active_session_token = Column(String(64), nullable=True)
+
     # Admin-toggled permission (see Admin > Users) — a Content Creator or
     # Plays Organiser can only create a live stream if this is True.
     # False by default: live streaming is opt-in per account, not

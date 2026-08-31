@@ -28,6 +28,17 @@ from app.security import hash_password, verify_password, create_access_token
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _new_login_token(user: User, db: Session) -> str:
+    """Issues a token for this login AND pins it as this account's one
+    valid session (see User.active_session_token) — any token from a
+    previous login stops working the instant this commits.
+    """
+    session_token = secrets.token_urlsafe(32)
+    user.active_session_token = session_token
+    db.commit()
+    return create_access_token(subject=str(user.id), session_token=session_token)
+
+
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register(payload: UserRegister, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
@@ -111,7 +122,7 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    token = create_access_token(subject=str(user.id))
+    token = _new_login_token(user, db)
     return Token(access_token=token, user=UserOut.model_validate(user))
 
 
@@ -136,7 +147,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
             detail="This account has been deactivated. Contact support if you believe this is a mistake.",
         )
 
-    token = create_access_token(subject=str(user.id))
+    token = _new_login_token(user, db)
     return Token(access_token=token, user=UserOut.model_validate(user))
 
 
@@ -185,7 +196,7 @@ def login_with_otp(payload: VerifyOtpLoginRequest, db: Session = Depends(get_db)
         )
 
     db.commit()
-    token = create_access_token(subject=str(user.id))
+    token = _new_login_token(user, db)
     return Token(access_token=token, user=UserOut.model_validate(user))
 @router.get("/me", response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)):

@@ -1,3 +1,5 @@
+import secrets
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
@@ -42,8 +44,15 @@ def _find_or_create_social_user(
     return user
 
 
-def _issue_token_and_redirect(user: User) -> RedirectResponse:
-    token = create_access_token(subject=str(user.id))
+def _issue_token_and_redirect(user: User, db: Session) -> RedirectResponse:
+    """Same single-session pinning as regular login (see
+    User.active_session_token / auth.py's _new_login_token) — a Google/
+    Facebook login also signs out any other active session on this account.
+    """
+    session_token = secrets.token_urlsafe(32)
+    user.active_session_token = session_token
+    db.commit()
+    token = create_access_token(subject=str(user.id), session_token=session_token)
     # Frontend reads ?token=... on this page and stores it (e.g. in memory
     # or secure storage), then clears it from the URL.
     return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/callback?token={token}")
@@ -102,7 +111,7 @@ def google_callback(code: str, db: Session = Depends(get_db)):
         email=info["email"],
         name=info.get("name", info["email"]),
     )
-    return _issue_token_and_redirect(user)
+    return _issue_token_and_redirect(user, db)
 
 
 # -------------------------------------------------------------- Facebook ---
@@ -160,4 +169,4 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
         email=info["email"],
         name=info.get("name", info["email"]),
     )
-    return _issue_token_and_redirect(user)
+    return _issue_token_and_redirect(user, db)

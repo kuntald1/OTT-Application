@@ -38,6 +38,20 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
       typeof data.detail === "string"
         ? data.detail
         : "Something went wrong. Please try again.";
+
+    // A logged-in request that comes back 401 while we're still holding
+    // a token means the backend rejected THIS specific session — most
+    // commonly, this same account just logged in elsewhere (see
+    // User.active_session_token) and this token no longer matches.
+    // Clearing it here (rather than only on next page load) means an
+    // actively-open tab notices immediately instead of silently failing
+    // requests with a dead token. AppContext listens for this event to
+    // show the login modal with an explanation.
+    if (auth && res.status === 401 && getToken()) {
+      setToken(null);
+      window.dispatchEvent(new CustomEvent("auth:sessionEnded", { detail: message }));
+    }
+
     throw new Error(message);
   }
 

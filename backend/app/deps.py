@@ -18,16 +18,27 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
 
-    user_id = decode_access_token(credentials.credentials)
-    if user_id is None:
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
         )
+    user_id = payload.get("sub")
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
+
+    # Single-session enforcement (see User.active_session_token) — a
+    # missing "sid" or missing active_session_token means this predates
+    # the feature, so it's let through rather than treated as a mismatch.
+    session_token = payload.get("sid")
+    if session_token and user.active_session_token and session_token != user.active_session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You've been logged out because this account was signed in on another device.",
         )
     return user
 
@@ -43,11 +54,15 @@ def get_current_user_optional(
     """
     if credentials is None:
         return None
-    user_id = decode_access_token(credentials.credentials)
-    if user_id is None:
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
         return None
+    user_id = payload.get("sub")
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
+        return None
+    session_token = payload.get("sid")
+    if session_token and user.active_session_token and session_token != user.active_session_token:
         return None
     return user
 
@@ -60,17 +75,20 @@ def get_current_admin(
     regular customer account can never satisfy this dependency, even if
     somehow presented here — its subject id simply won't exist in this
     table. Same isolation in the other direction for get_current_user.
+    Admin tokens never carry a "sid" claim, so single-session enforcement
+    (see User.active_session_token) doesn't apply here at all.
     """
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
 
-    admin_id = decode_access_token(credentials.credentials)
-    if admin_id is None:
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
         )
+    admin_id = payload.get("sub")
 
     admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
     if admin is None or not admin.is_active:

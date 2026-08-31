@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User, Subscription
+from app.routers.videos import _billing_owner
 from app.schemas import SubscriptionCreate, SubscriptionOut
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
@@ -60,9 +61,16 @@ def get_my_subscription(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """A sub-account (User.parent_id set) has no Subscription rows of
+    its own — it shares whichever plan its parent holds (same
+    _billing_owner resolution as video access/screens, see
+    routers/videos.py), so the "You're on plan X" state and the
+    Subscribe button match reality for them too.
+    """
+    owner = _billing_owner(current_user, db)
     return (
         db.query(Subscription)
-        .filter(Subscription.user_id == current_user.id, Subscription.is_active == True)  # noqa: E712
+        .filter(Subscription.user_id == owner.id, Subscription.is_active == True)  # noqa: E712
         .order_by(Subscription.started_at.desc())
         .first()
     )

@@ -189,6 +189,21 @@ export function AppProvider({ children }) {
       .finally(() => setAuthLoading(false));
   }, [loadUserData]);
 
+  // Fired by api.js the instant any authenticated request comes back
+  // 401 while we're still holding a token — most commonly because this
+  // same account just logged in elsewhere (single-session enforcement,
+  // see backend User.active_session_token) and this tab's token no
+  // longer matches. Surfaces why, instead of a silent/confusing logout.
+  useEffect(() => {
+    const handleSessionEnded = (e) => {
+      setIsLoggedIn(false);
+      setProfile({ id: null, name: "", email: "", photo: null, role: "user", country: "India" });
+      setAuthError(e.detail || "You've been logged out.");
+    };
+    window.addEventListener("auth:sessionEnded", handleSessionEnded);
+    return () => window.removeEventListener("auth:sessionEnded", handleSessionEnded);
+  }, []);
+
   // The whole site requires login. Whenever isLoggedIn is false — on first
   // load (once we've finished checking for an existing session), or right
   // after logging out — force the login modal open. It's non-dismissable in
