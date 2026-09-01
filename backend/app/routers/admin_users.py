@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
-from app.models import AdminUser, User
-from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest
+from app.models import AdminUser, User, Subscription, Payment
+from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest, SubscriptionOut, PaymentOut
 from app.security import hash_password
 from app.notifications import send_live_streaming_enabled_email, send_live_streaming_enabled_whatsapp
 
@@ -124,3 +124,39 @@ def notify_user_about_live_streaming(
     user = _get_user_or_404(user_id, db)
     send_live_streaming_enabled_email(user.email, user.name)
     send_live_streaming_enabled_whatsapp(user.phone, user.name)
+
+
+@router.get("/{user_id}/subscriptions", response_model=list[SubscriptionOut])
+def get_user_subscriptions(
+    user_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Powers Customer Management's per-customer detail view — full
+    subscription history (active AND past), most recent first.
+    """
+    _get_user_or_404(user_id, db)
+    return (
+        db.query(Subscription)
+        .filter(Subscription.user_id == user_id)
+        .order_by(Subscription.started_at.desc())
+        .all()
+    )
+
+
+@router.get("/{user_id}/payments", response_model=list[PaymentOut])
+def get_user_payments(
+    user_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Powers Customer Management's per-customer detail view — full
+    payment/transaction history, most recent first.
+    """
+    _get_user_or_404(user_id, db)
+    return (
+        db.query(Payment)
+        .filter(Payment.user_id == user_id)
+        .order_by(Payment.created_at.desc())
+        .all()
+    )

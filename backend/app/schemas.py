@@ -424,6 +424,33 @@ class TaxConfigOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AdminSubscriptionTransactionOut(BaseModel):
+    """One row per Payment (checkout attempt), joined with the customer
+    and the resulting Subscription's current state — powers Admin >
+    Subscription Management's "active, expired, completed, failed"
+    filters. `bucket` is the friendly, filterable status:
+    - "pending"   Payment.status == created (checkout not finished)
+    - "failed"    Payment.status == failed
+    - "active"    paid AND the linked subscription is currently active + unexpired
+    - "expired"   paid AND the linked subscription has lapsed/been replaced
+    """
+    payment_id: uuid.UUID
+    user_id: uuid.UUID
+    customer_name: str
+    customer_email: str
+    plan_name: str
+    duration_label: str
+    screens: int
+    total_amount: Decimal
+    currency: str
+    gateway: str
+    bucket: str
+    subscription_expires_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class TaxConfigUpdate(BaseModel):
     gst_percent: Decimal = Field(ge=0, le=100)
 

@@ -801,3 +801,23 @@ export function fetchAdminTaxConfig() {
 export function updateAdminTaxConfig(gstPercent) {
   return request("/admin/subscription-plans/tax", { method: "PUT", auth: true, body: { gst_percent: gstPercent } });
 }
+
+// --- Customer Management (subscriptions/payments drill-down) ---
+
+export function fetchAdminUserSubscriptions(userId) {
+  return request(`/admin/users/${userId}/subscriptions`, { auth: true });
+}
+
+export function fetchAdminUserPayments(userId) {
+  return request(`/admin/users/${userId}/payments`, { auth: true });
+}
+
+// --- Subscription Management ---
+
+export function fetchAdminSubscriptionTransactions({ statusFilter, search } = {}) {
+  const params = new URLSearchParams();
+  if (statusFilter && statusFilter !== "all") params.set("status_filter", statusFilter);
+  if (search) params.set("search", search);
+  const qs = params.toString();
+  return request(`/admin/subscriptions${qs ? `?${qs}` : ""}`, { auth: true });
+}

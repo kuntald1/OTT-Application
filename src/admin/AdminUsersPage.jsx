@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight } from "lucide-react";
-import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming } from "./adminApi";
+import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye } from "lucide-react";
+import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, fetchAdminUserSubscriptions, fetchAdminUserPayments } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
 
@@ -74,6 +74,7 @@ export default function AdminUsersPage({ currentAdmin }) {
   };
 
   const [confirmToggleUser, setConfirmToggleUser] = useState(null);
+  const [viewingUser, setViewingUser] = useState(null);
 
   const handleToggleActiveConfirmed = async () => {
     const user = confirmToggleUser;
@@ -203,6 +204,14 @@ export default function AdminUsersPage({ currentAdmin }) {
               </div>
 
               <div className="flex flex-shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewingUser(u)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+                  style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+                >
+                  <Eye className="h-3.5 w-3.5" /> View
+                </button>
                 {isSuperadmin && (
                   <button
                     type="button"
@@ -318,8 +327,122 @@ export default function AdminUsersPage({ currentAdmin }) {
         onCancel={() => setConfirmToggleUser(null)}
         onConfirm={handleToggleActiveConfirmed}
       />
+
+      {viewingUser && (
+        <CustomerDetailModal user={viewingUser} onClose={() => setViewingUser(null)} />
+      )}
         </>
       )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------- Customer detail
+// "Customer Management" drill-down — account status (already visible on
+// the row itself), subscription history, and payment history for one
+// customer. Opened via the "View" button on each row above.
+
+function CustomerDetailModal({ user, onClose }) {
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    Promise.all([fetchAdminUserSubscriptions(user.id), fetchAdminUserPayments(user.id)])
+      .then(([subs, pays]) => {
+        setSubscriptions(subs);
+        setPayments(pays);
+      })
+      .catch((err) => setError(err.message || "Couldn't load customer details."))
+      .finally(() => setLoading(false));
+  }, [user.id]);
+
+  const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl p-6"
+        style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.25)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-start justify-between">
+          <div>
+            <h3 className="text-base font-semibold" style={{ color: COLORS.cream }}>{user.name}</h3>
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>{user.email}</p>
+          </div>
+          <button type="button" onClick={onClose} style={{ color: "rgba(245,235,221,0.5)" }}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-1 text-xs" style={{ color: user.is_active ? "#6FCF97" : "#f87171" }}>
+          {user.is_active ? "Active account" : "Deactivated account"}
+        </p>
+
+        {loading ? (
+          <p className="mt-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+        ) : error ? (
+          <p className="mt-6 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+        ) : (
+          <>
+            <h4 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Subscriptions</h4>
+            {subscriptions.length === 0 ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.4)" }}>No subscriptions.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {subscriptions.map((s) => (
+                  <div key={s.id} className="rounded-lg p-3 text-sm" style={{ background: "rgba(245,235,221,0.03)" }}>
+                    <p style={{ color: COLORS.cream }}>
+                      {s.plan_name} — {s.duration_label} · {s.screens} screen{s.screens === 1 ? "" : "s"}
+                      <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={s.is_active ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" } : { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }}>
+                        {s.is_active ? "Active" : "Past"}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                      {s.currency} {s.price} · {formatDate(s.started_at)} → {formatDate(s.expires_at)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h4 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Payment History</h4>
+            {payments.length === 0 ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.4)" }}>No payments.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {payments.map((p) => (
+                  <div key={p.id} className="rounded-lg p-3 text-sm" style={{ background: "rgba(245,235,221,0.03)" }}>
+                    <p style={{ color: COLORS.cream }}>
+                      {p.plan_name} — {p.duration_label} · {p.currency} {p.total_amount}
+                      <span
+                        className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                        style={
+                          p.status === "paid" ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" }
+                          : p.status === "failed" ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
+                          : { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }
+                        }
+                      >
+                        {p.status}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                      {p.gateway} · {formatDate(p.created_at)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
