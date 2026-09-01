@@ -126,6 +126,10 @@ class Ticket(Base):
     # existed (all of which came from the Complain tab).
     source = Column(Enum(TicketSource), nullable=False, default=TicketSource.complaint)
 
+    # Optional screenshot/photo the person attaches when filing —
+    # e.g. proof of a billing issue or a broken-video screenshot.
+    image_url = Column(String(500), nullable=True)
+
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

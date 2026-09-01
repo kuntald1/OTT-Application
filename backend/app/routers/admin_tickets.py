@@ -32,7 +32,7 @@ def list_tickets(
         AdminTicketOut(
             id=t.id, ticket_number=t.ticket_number, customer_name=u.name, customer_email=u.email,
             subject=t.subject, description=t.description, status=t.status, source=t.source.value,
-            created_at=t.created_at,
+            image_url=t.image_url, created_at=t.created_at,
         )
         for t, u in rows
     ]
@@ -55,5 +55,5 @@ def update_ticket_status(
     return AdminTicketOut(
         id=ticket.id, ticket_number=ticket.ticket_number, customer_name=user.name, customer_email=user.email,
         subject=ticket.subject, description=ticket.description, status=ticket.status, source=ticket.source.value,
-        created_at=ticket.created_at,
+        image_url=ticket.image_url, created_at=ticket.created_at,
     )

@@ -95,6 +95,7 @@ class TicketOut(BaseModel):
     description: Optional[str] = None
     status: TicketStatus
     source: str
+    image_url: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -110,6 +111,7 @@ class AdminTicketOut(BaseModel):
     description: Optional[str] = None
     status: TicketStatus
     source: str
+    image_url: Optional[str] = None
     created_at: datetime
 
 

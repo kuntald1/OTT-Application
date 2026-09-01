@@ -110,6 +110,16 @@ export default function AdminHelpCenterPage() {
               {t.description && (
                 <p className="mt-2 text-sm" style={{ color: "rgba(245,235,221,0.7)" }}>{t.description}</p>
               )}
+              {t.image_url && (
+                <a href={t.image_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block">
+                  <img
+                    src={t.image_url}
+                    alt="Attached screenshot"
+                    className="h-24 w-24 rounded-lg object-cover transition-opacity hover:opacity-80"
+                    style={{ border: "1px solid rgba(245,235,221,0.15)" }}
+                  />
+                </a>
+              )}
               <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>Filed {formatDate(t.created_at)}</p>
             </div>
           ))}

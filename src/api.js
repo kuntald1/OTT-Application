@@ -140,12 +140,23 @@ export function resetPassword({ token, newPassword }) {
   });
 }
 
-export function createTicket({ subject, description, source = "complaint" }) {
-  return request("/tickets", {
+export async function createTicket({ subject, description, source = "complaint", imageFile }) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("subject", subject);
+  formData.append("description", description || "");
+  formData.append("source", source);
+  if (imageFile) formData.append("image", imageFile);
+  const res = await fetch(`${BASE_URL}/tickets`, {
     method: "POST",
-    auth: true,
-    body: { subject, description, source },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
   });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't submit your request. Please try again.");
+  }
+  return data;
 }
 
 export function fetchTickets() {

@@ -350,8 +350,8 @@ export function AppProvider({ children }) {
   // Help Center — persists the complaint as a real ticket on the backend.
   // Throws on failure so the page can show an error; on success, prepends
   // the new ticket (mapped to the display shape) to the local list.
-  const addTicket = useCallback(async (subject, description, source = "complaint") => {
-    const ticket = await createTicket({ subject, description, source });
+  const addTicket = useCallback(async (subject, description, source = "complaint", imageFile = null) => {
+    const ticket = await createTicket({ subject, description, source, imageFile });
     const display = toTicketDisplay(ticket);
     setTickets((list) => [display, ...list]);
     return display;
