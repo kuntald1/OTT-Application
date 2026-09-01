@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3 } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -18,6 +18,8 @@ import AdminCastCrewPage from "./AdminCastCrewPage";
 import AdminSubscriptionPlansPage from "./AdminSubscriptionPlansPage";
 import AdminSubscriptionsPage from "./AdminSubscriptionsPage";
 import AdminHelpCenterPage from "./AdminHelpCenterPage";
+import AdminDashboardPage from "./AdminDashboardPage";
+import AdminReportsPage from "./AdminReportsPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -33,9 +35,11 @@ const COLORS = {
 // own set of features without crowding everything else.
 export default function AdminLayout({ currentAdmin, onLogout }) {
   const isSuperadmin = currentAdmin.role === "superadmin";
-  const [activePage, setActivePage] = useState("videos");
+  const [activePage, setActivePage] = useState("dashboard");
 
   const NAV_ITEMS = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, visible: true },
+    { id: "reports", label: "Reports & Analytics", icon: BarChart3, visible: true },
     { id: "videos", label: "Video Review", icon: Clapperboard, visible: true },
     { id: "add-video", label: "Add Video", icon: PlusCircle, visible: true },
     { id: "cast-crew", label: "Cast/Crew Master", icon: Contact, visible: true },
@@ -110,6 +114,8 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
       {/* Content */}
       <main className="flex-1 px-8 py-8">
         <div className="mx-auto max-w-3xl">
+          {activePage === "dashboard" && <AdminDashboardPage />}
+          {activePage === "reports" && <AdminReportsPage />}
           {activePage === "videos" && <AdminVideoReviewPage />}
           {activePage === "add-video" && <AdminAddVideoPage />}
           {activePage === "cast-crew" && <AdminCastCrewPage />}

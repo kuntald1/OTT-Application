@@ -835,3 +835,34 @@ export function fetchAdminTickets({ source, statusFilter } = {}) {
 export function updateAdminTicketStatus(ticketId, statusValue) {
   return request(`/admin/tickets/${ticketId}/status`, { method: "PUT", auth: true, body: { status: statusValue } });
 }
+
+// --- Dashboard ---
+
+export function fetchAdminDashboardSummary() {
+  return request("/admin/dashboard/summary", { auth: true });
+}
+
+// --- Reports and Analytics ---
+
+export function fetchAdminReport(reportType) {
+  return request(`/admin/reports/${reportType}`, { auth: true });
+}
+
+export async function downloadAdminReportCsv(reportType) {
+  const token = getAdminToken();
+  const res = await fetch(`${BASE_URL}/admin/reports/${reportType}/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error("Couldn't export the report. Please try again.");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${reportType}_report.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

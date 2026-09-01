@@ -1421,3 +1421,21 @@ class MyParentOut(BaseModel):
     has_parent: bool
     parent_name: Optional[str] = None
     parent_email: Optional[str] = None
+
+
+class AdminDashboardOut(BaseModel):
+    """Admin's landing page KPI cards. "Bookings/ticket sales" aren't
+    included — there's no purchase-tracking model for event tickets
+    yet (only EventTicketTier, which defines prices, not actual
+    purchases), same gap flagged for Customer Management earlier.
+    """
+    total_customers: int
+    active_customers: int
+    active_subscriptions: int
+    expired_subscriptions: int
+    published_videos: int
+    pending_review_videos: int
+    approved_events: int
+    pending_enquiries: int
+    total_transactions: int
+    total_revenue_rupees: Decimal
