@@ -116,6 +116,114 @@ export default function AdminUsersPage({ currentAdmin }) {
 
   const [tab, setTab] = useState("users");
 
+  // "standalone" = own full card (unrelated to any parent/child); "parent"
+  // and "child" render without their own border/background since the
+  // grouping wrapper in the render tree below already supplies a single
+  // shared tinted container for the whole family — that's what actually
+  // makes the relationship visually obvious instead of just a caption.
+  const renderUserRow = (u, variant) => (
+    <div
+      key={u.id}
+      className={`flex flex-wrap items-center justify-between gap-3 ${variant === "standalone" ? "rounded-xl p-4" : "p-1"}`}
+      style={variant === "standalone" ? { background: COLORS.panel, border: "1px solid rgba(255,255,255,0.08)", opacity: u.is_active ? 1 : 0.5 } : { opacity: u.is_active ? 1 : 0.5 }}
+    >
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: COLORS.cream }}>
+          {u.name}
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={ROLE_STYLES[u.role] || ROLE_STYLES.user}>
+            {ROLE_LABELS[u.role] || u.role}
+          </span>
+          {variant === "parent" && (
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(212,175,55,0.18)", color: COLORS.gold }}>
+              Parent
+            </span>
+          )}
+          {variant === "child" && (
+            <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(212,175,55,0.18)", color: COLORS.gold }}>
+              <CornerDownRight className="h-2.5 w-2.5" /> Child
+            </span>
+          )}
+          {!u.is_active && (
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase" style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}>
+              Deactivated
+            </span>
+          )}
+        </p>
+        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{u.email}</p>
+        {variant === "standalone" && u.parent_id && (
+          <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: COLORS.gold }}>
+            <CornerDownRight className="h-3 w-3" /> Sub-account of {u.parent_name} ({u.parent_email})
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setViewingUser(u)}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+        >
+          <Eye className="h-3.5 w-3.5" /> View
+        </button>
+        {isSuperadmin && (
+          <button
+            type="button"
+            onClick={() => openPasswordDialog(u)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+            style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+          >
+            <Key className="h-3.5 w-3.5" /> Password
+          </button>
+        )}
+        {(u.role === "content_creator" || u.role === "plays_organiser") && (
+          <button
+            type="button"
+            onClick={() => handleToggleLiveStreaming(u)}
+            disabled={busyId === u.id}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            style={{
+              background: u.can_live_stream ? "rgba(111,207,151,0.15)" : "rgba(245,235,221,0.06)",
+              color: u.can_live_stream ? "#6FCF97" : "rgba(245,235,221,0.7)",
+            }}
+          >
+            <Video className="h-3.5 w-3.5" /> {u.can_live_stream ? "Live: On" : "Live: Off"}
+          </button>
+        )}
+        {(u.role === "content_creator" || u.role === "plays_organiser") && u.can_live_stream && (
+          <button
+            type="button"
+            onClick={() => handleNotify(u)}
+            disabled={busyId === u.id}
+            title="Email + WhatsApp them about broadcasting"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            style={{
+              background: notifiedId === u.id ? "rgba(111,207,151,0.15)" : "rgba(212,175,55,0.12)",
+              color: notifiedId === u.id ? "#6FCF97" : COLORS.gold,
+            }}
+          >
+            <Send className="h-3.5 w-3.5" /> {notifiedId === u.id ? "Sent!" : "Notify"}
+          </button>
+        )}
+        {isSuperadmin && (
+          <button
+            type="button"
+            onClick={() => setConfirmToggleUser(u)}
+            disabled={busyId === u.id}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            style={{
+              background: u.is_active ? "rgba(248,113,113,0.12)" : "rgba(111,207,151,0.15)",
+              color: u.is_active ? "#f87171" : "#6FCF97",
+            }}
+          >
+            {u.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+            {u.is_active ? "Deactivate" : "Reactivate"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold" style={{ color: COLORS.cream }}>
@@ -174,101 +282,39 @@ export default function AdminUsersPage({ currentAdmin }) {
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No users found.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {users.map((u) => (
-            <div
-              key={u.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-4"
-              style={{ background: COLORS.panel, border: "1px solid rgba(255,255,255,0.08)", opacity: u.is_active ? 1 : 0.5 }}
-            >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: COLORS.cream }}>
-                  {u.name}
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                    style={ROLE_STYLES[u.role] || ROLE_STYLES.user}
-                  >
-                    {ROLE_LABELS[u.role] || u.role}
-                  </span>
-                  {!u.is_active && (
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase" style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}>
-                      Deactivated
-                    </span>
-                  )}
-                </p>
-                <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{u.email}</p>
-                {u.parent_id && (
-                  <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: COLORS.gold }}>
-                    <CornerDownRight className="h-3 w-3" /> Sub-account of {u.parent_name} ({u.parent_email})
-                  </p>
-                )}
-              </div>
+          {(() => {
+            // Group sub-accounts with their parent so the family is one
+            // visually connected unit (shared tint + border) instead of
+            // two separate rows that happen to sit near each other —
+            // only falls back to a standalone row if the parent isn't
+            // in the current (possibly search-filtered) list.
+            const childrenByParent = {};
+            users.forEach((u) => {
+              if (u.parent_id && users.some((p) => p.id === u.parent_id)) {
+                (childrenByParent[u.parent_id] = childrenByParent[u.parent_id] || []).push(u);
+              }
+            });
+            const topLevel = users.filter((u) => !u.parent_id || !users.some((p) => p.id === u.parent_id));
 
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setViewingUser(u)}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
-                  style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+            return topLevel.map((u) => {
+              const children = childrenByParent[u.id] || [];
+              if (children.length === 0) {
+                return renderUserRow(u, "standalone");
+              }
+              return (
+                <div
+                  key={u.id}
+                  className="flex flex-col gap-2 rounded-xl p-3"
+                  style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.3)" }}
                 >
-                  <Eye className="h-3.5 w-3.5" /> View
-                </button>
-                {isSuperadmin && (
-                  <button
-                    type="button"
-                    onClick={() => openPasswordDialog(u)}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
-                    style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
-                  >
-                    <Key className="h-3.5 w-3.5" /> Password
-                  </button>
-                )}
-                {(u.role === "content_creator" || u.role === "plays_organiser") && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleLiveStreaming(u)}
-                    disabled={busyId === u.id}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                    style={{
-                      background: u.can_live_stream ? "rgba(111,207,151,0.15)" : "rgba(245,235,221,0.06)",
-                      color: u.can_live_stream ? "#6FCF97" : "rgba(245,235,221,0.7)",
-                    }}
-                  >
-                    <Video className="h-3.5 w-3.5" /> {u.can_live_stream ? "Live: On" : "Live: Off"}
-                  </button>
-                )}
-                {(u.role === "content_creator" || u.role === "plays_organiser") && u.can_live_stream && (
-                  <button
-                    type="button"
-                    onClick={() => handleNotify(u)}
-                    disabled={busyId === u.id}
-                    title="Email + WhatsApp them about broadcasting"
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                    style={{
-                      background: notifiedId === u.id ? "rgba(111,207,151,0.15)" : "rgba(212,175,55,0.12)",
-                      color: notifiedId === u.id ? "#6FCF97" : COLORS.gold,
-                    }}
-                  >
-                    <Send className="h-3.5 w-3.5" /> {notifiedId === u.id ? "Sent!" : "Notify"}
-                  </button>
-                )}
-                {isSuperadmin && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmToggleUser(u)}
-                    disabled={busyId === u.id}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                    style={{
-                      background: u.is_active ? "rgba(248,113,113,0.12)" : "rgba(111,207,151,0.15)",
-                      color: u.is_active ? "#f87171" : "#6FCF97",
-                    }}
-                  >
-                    {u.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                    {u.is_active ? "Deactivate" : "Reactivate"}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+                  {renderUserRow(u, "parent")}
+                  <div className="ml-3 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: "rgba(212,175,55,0.3)" }}>
+                    {children.map((c) => renderUserRow(c, "child"))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
 
@@ -392,54 +438,91 @@ function CustomerDetailModal({ user, onClose }) {
           <p className="mt-6 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
         ) : (
           <>
-            <h4 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Subscriptions</h4>
+            <h4 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Subscriptions & Transactions</h4>
             {subscriptions.length === 0 ? (
               <p className="text-sm" style={{ color: "rgba(245,235,221,0.4)" }}>No subscriptions.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {subscriptions.map((s) => (
-                  <div key={s.id} className="rounded-lg p-3 text-sm" style={{ background: "rgba(245,235,221,0.03)" }}>
-                    <p style={{ color: COLORS.cream }}>
-                      {s.plan_name} — {s.duration_label} · {s.screens} screen{s.screens === 1 ? "" : "s"}
-                      <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={s.is_active ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" } : { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }}>
-                        {s.is_active ? "Active" : "Past"}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                      {s.currency} {s.price} · {formatDate(s.started_at)} → {formatDate(s.expires_at)}
-                    </p>
-                  </div>
-                ))}
+                {subscriptions.map((s) => {
+                  // The payment that actually created this subscription —
+                  // shown together in one card so it's obvious which
+                  // transaction paid for which plan, instead of two
+                  // separate lists the admin has to cross-reference by eye.
+                  const payment = payments.find((p) => p.subscription_id === s.id);
+                  return (
+                    <div key={s.id} className="rounded-lg p-3 text-sm" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <p style={{ color: COLORS.cream }}>
+                        {s.plan_name} — {s.duration_label} · {s.screens} screen{s.screens === 1 ? "" : "s"}
+                        <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={s.is_active ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" } : { background: "rgba(248,113,113,0.15)", color: "#ef4444" }}>
+                          {s.is_active ? "Active" : "Expired"}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                        {s.currency} {s.price} · {formatDate(s.started_at)} → {formatDate(s.expires_at)}
+                      </p>
+                      <div className="mt-2 border-t pt-2" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                        {payment ? (
+                          <>
+                            <p className="text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
+                              Paid via {payment.gateway} on {formatDate(payment.created_at)}
+                              <span
+                                className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                                style={payment.status === "paid" ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" } : { background: "rgba(248,113,113,0.15)", color: "#f87171" }}
+                              >
+                                {payment.status}
+                              </span>
+                            </p>
+                            <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>
+                              Transaction ID: {payment.gateway_payment_id || "—"}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>No matching transaction record found.</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
-            <h4 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Payment History</h4>
-            {payments.length === 0 ? (
-              <p className="text-sm" style={{ color: "rgba(245,235,221,0.4)" }}>No payments.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {payments.map((p) => (
-                  <div key={p.id} className="rounded-lg p-3 text-sm" style={{ background: "rgba(245,235,221,0.03)" }}>
-                    <p style={{ color: COLORS.cream }}>
-                      {p.plan_name} — {p.duration_label} · {p.currency} {p.total_amount}
-                      <span
-                        className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
-                        style={
-                          p.status === "paid" ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" }
-                          : p.status === "failed" ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
-                          : { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }
-                        }
-                      >
-                        {p.status}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                      {p.gateway} · {formatDate(p.created_at)}
-                    </p>
+            {(() => {
+              const subscriptionIds = new Set(subscriptions.map((s) => s.id));
+              const otherPayments = payments.filter((p) => !p.subscription_id || !subscriptionIds.has(p.subscription_id));
+              if (otherPayments.length === 0) return null;
+              return (
+                <>
+                  <h4 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                    Other Transactions <span className="normal-case" style={{ color: "rgba(245,235,221,0.35)" }}>(pending / failed — didn't result in a subscription)</span>
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    {otherPayments.map((p) => (
+                      <div key={p.id} className="rounded-lg p-3 text-sm" style={{ background: "rgba(245,235,221,0.03)" }}>
+                        <p style={{ color: COLORS.cream }}>
+                          {p.plan_name} — {p.duration_label} · {p.currency} {p.total_amount}
+                          <span
+                            className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                            style={
+                              p.status === "paid" ? { background: "rgba(111,207,151,0.15)", color: "#6FCF97" }
+                              : p.status === "failed" ? { background: "rgba(248,113,113,0.15)", color: "#f87171" }
+                              : { background: "rgba(212,175,55,0.12)", color: COLORS.gold }
+                            }
+                          >
+                            {p.status}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                          {p.gateway} · {formatDate(p.created_at)}
+                        </p>
+                        <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>
+                          Transaction ID: {p.gateway_payment_id || "—"}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                </>
+              );
+            })()}
           </>
         )}
       </div>

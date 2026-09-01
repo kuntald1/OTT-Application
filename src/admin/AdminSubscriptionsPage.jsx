@@ -14,7 +14,7 @@ const TABS = [
 
 const BUCKET_STYLE = {
   active: { background: "rgba(111,207,151,0.15)", color: "#6FCF97" },
-  expired: { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" },
+  expired: { background: "rgba(248,113,113,0.15)", color: "#ef4444" },
   pending: { background: "rgba(212,175,55,0.12)", color: COLORS.gold },
   failed: { background: "rgba(248,113,113,0.15)", color: "#f87171" },
 };
@@ -110,6 +110,9 @@ export default function AdminSubscriptionsPage() {
               <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
                 {r.plan_name} — {r.duration_label} · {r.screens} screen{r.screens === 1 ? "" : "s"} · {formatDate(r.created_at)}
                 {r.subscription_expires_at && ` · expires ${formatDate(r.subscription_expires_at)}`}
+              </p>
+              <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>
+                Transaction ID: {r.gateway_payment_id || r.gateway_order_id || "—"}
               </p>
             </div>
           ))}

@@ -444,6 +444,8 @@ class AdminSubscriptionTransactionOut(BaseModel):
     total_amount: Decimal
     currency: str
     gateway: str
+    gateway_order_id: Optional[str] = None
+    gateway_payment_id: Optional[str] = None
     bucket: str
     subscription_expires_at: Optional[datetime] = None
     created_at: datetime
