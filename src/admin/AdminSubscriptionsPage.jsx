@@ -89,33 +89,59 @@ export default function AdminSubscriptionsPage() {
       ) : rows.length === 0 ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No transactions found.</p>
       ) : (
-        <div className="flex flex-col gap-3">
-          {rows.map((r) => (
-            <div key={r.payment_id} className="rounded-xl p-4" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: COLORS.cream }}>
-                    {r.customer_name}
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase" style={BUCKET_STYLE[r.bucket] || BUCKET_STYLE.pending}>
-                      {r.bucket}
-                    </span>
+        <div className="flex flex-col gap-4">
+          {(() => {
+            // Group every row by customer so one person's transactions
+            // sit together instead of interleaved with everyone else's
+            // by raw chronological order. Groups themselves stay ordered
+            // by that customer's most recent transaction, so the overall
+            // "newest activity first" feel is preserved.
+            const byCustomer = new Map();
+            rows.forEach((r) => {
+              if (!byCustomer.has(r.user_id)) byCustomer.set(r.user_id, []);
+              byCustomer.get(r.user_id).push(r);
+            });
+            const groups = Array.from(byCustomer.values());
+
+            return groups.map((group) => {
+              const first = group[0];
+              return (
+                <div key={first.user_id} className="rounded-xl p-3" style={{ background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.2)" }}>
+                  <p className="mb-2 flex items-baseline gap-2 px-1 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                    {first.customer_name}
+                    <span className="text-xs font-normal" style={{ color: "rgba(245,235,221,0.5)" }}>{first.customer_email}</span>
+                    {group.length > 1 && (
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}>
+                        {group.length} transactions
+                      </span>
+                    )}
                   </p>
-                  <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{r.customer_email}</p>
+                  <div className="flex flex-col gap-2">
+                    {group.map((r) => (
+                      <div key={r.payment_id} className="rounded-lg p-3" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.08)" }}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase" style={BUCKET_STYLE[r.bucket] || BUCKET_STYLE.pending}>
+                            {r.bucket}
+                          </span>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{r.currency} {r.total_amount}</p>
+                            <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{r.gateway}</p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                          {r.plan_name} — {r.duration_label} · {r.screens} screen{r.screens === 1 ? "" : "s"} · {formatDate(r.created_at)}
+                          {r.subscription_expires_at && ` · expires ${formatDate(r.subscription_expires_at)}`}
+                        </p>
+                        <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>
+                          Transaction ID: {r.gateway_payment_id || r.gateway_order_id || "—"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{r.currency} {r.total_amount}</p>
-                  <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{r.gateway}</p>
-                </div>
-              </div>
-              <p className="mt-2 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                {r.plan_name} — {r.duration_label} · {r.screens} screen{r.screens === 1 ? "" : "s"} · {formatDate(r.created_at)}
-                {r.subscription_expires_at && ` · expires ${formatDate(r.subscription_expires_at)}`}
-              </p>
-              <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.35)" }}>
-                Transaction ID: {r.gateway_payment_id || r.gateway_order_id || "—"}
-              </p>
-            </div>
-          ))}
+              );
+            });
+          })()}
         </div>
       )}
     </div>
