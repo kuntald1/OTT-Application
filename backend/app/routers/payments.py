@@ -15,29 +15,23 @@ from app.models import (
     SubscriptionPlan, Subscription, TaxConfig, RewardConfig,
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
+from app.duration_pricing import get_duration_months_and_discount
 from app.schemas import PaymentOut, CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest
 
 router = APIRouter(prefix="/payments", tags=["payments"])
-
-# Matches the duration options on the frontend's Subscription page
-_DURATION_MONTHS = {
-    "1 Month": (1, Decimal("0")),
-    "6 Months": (6, Decimal("0.10")),
-    "1 Year": (12, Decimal("0.20")),
-}
 
 
 def _round(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def _compute_pricing(plan: SubscriptionPlan, duration_label: str, screens: int, reward_points_requested: int, gst_percent: Decimal):
+def _compute_pricing(plan: SubscriptionPlan, duration_label: str, screens: int, reward_points_requested: int, gst_percent: Decimal, db: Session):
     """Server-side price recomputation — never trusts a price sent by the
     client. Mirrors SubscriptionPage.jsx's priceFor() logic (screens
     scaling + duration discount), then adds GST on top of the
     reward-discounted amount.
     """
-    months, discount = _DURATION_MONTHS.get(duration_label, (1, Decimal("0")))
+    months, discount = get_duration_months_and_discount(duration_label, db)
     monthly = plan.base_price + plan.per_extra_screen * (screens - 1)
     pre_rewards = _round(monthly * months * (1 - discount))
 
@@ -90,7 +84,7 @@ def create_razorpay_order(
     gst_percent = tax_row.gst_percent
 
     base_amount, reward_used, tax_amount, total = _compute_pricing(
-        plan, payload.duration_label, payload.screens, payload.reward_points_requested, gst_percent
+        plan, payload.duration_label, payload.screens, payload.reward_points_requested, gst_percent, db
     )
 
     if total <= 0:
@@ -184,7 +178,7 @@ def verify_razorpay_payment(
         Subscription.user_id == current_user.id, Subscription.is_active == True  # noqa: E712
     ).update({"is_active": False})
 
-    months, _ = _DURATION_MONTHS.get(payment.duration_label, (1, Decimal("0")))
+    months, _ = get_duration_months_and_discount(payment.duration_label, db)
     expires_at = datetime.now(timezone.utc) + timedelta(days=months * 30)
 
     subscription = Subscription(

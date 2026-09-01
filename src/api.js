@@ -755,6 +755,10 @@ export function fetchSubscriptionPlans() {
   return request("/subscription-plans");
 }
 
+export function fetchSubscriptionDurations() {
+  return request("/subscription-durations");
+}
+
 // Full-page redirects — these aren't fetch calls, the browser needs to
 // actually navigate so Google/Facebook's login screen can load.
 export function redirectToGoogleLogin() {

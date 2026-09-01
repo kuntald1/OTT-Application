@@ -200,6 +200,14 @@ class SubscriptionPlan(Base):
     # List of feature bullet strings, e.g. ["Unlimited access to all Play content", ...]
     features = Column(JSONB, nullable=False, default=list)
 
+    # Content access this plan grants — replaces the old convention of
+    # inferring access from the literal strings "Play"/"Archive"/"Both"
+    # in the plan's name (see routers/videos.py's _has_active_subscription_
+    # for_section), so an admin can freely rename or add plans without
+    # breaking what they unlock. "Both" is simply grants_play=grants_archive=True.
+    grants_play = Column(Boolean, nullable=False, default=False)
+    grants_archive = Column(Boolean, nullable=False, default=False)
+
     highlighted = Column(Boolean, nullable=False, default=False)  # shows "Best Value" badge
     display_order = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -207,6 +215,21 @@ class SubscriptionPlan(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class SubscriptionDuration(Base):
+    """Admin-editable billing-cycle options (1 Month, 6 Months -10%, ...)
+    shown on the Subscription page's duration picker — previously a
+    hardcoded array on both the frontend and backend.
+    """
+    __tablename__ = "subscription_durations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    label = Column(String(50), nullable=False, unique=True)  # "1 Month", "6 Months", ...
+    months = Column(Integer, nullable=False)
+    discount_percent = Column(Numeric(5, 2), nullable=False, default=0)  # e.g. 10 for "-10%"
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
 
 
 

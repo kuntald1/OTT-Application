@@ -333,10 +333,69 @@ class SubscriptionPlanOut(BaseModel):
     base_price_usd: Decimal
     per_extra_screen_usd: Decimal
     features: List[str]
+    grants_play: bool
+    grants_archive: bool
     highlighted: bool
     display_order: int
+    is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+class SubscriptionPlanCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    tagline: Optional[str] = None
+    base_price: Decimal = Field(ge=0)
+    per_extra_screen: Decimal = Field(default=0, ge=0)
+    base_price_usd: Decimal = Field(default=0, ge=0)
+    per_extra_screen_usd: Decimal = Field(default=0, ge=0)
+    features: List[str] = Field(default_factory=list)
+    grants_play: bool = False
+    grants_archive: bool = False
+    highlighted: bool = False
+    display_order: int = 0
+
+
+class SubscriptionPlanUpdate(BaseModel):
+    """All-optional — admin_plans.py only applies fields actually sent."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    tagline: Optional[str] = None
+    base_price: Optional[Decimal] = Field(default=None, ge=0)
+    per_extra_screen: Optional[Decimal] = Field(default=None, ge=0)
+    base_price_usd: Optional[Decimal] = Field(default=None, ge=0)
+    per_extra_screen_usd: Optional[Decimal] = Field(default=None, ge=0)
+    features: Optional[List[str]] = None
+    grants_play: Optional[bool] = None
+    grants_archive: Optional[bool] = None
+    highlighted: Optional[bool] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class SubscriptionDurationOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    months: int
+    discount_percent: Decimal
+    display_order: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SubscriptionDurationCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=50)
+    months: int = Field(ge=1, le=60)
+    discount_percent: Decimal = Field(default=0, ge=0, le=100)
+    display_order: int = 0
+
+
+class SubscriptionDurationUpdate(BaseModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    months: Optional[int] = Field(default=None, ge=1, le=60)
+    discount_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 
@@ -363,6 +422,10 @@ class TaxConfigOut(BaseModel):
     gst_percent: Decimal
 
     model_config = {"from_attributes": True}
+
+
+class TaxConfigUpdate(BaseModel):
+    gst_percent: Decimal = Field(ge=0, le=100)
 
 
 class CreateOrderRequest(BaseModel):

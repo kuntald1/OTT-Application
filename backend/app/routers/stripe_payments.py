@@ -13,23 +13,17 @@ from app.models import (
     SubscriptionPlan, Subscription, ExchangeRateConfig,
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
+from app.duration_pricing import get_duration_months_and_discount
 from app.schemas import PaymentOut, StripeCreateSessionRequest, StripeCreateSessionResponse, StripeConfirmRequest
 
 router = APIRouter(prefix="/payments/stripe", tags=["payments"])
-
-# Same duration/discount table as the Razorpay flow — kept in sync manually
-_DURATION_MONTHS = {
-    "1 Month": (1, Decimal("0")),
-    "6 Months": (6, Decimal("0.10")),
-    "1 Year": (12, Decimal("0.20")),
-}
 
 
 def _round2(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def _compute_usd_pricing(plan: SubscriptionPlan, duration_label: str, screens: int, reward_points_requested: int, inr_per_usd: Decimal):
+def _compute_usd_pricing(plan: SubscriptionPlan, duration_label: str, screens: int, reward_points_requested: int, inr_per_usd: Decimal, db: Session):
     """Server-side price recomputation in USD. GST does not apply outside
     India, so unlike the Razorpay flow there's no tax line here — the INR
     plan price is converted to USD via the fixed exchange rate, then the
@@ -39,7 +33,7 @@ def _compute_usd_pricing(plan: SubscriptionPlan, duration_label: str, screens: i
     earned, on the INR side of the business), so the redemption is
     converted to its USD-equivalent discount here.
     """
-    months, discount = _DURATION_MONTHS.get(duration_label, (1, Decimal("0")))
+    months, discount = get_duration_months_and_discount(duration_label, db)
     monthly_inr = plan.base_price + plan.per_extra_screen * (screens - 1)
     pre_rewards_inr = (monthly_inr * months * (1 - discount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
@@ -76,7 +70,7 @@ def create_stripe_checkout_session(
         )
     inr_per_usd = rate_row.inr_per_usd
 
-    amount_usd = _compute_usd_pricing(plan, payload.duration_label, payload.screens, payload.reward_points_requested, inr_per_usd)
+    amount_usd = _compute_usd_pricing(plan, payload.duration_label, payload.screens, payload.reward_points_requested, inr_per_usd, db)
     if amount_usd <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Total amount must be greater than zero.")
 
@@ -165,7 +159,7 @@ def confirm_stripe_payment(
         Subscription.user_id == current_user.id, Subscription.is_active == True  # noqa: E712
     ).update({"is_active": False})
 
-    months, _ = _DURATION_MONTHS.get(payment.duration_label, (1, Decimal("0")))
+    months, _ = get_duration_months_and_discount(payment.duration_label, db)
     expires_at = datetime.now(timezone.utc) + timedelta(days=months * 30)
 
     subscription = Subscription(

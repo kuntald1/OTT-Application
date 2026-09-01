@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig
+from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig
 from app.security import hash_password
 
 
@@ -86,6 +86,8 @@ def seed_subscription_plans(db):
             "base_price_usd": 2.99,
             "per_extra_screen_usd": 1.49,
             "features": ["Unlimited access to all Play content", "New titles added weekly"],
+            "grants_play": True,
+            "grants_archive": False,
             "highlighted": False,
             "display_order": 0,
         },
@@ -97,6 +99,8 @@ def seed_subscription_plans(db):
             "base_price_usd": 2.99,
             "per_extra_screen_usd": 1.49,
             "features": ["Unlimited access to old & restored footage", "Vintage recordings added regularly"],
+            "grants_play": False,
+            "grants_archive": True,
             "highlighted": False,
             "display_order": 1,
         },
@@ -108,6 +112,8 @@ def seed_subscription_plans(db):
             "base_price_usd": 4.49,
             "per_extra_screen_usd": 2.29,
             "features": ["Everything in Play", "Everything in Archive", "Best value vs buying separately"],
+            "grants_play": True,
+            "grants_archive": True,
             "highlighted": True,
             "display_order": 2,
         },
@@ -118,6 +124,18 @@ def seed_subscription_plans(db):
         if p["name"] in existing:
             continue
         db.add(SubscriptionPlan(**p))
+        count += 1
+
+    existing_durations = {d.label for d in db.query(SubscriptionDuration).all()}
+    durations = [
+        {"label": "1 Month", "months": 1, "discount_percent": 0, "display_order": 0},
+        {"label": "6 Months", "months": 6, "discount_percent": 10, "display_order": 1},
+        {"label": "1 Year", "months": 12, "discount_percent": 20, "display_order": 2},
+    ]
+    for d in durations:
+        if d["label"] in existing_durations:
+            continue
+        db.add(SubscriptionDuration(**d))
         count += 1
 
     db.commit()

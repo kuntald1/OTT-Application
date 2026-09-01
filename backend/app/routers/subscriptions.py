@@ -8,16 +8,10 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import User, Subscription
 from app.routers.videos import _billing_owner
+from app.duration_pricing import get_duration_months_and_discount
 from app.schemas import SubscriptionCreate, SubscriptionOut
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
-
-# Matches the duration options on the frontend's Subscription page
-_DURATION_MONTHS = {
-    "1 Month": 1,
-    "6 Months": 6,
-    "1 Year": 12,
-}
 
 
 def _months_to_days(months: int) -> int:
@@ -38,7 +32,7 @@ def activate_subscription(
         Subscription.user_id == current_user.id, Subscription.is_active == True  # noqa: E712
     ).update({"is_active": False})
 
-    months = _DURATION_MONTHS.get(payload.duration_label, 1)
+    months, _ = get_duration_months_and_discount(payload.duration_label, db)
     expires_at = datetime.now(timezone.utc) + timedelta(days=_months_to_days(months))
 
     subscription = Subscription(

@@ -8,7 +8,7 @@ from app.deps import get_current_user
 from app.models import (
     User, Video, VideoStatus, VideoMonetization, Subscription, PlaybackSession,
 )
-from app.routers.videos import _billing_owner
+from app.routers.videos import _billing_owner, _subscription_grants_section
 from app.schemas import (
     PlaybackSessionStartRequest, PlaybackSessionStartResponse, PlaybackSessionEndRequest,
 )
@@ -36,18 +36,17 @@ def _get_max_screens(video: Video, user: User, db: Session) -> int:
         return 1
 
     owner = _billing_owner(user, db)
-    required_plan = {"play": "Play", "archive": "Archive"}[video.section.value]
-    sub = (
+    active_subs = (
         db.query(Subscription)
         .filter(
             Subscription.user_id == owner.id,
             Subscription.is_active == True,  # noqa: E712
             Subscription.expires_at > datetime.now(timezone.utc),
-            Subscription.plan_name.in_([required_plan, "Both"]),
         )
-        .first()
+        .all()
     )
-    return sub.screens if sub else 1
+    matching = [s for s in active_subs if _subscription_grants_section(s, video.section, db)]
+    return max((s.screens for s in matching), default=1)
 
 
 @router.post("/{video_id}/playback-session/start", response_model=PlaybackSessionStartResponse)

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession, fetchMyVideoPurchases } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession, fetchMyVideoPurchases } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -13,19 +13,24 @@ import { fetchSubscriptionPlans, fetchSubscriptionHistory, fetchPaymentRecords, 
 // streaming pricing pages.
 // ---------------------------------------------------------------------------
 
-const DURATIONS = [
-  { id: "1m", label: "1 Month", months: 1, discount: 0 },
-  { id: "6m", label: "6 Months", months: 6, discount: 0.10 },
-  { id: "12m", label: "1 Year", months: 12, discount: 0.20 },
-];
+// ---------------------------------------------------------------------------
+// Subscription — plan catalog (name, pricing, features) now comes from
+// GET /api/subscription-plans (the `subscription_plans` database table,
+// admin-editable from Admin > Subscription Plans) instead of a hardcoded
+// array. Duration options (1/6/12 months, discount %) likewise come from
+// GET /api/subscription-durations (the `subscription_durations` table,
+// same admin page's Durations tab) instead of a hardcoded array. A
+// screens selector (1-5) scales the price on top of both.
+// ---------------------------------------------------------------------------
 
 const MAX_SCREENS = 5;
 
 export default function SubscriptionPage({ onBack }) {
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [durations, setDurations] = useState([]);
   const [screens, setScreens] = useState({});
-  const [durationId, setDurationId] = useState("1m");
+  const [durationId, setDurationId] = useState(null);
   const [useRewards, setUseRewards] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState("");
@@ -36,6 +41,18 @@ export default function SubscriptionPage({ onBack }) {
 
   const isIndia = profile.country === "India";
   const [exchangeRate, setExchangeRate] = useState(null);
+
+  useEffect(() => {
+    fetchSubscriptionDurations()
+      .then((data) => {
+        const mapped = data.map((d) => ({
+          id: d.id, label: d.label, months: d.months, discount: Number(d.discount_percent) / 100,
+        }));
+        setDurations(mapped);
+        if (mapped.length > 0) setDurationId((prev) => prev || mapped[0].id);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetchExchangeRate().then(setExchangeRate).catch(() => setExchangeRate({ inr_per_usd: 83.5 }));
@@ -124,7 +141,7 @@ export default function SubscriptionPage({ onBack }) {
   const formatDate = (iso) =>
     new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-  const duration = DURATIONS.find((d) => d.id === durationId);
+  const duration = durations.find((d) => d.id === durationId) || durations[0];
 
   const priceFor = (plan) => {
     const count = screens[plan.name] || 1;
@@ -206,7 +223,7 @@ export default function SubscriptionPage({ onBack }) {
 
         {/* Duration selector — applies to all three plans */}
         <div className="mx-auto mt-6 flex max-w-xs items-center justify-center gap-2 rounded-full p-1.5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-          {DURATIONS.map((d) => (
+          {durations.map((d) => (
             <button
               key={d.id}
               type="button"
@@ -265,7 +282,7 @@ export default function SubscriptionPage({ onBack }) {
           </button>
         )}
 
-        {plansLoading ? (
+        {plansLoading || durations.length === 0 ? (
           <p className="mx-auto mt-10 max-w-4xl text-center text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
             Loading plans…
           </p>

@@ -14,7 +14,7 @@ from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
-    Subscription, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
+    Subscription, SubscriptionPlan, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
     Ad, AdCuePoint, Menu, VideoSubtitle,
 )
 from app.schemas import (
@@ -85,6 +85,10 @@ def _fetch_and_cache_duration(video: Video, db: Session) -> None:
 
 # A subscription's plan_name covers a video's section if it's exactly
 # matched ("Play" plan -> "play" section) or the user bought "Both".
+# Used only as a fallback (see _subscription_grants_section) for
+# legacy Subscription rows whose plan was later deleted from the
+# catalog — new/renamed plans are read live from SubscriptionPlan
+# instead of this literal-name convention.
 _SECTION_TO_PLAN = {VideoSection.play: "Play", VideoSection.archive: "Archive"}
 
 
@@ -102,20 +106,36 @@ def _billing_owner(user: User, db: Session) -> User:
     return user
 
 
-def _has_active_subscription_for_section(user: User, section: VideoSection, db: Session) -> bool:
+def _subscription_grants_section(sub: Subscription, section: VideoSection, db: Session) -> bool:
+    """Whether an active Subscription row unlocks a given section —
+    reads the CURRENT plan definition's grants_play/grants_archive
+    (Admin > Subscription Plans), which is what makes plan management
+    fully dynamic: renaming a plan or changing its access doesn't
+    require touching this code. Falls back to the legacy "Play"/
+    "Archive"/"Both" literal-name convention only if the specific plan
+    that was purchased no longer exists in the catalog (e.g. deleted
+    after purchase) — an existing subscriber never loses access just
+    because the catalog changed.
+    """
+    plan = db.query(SubscriptionPlan).filter(SubscriptionPlan.name == sub.plan_name).first()
+    if plan:
+        return plan.grants_play if section == VideoSection.play else plan.grants_archive
     required_plan = _SECTION_TO_PLAN[section]
+    return sub.plan_name in (required_plan, "Both")
+
+
+def _has_active_subscription_for_section(user: User, section: VideoSection, db: Session) -> bool:
     owner = _billing_owner(user, db)
-    return (
+    active_subs = (
         db.query(Subscription)
         .filter(
             Subscription.user_id == owner.id,
             Subscription.is_active == True,  # noqa: E712
             Subscription.expires_at > datetime.now(timezone.utc),
-            Subscription.plan_name.in_([required_plan, "Both"]),
         )
-        .first()
-        is not None
+        .all()
     )
+    return any(_subscription_grants_section(sub, section, db) for sub in active_subs)
 
 
 def _has_active_subscription_any(user: User, db: Session) -> bool:

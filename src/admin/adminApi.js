@@ -759,3 +759,45 @@ export async function deleteAdminDonationRegistration(requestId) {
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't delete registration.");
   }
 }
+
+// --- Subscription Plan Management ---
+
+export function fetchAdminSubscriptionPlans() {
+  return request("/admin/subscription-plans", { auth: true });
+}
+
+export function createAdminSubscriptionPlan(payload) {
+  return request("/admin/subscription-plans", { method: "POST", auth: true, body: payload });
+}
+
+export function updateAdminSubscriptionPlan(planId, payload) {
+  return request(`/admin/subscription-plans/${planId}`, { method: "PUT", auth: true, body: payload });
+}
+
+export function toggleAdminSubscriptionPlan(planId) {
+  return request(`/admin/subscription-plans/${planId}/toggle`, { method: "PATCH", auth: true });
+}
+
+export function fetchAdminSubscriptionDurations() {
+  return request("/admin/subscription-plans/durations", { auth: true });
+}
+
+export function createAdminSubscriptionDuration(payload) {
+  return request("/admin/subscription-plans/durations", { method: "POST", auth: true, body: payload });
+}
+
+export function updateAdminSubscriptionDuration(durationId, payload) {
+  return request(`/admin/subscription-plans/durations/${durationId}`, { method: "PUT", auth: true, body: payload });
+}
+
+export function toggleAdminSubscriptionDuration(durationId) {
+  return request(`/admin/subscription-plans/durations/${durationId}/toggle`, { method: "PATCH", auth: true });
+}
+
+export function fetchAdminTaxConfig() {
+  return request("/admin/subscription-plans/tax", { auth: true });
+}
+
+export function updateAdminTaxConfig(gstPercent) {
+  return request("/admin/subscription-plans/tax", { method: "PUT", auth: true, body: { gst_percent: gstPercent } });
+}
