@@ -5,8 +5,9 @@ import { useApp } from "../context/AppContext";
 
 // ---------------------------------------------------------------------------
 // Help Center — reached from the profile menu. Three tabs: Message, Call,
-// Complain. Complain generates a ticket (stored in AppContext) with a
-// ticket number, details, and status — demo-only, no real support backend.
+// Complain. Both Message and Complain create a real Ticket on the backend
+// (Ticket.source distinguishes which tab it came from) — Admin > Help
+// Center is where these actually get read and worked on.
 // ---------------------------------------------------------------------------
 
 const TABS = [
@@ -89,8 +90,28 @@ const inputStyle = {
 };
 
 function MessageTab() {
+  const { addTicket } = useApp();
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSend = async () => {
+    setError("");
+    setSending(true);
+    try {
+      // Same Ticket backend as Complain (Ticket.source distinguishes the
+      // two in Admin > Help Center) — "General Message" is a fixed
+      // subject since this tab never asks the person for one, unlike
+      // Complain's dedicated Subject field.
+      await addTicket("General Message", message.trim(), "message");
+      setSent(true);
+    } catch (err) {
+      setError(err.message || "Couldn't send your message. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
 
   if (sent) {
     return (
@@ -112,14 +133,17 @@ function MessageTab() {
       <Field label="Your message">
         <textarea rows={5} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="How can we help?" style={{ ...inputStyle, resize: "vertical" }} />
       </Field>
+      {error && (
+        <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+      )}
       <button
         type="button"
-        disabled={!message.trim()}
-        onClick={() => setSent(true)}
+        disabled={!message.trim() || sending}
+        onClick={handleSend}
         className="rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
       >
-        Send message
+        {sending ? "Sending…" : "Send message"}
       </button>
     </Card>
   );
@@ -166,7 +190,7 @@ function ComplainTab() {
     setError("");
     setSubmitting(true);
     try {
-      const ticket = await addTicket(subject.trim(), description.trim());
+      const ticket = await addTicket(subject.trim(), description.trim(), "complaint");
       setLastTicket(ticket);
       setSubject("");
       setDescription("");

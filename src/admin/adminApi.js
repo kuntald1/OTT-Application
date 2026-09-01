@@ -821,3 +821,17 @@ export function fetchAdminSubscriptionTransactions({ statusFilter, search } = {}
   const qs = params.toString();
   return request(`/admin/subscriptions${qs ? `?${qs}` : ""}`, { auth: true });
 }
+
+// --- Help Center (tickets: Message + Complain) ---
+
+export function fetchAdminTickets({ source, statusFilter } = {}) {
+  const params = new URLSearchParams();
+  if (source) params.set("source", source);
+  if (statusFilter) params.set("status_filter", statusFilter);
+  const qs = params.toString();
+  return request(`/admin/tickets${qs ? `?${qs}` : ""}`, { auth: true });
+}
+
+export function updateAdminTicketStatus(ticketId, statusValue) {
+  return request(`/admin/tickets/${ticketId}/status`, { method: "PUT", auth: true, body: { status: statusValue } });
+}

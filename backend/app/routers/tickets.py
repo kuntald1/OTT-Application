@@ -1,11 +1,11 @@
 import random
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User, Ticket
+from app.models import User, Ticket, TicketSource
 from app.schemas import TicketCreate, TicketOut
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -27,11 +27,17 @@ def create_ticket(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    try:
+        source = TicketSource(payload.source)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid source.")
+
     ticket = Ticket(
         user_id=current_user.id,
         ticket_number=_generate_ticket_number(db),
         subject=payload.subject,
         description=payload.description,
+        source=source,
     )
     db.add(ticket)
     db.commit()

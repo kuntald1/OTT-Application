@@ -100,6 +100,11 @@ class TicketStatus(str, enum.Enum):
     closed = "Closed"
 
 
+class TicketSource(str, enum.Enum):
+    message = "message"       # Help Center > Message tab — quick, informal contact
+    complaint = "complaint"   # Help Center > Complain tab — formal, tracked issue
+
+
 class Ticket(Base):
     __tablename__ = "tickets"
 
@@ -113,6 +118,13 @@ class Ticket(Base):
     subject = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(Enum(TicketStatus), nullable=False, default=TicketStatus.open)
+
+    # Distinguishes Help Center's two async channels (Message vs Complain)
+    # so Admin > Help Center can tell them apart at a glance — both land
+    # in the exact same table/workflow otherwise. Defaults to "complaint"
+    # for backward compatibility with rows created before this column
+    # existed (all of which came from the Complain tab).
+    source = Column(Enum(TicketSource), nullable=False, default=TicketSource.complaint)
 
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

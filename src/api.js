@@ -140,11 +140,11 @@ export function resetPassword({ token, newPassword }) {
   });
 }
 
-export function createTicket({ subject, description }) {
+export function createTicket({ subject, description, source = "complaint" }) {
   return request("/tickets", {
     method: "POST",
     auth: true,
-    body: { subject, description },
+    body: { subject, description, source },
   });
 }
 

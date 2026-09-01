@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -17,6 +17,7 @@ import AdminDonationRegistrationsPage from "./AdminDonationRegistrationsPage";
 import AdminCastCrewPage from "./AdminCastCrewPage";
 import AdminSubscriptionPlansPage from "./AdminSubscriptionPlansPage";
 import AdminSubscriptionsPage from "./AdminSubscriptionsPage";
+import AdminHelpCenterPage from "./AdminHelpCenterPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -44,6 +45,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "donation-registrations", label: "Donation Registrations", icon: HandCoins, visible: true },
     { id: "subscription-plans", label: "Subscription Plans", icon: CreditCard, visible: isSuperadmin },
     { id: "subscriptions", label: "Subscriptions", icon: Receipt, visible: true },
+    { id: "help-center", label: "Help Center", icon: LifeBuoy, visible: true },
     { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
     { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
@@ -117,6 +119,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "donation-registrations" && <AdminDonationRegistrationsPage />}
           {activePage === "subscription-plans" && isSuperadmin && <AdminSubscriptionPlansPage />}
           {activePage === "subscriptions" && <AdminSubscriptionsPage />}
+          {activePage === "help-center" && <AdminHelpCenterPage />}
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}
           {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "categories" && isSuperadmin && <AdminCategoriesPage />}

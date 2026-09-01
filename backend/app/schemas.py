@@ -85,6 +85,7 @@ class MessageResponse(BaseModel):
 class TicketCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
     description: Optional[str] = None
+    source: str = Field(default="complaint")  # "message" | "complaint" — see TicketSource
 
 
 class TicketOut(BaseModel):
@@ -93,9 +94,27 @@ class TicketOut(BaseModel):
     subject: str
     description: Optional[str] = None
     status: TicketStatus
+    source: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AdminTicketOut(BaseModel):
+    """Same as TicketOut, plus who filed it — powers Admin > Help Center."""
+    id: uuid.UUID
+    ticket_number: str
+    customer_name: str
+    customer_email: str
+    subject: str
+    description: Optional[str] = None
+    status: TicketStatus
+    source: str
+    created_at: datetime
+
+
+class AdminTicketStatusUpdate(BaseModel):
+    status: TicketStatus
 
 
 class SubscriptionCreate(BaseModel):
