@@ -7,7 +7,6 @@ import {
   fetchRevenueByDay, fetchRevenueByCountry, fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
   fetchAnalyticsInsights,
 } from "./adminApi";
-import DateRangePicker, { defaultDateRange } from "./DateRangePicker";
 
 const COLORS = {
   panel: "#150307",
@@ -36,7 +35,6 @@ export default function AdminRevenuePage({ currentAdmin }) {
   // automation isn't wired up yet), and content performance analytics
   // (views/revenue per video, platform-wide).
   const [tab, setTab] = useState("withdrawals");
-  const [dateRange, setDateRange] = useState(defaultDateRange());
 
   const [withdrawals, setWithdrawals] = useState([]);
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(true);
@@ -81,7 +79,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
   const loadWithdrawals = () => {
     setWithdrawalsLoading(true);
-    fetchAdminWithdrawals(statusFilter || undefined, dateRange)
+    fetchAdminWithdrawals(statusFilter || undefined)
       .then(setWithdrawals)
       .catch(() => setWithdrawals([]))
       .finally(() => setWithdrawalsLoading(false));
@@ -90,18 +88,18 @@ export default function AdminRevenuePage({ currentAdmin }) {
   useEffect(() => {
     if (tab === "withdrawals") loadWithdrawals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, statusFilter, dateRange]);
+  }, [tab, statusFilter]);
 
   useEffect(() => {
     if (tab !== "performance") return;
     setPerformanceLoading(true);
-    fetchAdminContentPerformance(dateRange)
+    fetchAdminContentPerformance()
       .then(setPerformance)
       .catch(() => setPerformance([]))
       .finally(() => setPerformanceLoading(false));
 
     setSummaryLoading(true);
-    Promise.all([fetchAdminRevenueSummary(dateRange), fetchAdminRevenueByCreator(dateRange)])
+    Promise.all([fetchAdminRevenueSummary(), fetchAdminRevenueByCreator()])
       .then(([s, c]) => {
         setSummary(s);
         setByCreator(c);
@@ -111,7 +109,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
         setByCreator([]);
       })
       .finally(() => setSummaryLoading(false));
-  }, [tab, dateRange]);
+  }, [tab]);
 
   const loadInsights = (force = false) => {
     setInsightsLoading(true);
@@ -127,7 +125,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
   useEffect(() => {
     if (tab !== "analytics") return;
     setAnalyticsLoading(true);
-    Promise.all([fetchRevenueByDay(dateRange), fetchRevenueByCountry(dateRange)])
+    Promise.all([fetchRevenueByDay(30), fetchRevenueByCountry()])
       .then(([byDay, byCountry]) => {
         setRevenueByDay(byDay);
         setRevenueByCountry(byCountry);
@@ -139,7 +137,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
       .finally(() => setAnalyticsLoading(false));
 
     loadInsights(false);
-  }, [tab, dateRange]);
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== "settings" || !isSuperadmin) return;
@@ -303,12 +301,6 @@ export default function AdminRevenuePage({ currentAdmin }) {
           </button>
         )}
       </div>
-
-      {tab !== "settings" && (
-        <div className="mb-6">
-          <DateRangePicker startDate={dateRange.startDate} endDate={dateRange.endDate} onChange={setDateRange} />
-        </div>
-      )}
 
       {error && <p className="mb-4 text-sm" style={{ color: "#f87171" }}>{error}</p>}
 

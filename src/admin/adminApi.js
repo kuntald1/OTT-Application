@@ -298,12 +298,10 @@ function _dateRangeQuery({ startDate, endDate } = {}) {
 }
 
 // Revenue Sharing Management — withdrawal request review + payment
-// tracking, and platform-wide content performance analytics.
-export function fetchAdminWithdrawals(statusFilter, dateRange) {
-  const params = new URLSearchParams(_dateRangeQuery(dateRange));
-  if (statusFilter) params.set("status_filter", statusFilter);
-  const qs = params.toString();
-  return request(`/admin/revenue/withdrawals${qs ? `?${qs}` : ""}`, { auth: true });
+// tracking, and platform-wide content performance analytics. All-time
+// (deliberately not date-range scoped, unlike Dashboard/Reports).
+export function fetchAdminWithdrawals(statusFilter) {
+  return request(`/admin/revenue/withdrawals${statusFilter ? `?status_filter=${statusFilter}` : ""}`, { auth: true });
 }
 
 export function approveWithdrawal(withdrawalId, adminNote) {
@@ -330,9 +328,8 @@ export function rejectWithdrawal(withdrawalId, adminNote) {
   });
 }
 
-export function fetchAdminContentPerformance(dateRange) {
-  const qs = _dateRangeQuery(dateRange);
-  return request(`/admin/revenue/content-performance${qs ? `?${qs}` : ""}`, { auth: true });
+export function fetchAdminContentPerformance() {
+  return request(`/admin/revenue/content-performance`, { auth: true });
 }
 
 // Category management — powers the Admin > Categories page. Every
@@ -413,14 +410,12 @@ export function deleteAdminCategory(categoryId) {
 }
 
 // Revenue Summary (platform-wide KPIs) + Revenue Share Report (per creator).
-export function fetchAdminRevenueSummary(dateRange) {
-  const qs = _dateRangeQuery(dateRange);
-  return request(`/admin/revenue/summary${qs ? `?${qs}` : ""}`, { auth: true });
+export function fetchAdminRevenueSummary() {
+  return request(`/admin/revenue/summary`, { auth: true });
 }
 
-export function fetchAdminRevenueByCreator(dateRange) {
-  const qs = _dateRangeQuery(dateRange);
-  return request(`/admin/revenue/by-creator${qs ? `?${qs}` : ""}`, { auth: true });
+export function fetchAdminRevenueByCreator() {
+  return request(`/admin/revenue/by-creator`, { auth: true });
 }
 
 // Platform default rate + commission — superadmin-only editing.
@@ -440,14 +435,12 @@ export function updateAdminRevenueConfig({ ratePaisaPerMinute, platformCommissio
 }
 
 // Revenue analytics — real data from RevenueLedgerEntry, not estimates.
-export function fetchRevenueByDay(dateRange) {
-  const qs = _dateRangeQuery(dateRange);
-  return request(`/admin/revenue/analytics/by-day${qs ? `?${qs}` : ""}`, { auth: true });
+export function fetchRevenueByDay(days = 30) {
+  return request(`/admin/revenue/analytics/by-day?days=${days}`, { auth: true });
 }
 
-export function fetchRevenueByCountry(dateRange) {
-  const qs = _dateRangeQuery(dateRange);
-  return request(`/admin/revenue/analytics/by-country${qs ? `?${qs}` : ""}`, { auth: true });
+export function fetchRevenueByCountry() {
+  return request(`/admin/revenue/analytics/by-country`, { auth: true });
 }
 
 // AI content optimization — Claude-powered title/description/category
