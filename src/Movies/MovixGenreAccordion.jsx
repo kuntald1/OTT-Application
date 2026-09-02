@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Play, Info, Sunset, CalendarDays, Users, Moon, X, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, HERO_HEIGHT_CLASS } from "../theme";
+import { fetchArchiveHeroSlides } from "../api";
 import tonightPoster from "../assets/posters/originals.jpg";
 import bingePoster from "../assets/posters/series.jpg";
 import familyPoster from "../assets/posters/family.jpg";
@@ -24,6 +25,16 @@ import lateNightPoster from "../assets/posters/films.jpg";
 // Click behavior: onSelectGenre(genre) fires when a panel is clicked —
 // wire this to your router/navigation. Left as a callback rather than
 // hardcoded navigation since this is a component, not a full app.
+//
+// Image/label/title/blurb for these 4 panels are admin-editable — see
+// Admin > Archive Hero Slides (the same GET /archive-hero-slides used
+// elsewhere), matched onto these 4 fixed slots BY POSITION (slide 0 ->
+// watch-tonight, slide 1 -> weekend-binge, etc.). The slot's id/icon/
+// tint/accent/number stay hardcoded here since they're wired to deeper
+// functionality (MOOD_CONTENT below, keyed by these exact 4 ids, powers
+// the Browse/Details overlay) — only content, not structure, is dynamic.
+// A slot falls back to its original built-in image/text if fewer than
+// 4 admin slides exist yet, so nothing ever renders broken/empty.
 // ---------------------------------------------------------------------------
 
 const NAVY_DEEP = COLORS.black;
@@ -35,7 +46,7 @@ const TEAL = COLORS.gold;
 // unrelated to the page background.
 const ARCHIVE_BG = "#4A2A0A";
 
-const GENRES = [
+const BASE_GENRES = [
   {
     id: "watch-tonight",
     number: "01",
@@ -81,6 +92,23 @@ const GENRES = [
     poster: lateNightPoster,
   },
 ];
+
+// Merges admin-uploaded slides (by position) onto the 4 fixed base slots —
+// a slide only overrides poster/label/title/blurb, never id/icon/tint/
+// accent/number.
+function buildGenres(slides) {
+  return BASE_GENRES.map((base, i) => {
+    const slide = slides[i];
+    if (!slide) return base;
+    return {
+      ...base,
+      poster: slide.image_url,
+      label: slide.eyebrow || base.label,
+      title: slide.headline || base.title,
+      blurb: slide.subtext || base.blurb,
+    };
+  });
+}
 
 // Placeholder catalog content per mood, purely for demo purposes — original
 // fictional titles, synopses, cast/crew names, and reviews (no real film/
@@ -301,10 +329,16 @@ function GenreArt({ genreId, accent }) {
 }
 
 export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
+  const [slides, setSlides] = useState([]);
+  useEffect(() => {
+    fetchArchiveHeroSlides().then(setSlides).catch(() => setSlides([]));
+  }, []);
+  const genres = buildGenres(slides);
+
   const [hovered, setHovered] = useState(null);
   // { type: 'browse' | 'details', genreId } | null
   const [overlay, setOverlay] = useState(null);
-  const activeGenre = overlay ? GENRES.find((g) => g.id === overlay.genreId) : null;
+  const activeGenre = overlay ? genres.find((g) => g.id === overlay.genreId) : null;
 
   return (
     <section
@@ -313,7 +347,7 @@ export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
     >
       {/* The accordion itself */}
       <div className="flex h-full w-full">
-        {GENRES.map((genre) => {
+        {genres.map((genre) => {
           const Icon = genre.icon;
           const isHovered = hovered === genre.id;
           const isAnyHovered = hovered !== null;
