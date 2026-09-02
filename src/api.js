@@ -905,8 +905,8 @@ export function fetchPageHero(pageKey) {
   return request(`/page-heroes/${pageKey}`);
 }
 
-// --- Ticketing Portraits (featured people strip, admin-managed) ---
+// --- Theater Hero Slides (TheaterHero.jsx carousel, admin-managed) ---
 
-export function fetchTicketingPortraits() {
-  return request("/ticketing-portraits");
+export function fetchTheaterHeroSlides() {
+  return request("/theater-hero-slides");
 }

@@ -946,21 +946,24 @@ export function deleteAdminPageHeroMedia(pageKey, mediaId) {
   return request(`/admin/page-heroes/${pageKey}/media/${mediaId}`, { method: "DELETE", auth: true });
 }
 
-// --- Ticketing Portraits ---
+// --- Theater Hero Slides (TheaterHero.jsx carousel) ---
 
-export function fetchAdminTicketingPortraits() {
-  return request("/admin/ticketing-portraits", { auth: true });
+export function fetchAdminTheaterHeroSlides() {
+  return request("/admin/theater-hero-slides", { auth: true });
 }
 
-export function createAdminTicketingPortrait(imageFile, caption, onProgress) {
+export function createAdminTheaterHeroSlide(imageFile, { category, venue, title, synopsis }, onProgress) {
   const token = getAdminToken();
   const formData = new FormData();
   formData.append("image", imageFile);
-  formData.append("caption", caption || "");
+  formData.append("category", category || "");
+  formData.append("venue", venue || "");
+  formData.append("title", title);
+  formData.append("synopsis", synopsis || "");
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${BASE_URL}/admin/ticketing-portraits`);
+    xhr.open("POST", `${BASE_URL}/admin/theater-hero-slides`);
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
@@ -976,10 +979,12 @@ export function createAdminTicketingPortrait(imageFile, caption, onProgress) {
   });
 }
 
-export function updateAdminTicketingPortraitCaption(portraitId, caption) {
-  return request(`/admin/ticketing-portraits/${portraitId}`, { method: "PUT", auth: true, body: { caption: caption || "" } });
+export function updateAdminTheaterHeroSlideText(slideId, { category, venue, title, synopsis }) {
+  return request(`/admin/theater-hero-slides/${slideId}`, {
+    method: "PUT", auth: true, body: { category: category || null, venue: venue || null, title, synopsis: synopsis || null },
+  });
 }
 
-export function deleteAdminTicketingPortrait(portraitId) {
-  return request(`/admin/ticketing-portraits/${portraitId}`, { method: "DELETE", auth: true });
+export function deleteAdminTheaterHeroSlide(slideId) {
+  return request(`/admin/theater-hero-slides/${slideId}`, { method: "DELETE", auth: true });
 }

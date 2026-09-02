@@ -1460,14 +1460,20 @@ class PageHeroOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class TicketingPortraitOut(BaseModel):
+class TheaterHeroSlideOut(BaseModel):
     id: uuid.UUID
     image_url: str
-    caption: Optional[str] = None
+    category: Optional[str] = None
+    venue: Optional[str] = None
+    title: str
+    synopsis: Optional[str] = None
     display_order: int
 
     model_config = {"from_attributes": True}
 
 
-class TicketingPortraitCaptionUpdate(BaseModel):
-    caption: str = ""
+class TheaterHeroSlideTextUpdate(BaseModel):
+    category: Optional[str] = None
+    venue: Optional[str] = None
+    title: str = Field(min_length=1, max_length=255)
+    synopsis: Optional[str] = None

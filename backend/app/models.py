@@ -1530,20 +1530,25 @@ class PageHeroMedia(Base):
     )
 
 
-class TicketingPortrait(Base):
-    """The circular "featured people" strip at the top of the Ticketing
-    page — a gallery of (image, optional caption) items, NOT a
-    background hero. Fully admin-managed (Admin > Ticketing Portraits):
-    add a photo, optionally give it a short caption, delete or
-    reorder any time — no rebuild needed. One image serves both the
-    small circular thumbnail and any larger display, resized by CSS
-    rather than storing two separate files per portrait.
+class TheaterHeroSlide(Base):
+    """Replaces the old hardcoded SHOWS array (src/Theater/showsData.js)
+    that powered TheaterHero.jsx — the auto-advancing full-bleed
+    carousel at the top of Ticketing, with its bottom row of small
+    circular thumbnails to jump between slides. Was previously 8
+    baked-in demo shows with a "large" and "small" copy of the same
+    photo per show (src/Theater/assets/portraits/{large,small}/); now
+    fully admin-managed (Admin > Ticketing Hero Slides). One uploaded
+    image serves both the large background AND the small circular
+    thumbnail — resized by CSS, no need for two separate files.
     """
-    __tablename__ = "ticketing_portraits"
+    __tablename__ = "theater_hero_slides"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     image_url = Column(String(500), nullable=False)
-    caption = Column(String(255), nullable=True)
+    category = Column(String(100), nullable=True)
+    venue = Column(String(255), nullable=True)
+    title = Column(String(255), nullable=False)
+    synopsis = Column(Text, nullable=True)
     display_order = Column(Integer, nullable=False, default=0)
 
     created_at = Column(
