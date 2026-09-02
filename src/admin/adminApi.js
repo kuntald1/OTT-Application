@@ -945,3 +945,41 @@ export function addAdminPageHeroMedia(pageKey, files, onProgress) {
 export function deleteAdminPageHeroMedia(pageKey, mediaId) {
   return request(`/admin/page-heroes/${pageKey}/media/${mediaId}`, { method: "DELETE", auth: true });
 }
+
+// --- Ticketing Portraits ---
+
+export function fetchAdminTicketingPortraits() {
+  return request("/admin/ticketing-portraits", { auth: true });
+}
+
+export function createAdminTicketingPortrait(imageFile, caption, onProgress) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("image", imageFile);
+  formData.append("caption", caption || "");
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE_URL}/admin/ticketing-portraits`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload. Please try again."));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — check your connection and try again."));
+    xhr.send(formData);
+  });
+}
+
+export function updateAdminTicketingPortraitCaption(portraitId, caption) {
+  return request(`/admin/ticketing-portraits/${portraitId}`, { method: "PUT", auth: true, body: { caption: caption || "" } });
+}
+
+export function deleteAdminTicketingPortrait(portraitId) {
+  return request(`/admin/ticketing-portraits/${portraitId}`, { method: "DELETE", auth: true });
+}

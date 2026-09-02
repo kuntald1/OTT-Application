@@ -904,3 +904,9 @@ export function deactivateSubAccount(subAccountId) {
 export function fetchPageHero(pageKey) {
   return request(`/page-heroes/${pageKey}`);
 }
+
+// --- Ticketing Portraits (featured people strip, admin-managed) ---
+
+export function fetchTicketingPortraits() {
+  return request("/ticketing-portraits");
+}

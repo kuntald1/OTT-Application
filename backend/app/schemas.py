@@ -1458,3 +1458,16 @@ class PageHeroOut(BaseModel):
     subtext: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class TicketingPortraitOut(BaseModel):
+    id: uuid.UUID
+    image_url: str
+    caption: Optional[str] = None
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class TicketingPortraitCaptionUpdate(BaseModel):
+    caption: str = ""

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Ticket, Info, Plus, Check, X, MapPin, Calendar, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
-import { fetchApprovedEvents } from "../api";
+import { fetchApprovedEvents, fetchTicketingPortraits } from "../api";
 import { useApp } from "../context/AppContext";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
 
@@ -134,6 +134,11 @@ export default function TheaterBrowsePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const [portraits, setPortraits] = useState([]);
+  useEffect(() => {
+    fetchTicketingPortraits().then(setPortraits).catch(() => setPortraits([]));
+  }, []);
+
   const VENUES = useMemo(() => {
     const unique = new Set(shows.map((s) => s.venue));
     return Array.from(unique).sort();
@@ -162,6 +167,24 @@ export default function TheaterBrowsePage() {
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+        {portraits.length > 0 && (
+          <div className="mb-6 flex gap-4 overflow-x-auto pb-2">
+            {portraits.map((p) => (
+              <div key={p.id} className="flex flex-shrink-0 flex-col items-center gap-1.5" style={{ width: 76 }}>
+                <img
+                  src={p.image_url}
+                  alt={p.caption || ""}
+                  className="h-16 w-16 rounded-full object-cover"
+                  style={{ border: "1px solid rgba(255,255,255,0.15)" }}
+                />
+                {p.caption && (
+                  <p className="max-w-full truncate text-center text-[11px]" style={{ color: T.textFaint }}>{p.caption}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Mobile filter toggle */}
         <button
           type="button"

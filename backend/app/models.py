@@ -1528,3 +1528,24 @@ class PageHeroMedia(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class TicketingPortrait(Base):
+    """The circular "featured people" strip at the top of the Ticketing
+    page — a gallery of (image, optional caption) items, NOT a
+    background hero. Fully admin-managed (Admin > Ticketing Portraits):
+    add a photo, optionally give it a short caption, delete or
+    reorder any time — no rebuild needed. One image serves both the
+    small circular thumbnail and any larger display, resized by CSS
+    rather than storing two separate files per portrait.
+    """
+    __tablename__ = "ticketing_portraits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    image_url = Column(String(500), nullable=False)
+    caption = Column(String(255), nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
