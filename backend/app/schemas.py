@@ -40,6 +40,20 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class ChangePasswordRequest(BaseModel):
+    """Self-service, from an already-logged-in session (Manage Profile) —
+    distinct from ResetPasswordRequest above (forgot-password email
+    link, no active session) and from AdminUserSetPasswordRequest (an
+    admin resetting someone ELSE's password, no old_password needed
+    since the admin already has elevated trust). This one requires the
+    current password precisely because the person IS logged in and
+    could otherwise silently take over the account from an unattended
+    session.
+    """
+    old_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     email: Optional[EmailStr] = None

@@ -203,6 +203,10 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 const trimmed = localQuery.trim();
+                if (currentSection === "ticketing") {
+                  onNavigate?.("theater", { q: trimmed || undefined });
+                  return;
+                }
                 if (trimmed) {
                   onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
                 } else {
@@ -217,6 +221,10 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               type="button"
               onClick={() => {
                 const trimmed = localQuery.trim();
+                if (currentSection === "ticketing") {
+                  onNavigate?.("theater", { q: trimmed || undefined });
+                  return;
+                }
                 if (trimmed) {
                   onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
                 } else {

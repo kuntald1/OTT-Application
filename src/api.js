@@ -98,6 +98,14 @@ export function updateCurrentUser({ name, email, phone }) {
   });
 }
 
+export function changePassword({ oldPassword, newPassword }) {
+  return request("/auth/me/password", {
+    method: "PUT",
+    auth: true,
+    body: { old_password: oldPassword, new_password: newPassword },
+  });
+}
+
 // File upload — deliberately NOT using the shared `request()` helper above,
 // since it always sets Content-Type: application/json. For multipart
 // uploads the browser must set its own Content-Type (with the boundary),

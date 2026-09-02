@@ -19,6 +19,7 @@ from app.schemas import (
     Token,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    ChangePasswordRequest,
     MessageResponse,
     UserUpdate,
     VerifyOtpLoginRequest,
@@ -201,6 +202,25 @@ def login_with_otp(payload: VerifyOtpLoginRequest, db: Session = Depends(get_db)
 @router.get("/me", response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.put("/me/password", response_model=MessageResponse)
+def change_own_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not current_user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account signed in with Google or Facebook and doesn't have a password to change.",
+        )
+    if not verify_password(payload.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return MessageResponse(message="Password changed successfully.")
 
 
 @router.put("/me", response_model=UserOut)

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, ArrowLeft, Users, Plus, UserX } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount } from "../api";
+import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword } from "../api";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,37 @@ export default function ManageProfilePage({ onBack }) {
   const [error, setError] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
+
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  const handleChangePassword = async () => {
+    setPasswordError("");
+    setPasswordSaved(false);
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirm password don't match.");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await changePassword({ oldPassword, newPassword });
+      setOldPassword(""); setNewPassword(""); setConfirmPassword("");
+      setPasswordSaved(true);
+      setTimeout(() => setPasswordSaved(false), 4000);
+    } catch (err) {
+      setPasswordError(err.message || "Couldn't change password. Please try again.");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   const handleSave = async () => {
     setError("");
@@ -200,6 +231,47 @@ export default function ManageProfilePage({ onBack }) {
             {saved && (
               <span className="flex items-center gap-1.5 text-sm" style={{ color: "#6FCF97" }}>
                 <CheckCircle2 className="h-4 w-4" /> Saved
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mb-8" />
+        <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+            <Lock className="h-4 w-4" style={{ color: COLORS.gold }} /> Change Password
+          </h2>
+
+          <div className="mb-4">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Old Password</label>
+            <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} style={inputStyle} />
+          </div>
+          <div className="mb-4">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>New Password</label>
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 8 characters" style={inputStyle} />
+          </div>
+          <div className="mb-6">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Confirm Password</label>
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={inputStyle} />
+          </div>
+
+          {passwordError && (
+            <div className="mb-4 rounded-lg px-3 py-2 text-sm font-medium" style={{ background: "rgba(255,255,255,0.95)", color: "#b91c1c", border: "1px solid rgba(185,28,28,0.3)" }}>{passwordError}</div>
+          )}
+
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              disabled={!oldPassword || !newPassword || !confirmPassword || changingPassword}
+              onClick={handleChangePassword}
+              className="rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+            >
+              {changingPassword ? "Changing…" : "Change Password"}
+            </button>
+            {passwordSaved && (
+              <span className="flex items-center gap-1.5 text-sm" style={{ color: "#6FCF97" }}>
+                <CheckCircle2 className="h-4 w-4" /> Password changed
               </span>
             )}
           </div>

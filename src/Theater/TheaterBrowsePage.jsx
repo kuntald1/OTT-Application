@@ -115,7 +115,7 @@ function toggleInSet(set, value) {
   return next;
 }
 
-export default function TheaterBrowsePage() {
+export default function TheaterBrowsePage({ searchQuery }) {
   const modal = useAnimatedModal();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState(new Set());
@@ -140,14 +140,19 @@ export default function TheaterBrowsePage() {
   }, [shows]);
 
   const filtered = useMemo(() => {
+    const q = (searchQuery || "").trim().toLowerCase();
     return shows.filter((s) => {
       if (categoryFilter.size > 0 && !categoryFilter.has(s.category)) return false;
       if (venueFilter.size > 0 && !venueFilter.has(s.venue)) return false;
       if (dateFilter && s.dateTag !== dateFilter) return false;
       if (priceFilter && s.priceTag !== priceFilter) return false;
+      if (q) {
+        const haystack = `${s.title} ${s.venue} ${s.category}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       return true;
     });
-  }, [shows, categoryFilter, venueFilter, dateFilter, priceFilter]);
+  }, [shows, categoryFilter, venueFilter, dateFilter, priceFilter, searchQuery]);
 
   const activeFilterCount =
     categoryFilter.size + venueFilter.size + (dateFilter ? 1 : 0) + (priceFilter ? 1 : 0);

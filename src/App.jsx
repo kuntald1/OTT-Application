@@ -98,6 +98,7 @@ export default function App() {
   useEffect(() => {
     if (route.view === 'hero') setLastSection('play')
     else if (route.view === 'accordion') setLastSection('archive')
+    else if (route.view === 'theater') setLastSection('ticketing')
   }, [route.view])
 
   const navigate = (view, params = {}) => {
@@ -184,7 +185,7 @@ export default function App() {
         ) : route.view === 'theater' ? (
           <div>
             <TheaterHero />
-            <TheaterBrowsePage />
+            <TheaterBrowsePage searchQuery={route.params.q} />
           </div>
         ) : route.view === 'archive' ? (
           <div>
