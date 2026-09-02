@@ -285,10 +285,25 @@ export async function uploadAdminVideoPoster(videoId, file) {
   return data;
 }
 
+// Shared by every Revenue Sharing Management fetch below — builds the
+// ?start_date=&end_date= query string the backend's app/date_range.py
+// expects (both optional; the backend itself defaults to the last 1
+// month when omitted, but pages always pass an explicit range once
+// DateRangePicker has mounted).
+function _dateRangeQuery({ startDate, endDate } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  return params.toString();
+}
+
 // Revenue Sharing Management — withdrawal request review + payment
 // tracking, and platform-wide content performance analytics.
-export function fetchAdminWithdrawals(statusFilter) {
-  return request(`/admin/revenue/withdrawals${statusFilter ? `?status_filter=${statusFilter}` : ""}`, { auth: true });
+export function fetchAdminWithdrawals(statusFilter, dateRange) {
+  const params = new URLSearchParams(_dateRangeQuery(dateRange));
+  if (statusFilter) params.set("status_filter", statusFilter);
+  const qs = params.toString();
+  return request(`/admin/revenue/withdrawals${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 export function approveWithdrawal(withdrawalId, adminNote) {
@@ -315,8 +330,9 @@ export function rejectWithdrawal(withdrawalId, adminNote) {
   });
 }
 
-export function fetchAdminContentPerformance() {
-  return request(`/admin/revenue/content-performance`, { auth: true });
+export function fetchAdminContentPerformance(dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/revenue/content-performance${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 // Category management — powers the Admin > Categories page. Every
@@ -397,12 +413,14 @@ export function deleteAdminCategory(categoryId) {
 }
 
 // Revenue Summary (platform-wide KPIs) + Revenue Share Report (per creator).
-export function fetchAdminRevenueSummary() {
-  return request(`/admin/revenue/summary`, { auth: true });
+export function fetchAdminRevenueSummary(dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/revenue/summary${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
-export function fetchAdminRevenueByCreator() {
-  return request(`/admin/revenue/by-creator`, { auth: true });
+export function fetchAdminRevenueByCreator(dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/revenue/by-creator${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 // Platform default rate + commission — superadmin-only editing.
@@ -422,12 +440,14 @@ export function updateAdminRevenueConfig({ ratePaisaPerMinute, platformCommissio
 }
 
 // Revenue analytics — real data from RevenueLedgerEntry, not estimates.
-export function fetchRevenueByDay(days = 30) {
-  return request(`/admin/revenue/analytics/by-day?days=${days}`, { auth: true });
+export function fetchRevenueByDay(dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/revenue/analytics/by-day${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
-export function fetchRevenueByCountry() {
-  return request(`/admin/revenue/analytics/by-country`, { auth: true });
+export function fetchRevenueByCountry(dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/revenue/analytics/by-country${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 // AI content optimization — Claude-powered title/description/category
@@ -838,19 +858,22 @@ export function updateAdminTicketStatus(ticketId, statusValue) {
 
 // --- Dashboard ---
 
-export function fetchAdminDashboardSummary() {
-  return request("/admin/dashboard/summary", { auth: true });
+export function fetchAdminDashboardSummary(dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/dashboard/summary${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 // --- Reports and Analytics ---
 
-export function fetchAdminReport(reportType) {
-  return request(`/admin/reports/${reportType}`, { auth: true });
+export function fetchAdminReport(reportType, dateRange) {
+  const qs = _dateRangeQuery(dateRange);
+  return request(`/admin/reports/${reportType}${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
-export async function downloadAdminReportCsv(reportType) {
+export async function downloadAdminReportCsv(reportType, dateRange) {
   const token = getAdminToken();
-  const res = await fetch(`${BASE_URL}/admin/reports/${reportType}/export`, {
+  const qs = _dateRangeQuery(dateRange);
+  const res = await fetch(`${BASE_URL}/admin/reports/${reportType}/export${qs ? `?${qs}` : ""}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {

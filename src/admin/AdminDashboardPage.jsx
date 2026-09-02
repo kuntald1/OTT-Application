@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { LayoutDashboard, Users, CreditCard, Clapperboard, CalendarCheck, Receipt, IndianRupee, Clock } from "lucide-react";
 import { fetchAdminDashboardSummary } from "./adminApi";
+import DateRangePicker, { defaultDateRange } from "./DateRangePicker";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -18,25 +19,31 @@ function Card({ icon: Icon, label, value, sub, accent }) {
 }
 
 export default function AdminDashboardPage() {
+  const [dateRange, setDateRange] = useState(defaultDateRange());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchAdminDashboardSummary()
+    setLoading(true);
+    fetchAdminDashboardSummary(dateRange)
       .then(setData)
       .catch((err) => setError(err.message || "Couldn't load the dashboard."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [dateRange]);
 
   return (
     <div>
       <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold" style={{ color: COLORS.cream }}>
         <LayoutDashboard className="h-6 w-6" style={{ color: COLORS.gold }} /> Dashboard
       </h1>
-      <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+      <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
         A summary of customers, subscriptions, content, events, and revenue across theomy.
       </p>
+
+      <div className="mb-6">
+        <DateRangePicker startDate={dateRange.startDate} endDate={dateRange.endDate} onChange={setDateRange} />
+      </div>
 
       {loading ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>

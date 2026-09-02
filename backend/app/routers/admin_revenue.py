@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.date_range import parse_date_range
 from app.deps import get_current_admin, get_current_superadmin
 from app.models import (
     AdminUser, User, Video, VideoWatchRecord, WithdrawalRequest, WithdrawalStatus, CreatorEarnings,
@@ -39,15 +40,24 @@ def _to_admin_withdrawal_out(w: WithdrawalRequest, creator: User) -> AdminWithdr
 @router.get("/withdrawals", response_model=list[AdminWithdrawalOut])
 def list_withdrawals(
     status_filter: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Withdrawal request & payment tracking — the admin side of the
     creator's /revenue/withdrawals list. status_filter (pending/
-    approved/rejected/paid) narrows the list; omitted shows everything,
-    most recent request first.
+    approved/rejected/paid) narrows the list; omitted shows everything.
+    Scoped to [start_date, end_date] against requested_at — no dates
+    given defaults to the last 1 month (see app/date_range.py). Most
+    recent request first.
     """
-    query = db.query(WithdrawalRequest, User).join(User, User.id == WithdrawalRequest.creator_user_id)
+    start, end = parse_date_range(start_date, end_date)
+    query = (
+        db.query(WithdrawalRequest, User)
+        .join(User, User.id == WithdrawalRequest.creator_user_id)
+        .filter(WithdrawalRequest.requested_at >= start, WithdrawalRequest.requested_at <= end)
+    )
     if status_filter:
         try:
             query = query.filter(WithdrawalRequest.status == WithdrawalStatus(status_filter))
@@ -216,24 +226,25 @@ def update_revenue_config(
 
 @router.get("/analytics/by-day", response_model=list[RevenueByDayOut])
 def get_revenue_by_day(
-    days: int = 30,
+    start_date: str | None = None,
+    end_date: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Real day-by-day revenue trend — built from RevenueLedgerEntry,
     which logs every individual crediting event (not the running totals
-    VideoWatchRecord holds). Platform-wide, most recent day last.
+    VideoWatchRecord holds). Scoped to [start_date, end_date] — no
+    dates given defaults to the last 1 month (see app/date_range.py).
+    Platform-wide, most recent day last.
     """
-    if days < 1 or days > 365:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="days must be between 1 and 365.")
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    start, end = parse_date_range(start_date, end_date)
     rows = (
         db.query(
             func.date(RevenueLedgerEntry.created_at).label("day"),
             func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
             func.sum(RevenueLedgerEntry.delta_gross_paisa).label("gross_paisa"),
         )
-        .filter(RevenueLedgerEntry.created_at >= since)
+        .filter(RevenueLedgerEntry.created_at >= start, RevenueLedgerEntry.created_at <= end)
         .group_by(func.date(RevenueLedgerEntry.created_at))
         .order_by(func.date(RevenueLedgerEntry.created_at).asc())
         .all()
@@ -250,6 +261,8 @@ def get_revenue_by_day(
 
 @router.get("/analytics/by-country", response_model=list[RevenueByCountryOut])
 def get_revenue_by_country(
+    start_date: str | None = None,
+    end_date: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -257,14 +270,17 @@ def get_revenue_by_country(
     RevenueLedgerEntry, which is a copy of the viewer's registered
     User.country at the moment they were credited (NOT IP-based
     geolocation; theomy doesn't do that). viewer_count is distinct
-    viewers per country, not raw event rows.
+    viewers per country, not raw event rows. Scoped to [start_date,
+    end_date] — no dates given defaults to the last 1 month.
     """
+    start, end = parse_date_range(start_date, end_date)
     rows = (
         db.query(
             func.coalesce(RevenueLedgerEntry.viewer_country, "Unknown").label("country"),
             func.count(func.distinct(RevenueLedgerEntry.user_id)).label("viewer_count"),
             func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
         )
+        .filter(RevenueLedgerEntry.created_at >= start, RevenueLedgerEntry.created_at <= end)
         .group_by(func.coalesce(RevenueLedgerEntry.viewer_country, "Unknown"))
         .order_by(func.sum(RevenueLedgerEntry.delta_creator_paisa).desc())
         .all()
@@ -281,31 +297,47 @@ def get_revenue_by_country(
 
 @router.get("/summary", response_model=AdminRevenueSummaryOut)
 def get_revenue_summary(
+    start_date: str | None = None,
+    end_date: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Platform-wide KPI cards. gross_revenue is what all watched
-    minutes were worth before commission; platform/creator share split
-    that using the real per-video/per-viewer credited amounts (not a
-    single flat commission % applied after the fact, since older
-    records could in principle have used a different rate at the time).
+    """Platform-wide KPI cards, scoped to [start_date, end_date] — no
+    dates given defaults to the last 1 month (see app/date_range.py).
+
+    gross/platform/creator revenue and total_viewer_records come from
+    RevenueLedgerEntry (one row per actual crediting event, so these
+    are genuinely date-scoped). total_watch_minutes and
+    avg_revenue_per_1000_minutes_rupees, and total_published_videos
+    stay ALL-TIME regardless of the date picker — the ledger tracks
+    money credited, not seconds watched, so there's no reliable way to
+    attribute watch-duration to a specific window (and the rate itself
+    can change over time, so back-computing minutes from money would
+    be inaccurate — see the by-creator docstring below for the same
+    reasoning).
     """
-    totals = db.query(
-        func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
-        func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("creator_paisa"),
+    start, end = parse_date_range(start_date, end_date)
+
+    ledger_totals = db.query(
+        func.coalesce(func.sum(RevenueLedgerEntry.delta_gross_paisa), 0).label("gross_paisa"),
+        func.coalesce(func.sum(RevenueLedgerEntry.delta_creator_paisa), 0).label("creator_paisa"),
+        func.count(RevenueLedgerEntry.id).label("viewer_records"),
+    ).filter(RevenueLedgerEntry.created_at >= start, RevenueLedgerEntry.created_at <= end).first()
+
+    all_time_totals = db.query(
         func.coalesce(func.sum(VideoWatchRecord.max_session_seconds), 0).label("total_seconds"),
-        func.count(VideoWatchRecord.id).label("viewer_records"),
+        func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("all_time_gross_paisa"),
     ).first()
 
     total_videos = db.query(func.count(Video.id)).filter(Video.status == VideoStatus.published).scalar() or 0
 
-    gross_paisa = totals.gross_paisa or 0
-    creator_paisa = totals.creator_paisa or 0
+    gross_paisa = ledger_totals.gross_paisa or 0
+    creator_paisa = ledger_totals.creator_paisa or 0
     platform_paisa = gross_paisa - creator_paisa
-    total_minutes = Decimal(totals.total_seconds or 0) / 60
+    total_minutes = Decimal(all_time_totals.total_seconds or 0) / 60
 
     avg_rpm = (
-        (Decimal(gross_paisa) / 100) / total_minutes * 1000
+        (Decimal(all_time_totals.all_time_gross_paisa or 0) / 100) / total_minutes * 1000
         if total_minutes > 0 else Decimal("0")
     )
 
@@ -314,7 +346,7 @@ def get_revenue_summary(
         platform_share_rupees=(Decimal(platform_paisa) / 100).quantize(Decimal("0.01")),
         creator_share_rupees=(Decimal(creator_paisa) / 100).quantize(Decimal("0.01")),
         total_watch_minutes=total_minutes.quantize(Decimal("0.01")),
-        total_viewer_records=totals.viewer_records or 0,
+        total_viewer_records=ledger_totals.viewer_records or 0,
         total_published_videos=total_videos,
         avg_revenue_per_1000_minutes_rupees=avg_rpm.quantize(Decimal("0.01")),
     )
@@ -322,22 +354,34 @@ def get_revenue_summary(
 
 @router.get("/by-creator", response_model=list[AdminRevenueByCreatorOut])
 def get_revenue_by_creator(
+    start_date: str | None = None,
+    end_date: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """The "Revenue Share Report" — one row per creator showing the
-    full Gross → Platform/Creator Share → Paid → Pending chain. Most
-    gross revenue first.
+    full Gross → Platform/Creator Share → Paid → Pending chain. Gross/
+    platform/creator share are scoped to [start_date, end_date] (via
+    RevenueLedgerEntry.creator_user_id, which is already denormalized
+    onto each ledger row); paid/pending stay ALL-TIME, since a
+    withdrawal payout isn't tied to any one earning period — a creator
+    can withdraw earnings from months ago at any time, so scoping
+    "paid" to the selected window would misrepresent their real
+    running balance. Most gross revenue first.
     """
+    start, end = parse_date_range(start_date, end_date)
+
     gross_rows = (
         db.query(
-            Video.uploaded_by_user_id.label("creator_user_id"),
-            func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
-            func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("creator_paisa"),
+            RevenueLedgerEntry.creator_user_id,
+            func.coalesce(func.sum(RevenueLedgerEntry.delta_gross_paisa), 0).label("gross_paisa"),
+            func.coalesce(func.sum(RevenueLedgerEntry.delta_creator_paisa), 0).label("creator_paisa"),
         )
-        .join(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
-        .filter(Video.uploaded_by_user_id.isnot(None))
-        .group_by(Video.uploaded_by_user_id)
+        .filter(
+            RevenueLedgerEntry.creator_user_id.isnot(None),
+            RevenueLedgerEntry.created_at >= start, RevenueLedgerEntry.created_at <= end,
+        )
+        .group_by(RevenueLedgerEntry.creator_user_id)
         .all()
     )
     paid_rows = (
@@ -378,39 +422,62 @@ def get_revenue_by_creator(
 
 @router.get("/content-performance", response_model=list[AdminContentPerformanceOut])
 def get_all_content_performance(
+    start_date: str | None = None,
+    end_date: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Platform-wide "Content performance analytics" — same shape as a
     creator's own /videos/content-performance/mine, but across every
-    uploaded video, with the creator's name attached so an admin can
-    see who's generating what.
+    uploaded video, with the creator's name attached. unique_viewers,
+    gross_revenue, and creator_earned are scoped to [start_date,
+    end_date] via RevenueLedgerEntry; total_watch_minutes stays
+    ALL-TIME (see get_revenue_summary's docstring for why — the ledger
+    tracks money credited per event, not seconds watched).
     """
-    rows = (
+    start, end = parse_date_range(start_date, end_date)
+
+    ledger_rows = (
         db.query(
-            Video.id,
-            Video.title,
-            User.name.label("creator_name"),
-            func.count(VideoWatchRecord.id).label("unique_viewers"),
-            func.coalesce(func.sum(VideoWatchRecord.max_session_seconds), 0).label("total_seconds"),
-            func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
-            func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("credited_paisa"),
+            RevenueLedgerEntry.video_id,
+            func.count(func.distinct(RevenueLedgerEntry.user_id)).label("unique_viewers"),
+            func.coalesce(func.sum(RevenueLedgerEntry.delta_gross_paisa), 0).label("gross_paisa"),
+            func.coalesce(func.sum(RevenueLedgerEntry.delta_creator_paisa), 0).label("credited_paisa"),
         )
-        .outerjoin(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
-        .outerjoin(User, User.id == Video.uploaded_by_user_id)
-        .group_by(Video.id, Video.title, User.name)
-        .order_by(func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).desc())
+        .filter(RevenueLedgerEntry.created_at >= start, RevenueLedgerEntry.created_at <= end)
+        .group_by(RevenueLedgerEntry.video_id)
         .all()
     )
-    return [
-        AdminContentPerformanceOut(
-            video_id=r.id,
-            title=r.title,
-            creator_name=r.creator_name or "Admin-uploaded",
-            unique_viewers=r.unique_viewers,
-            total_watch_minutes=(Decimal(r.total_seconds) / 60).quantize(Decimal("0.01")),
-            gross_revenue_rupees=(Decimal(r.gross_paisa) / 100).quantize(Decimal("0.01")),
-            creator_earned_rupees=(Decimal(r.credited_paisa) / 100).quantize(Decimal("0.01")),
+    ledger_by_video = {r.video_id: r for r in ledger_rows}
+
+    watch_minutes_rows = (
+        db.query(
+            VideoWatchRecord.video_id,
+            func.coalesce(func.sum(VideoWatchRecord.max_session_seconds), 0).label("total_seconds"),
         )
-        for r in rows
-    ]
+        .group_by(VideoWatchRecord.video_id)
+        .all()
+    )
+    minutes_by_video = {r.video_id: Decimal(r.total_seconds) / 60 for r in watch_minutes_rows}
+
+    videos = (
+        db.query(Video.id, Video.title, User.name.label("creator_name"))
+        .outerjoin(User, User.id == Video.uploaded_by_user_id)
+        .filter(Video.id.in_(list(ledger_by_video.keys())))
+        .all()
+    ) if ledger_by_video else []
+
+    results = []
+    for v in videos:
+        ledger = ledger_by_video.get(v.id)
+        results.append(AdminContentPerformanceOut(
+            video_id=v.id,
+            title=v.title,
+            creator_name=v.creator_name or "Admin-uploaded",
+            unique_viewers=ledger.unique_viewers if ledger else 0,
+            total_watch_minutes=minutes_by_video.get(v.id, Decimal("0")).quantize(Decimal("0.01")),
+            gross_revenue_rupees=(Decimal(ledger.gross_paisa) / 100).quantize(Decimal("0.01")) if ledger else Decimal("0.00"),
+            creator_earned_rupees=(Decimal(ledger.credited_paisa) / 100).quantize(Decimal("0.01")) if ledger else Decimal("0.00"),
+        ))
+    results.sort(key=lambda x: x.creator_earned_rupees, reverse=True)
+    return results

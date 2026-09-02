@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BarChart3, Download } from "lucide-react";
 import { fetchAdminReport, downloadAdminReportCsv } from "./adminApi";
+import DateRangePicker, { defaultDateRange } from "./DateRangePicker";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -15,6 +16,7 @@ const REPORT_TABS = [
 
 export default function AdminReportsPage() {
   const [tab, setTab] = useState("customers");
+  const [dateRange, setDateRange] = useState(defaultDateRange());
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -23,16 +25,16 @@ export default function AdminReportsPage() {
   useEffect(() => {
     setLoading(true);
     setError("");
-    fetchAdminReport(tab)
+    fetchAdminReport(tab, dateRange)
       .then(setReport)
       .catch((err) => setError(err.message || "Couldn't load this report."))
       .finally(() => setLoading(false));
-  }, [tab]);
+  }, [tab, dateRange]);
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      await downloadAdminReportCsv(tab);
+      await downloadAdminReportCsv(tab, dateRange);
     } catch (err) {
       setError(err.message || "Couldn't export the report.");
     } finally {
@@ -48,6 +50,10 @@ export default function AdminReportsPage() {
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
         Basic reports covering customers, subscriptions, events, content, enquiries, transactions and revenue — export any of these as CSV.
       </p>
+
+      <div className="mb-4">
+        <DateRangePicker startDate={dateRange.startDate} endDate={dateRange.endDate} onChange={setDateRange} />
+      </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">

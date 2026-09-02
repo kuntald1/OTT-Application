@@ -954,7 +954,7 @@ class ContentPerformanceOut(BaseModel):
 
 
 class AdminRevenueConfigUpdate(BaseModel):
-    rate_paisa_per_minute: int = Field(gt=0)
+    rate_paisa_per_minute: int = Field(ge=0)
     platform_commission_percent: Decimal = Field(ge=0, le=100)
 
 
