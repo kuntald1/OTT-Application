@@ -4,14 +4,6 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { fetchApprovedEvents } from "../api";
 import { useApp } from "../context/AppContext";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-import PageHero from "../shared/PageHero";
-
-const TICKETING_THEME = {
-  fallbackBg: COLORS.black,
-  scrim: "linear-gradient(180deg, rgba(61,0,13,0.35) 0%, rgba(61,0,13,0.15) 35%, rgba(61,0,13,0.85) 100%)",
-  glow: `radial-gradient(ellipse at 15% 100%, ${COLORS.burgundy}55 0%, transparent 45%), radial-gradient(ellipse at 100% 0%, ${COLORS.burgundy}40 0%, transparent 40%)`,
-  vignette: `radial-gradient(circle, transparent 40%, ${COLORS.black} 100%)`,
-};
 
 // ---------------------------------------------------------------------------
 // Theater Browse ("Ticketing") — real, admin-approved events (from the
@@ -169,7 +161,6 @@ export default function TheaterBrowsePage() {
 
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
-      <PageHero pageKey="ticketing" theme={TICKETING_THEME} />
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
         {/* Mobile filter toggle */}
         <button

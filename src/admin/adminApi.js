@@ -909,21 +909,37 @@ export async function updateAdminPageHeroDetails(pageKey, { contentType, eyebrow
 }
 
 // files: a FileList or array of File objects — uploads all of them to
-// this hero's slideshow in one request.
-export async function addAdminPageHeroMedia(pageKey, files) {
+// this hero's slideshow in one request. Uses XMLHttpRequest (not
+// fetch, which has no upload-progress event) so onProgress can drive
+// a real progress bar — video files are large enough that "Uploading…"
+// with no percentage looks stuck even when it's working fine.
+export function addAdminPageHeroMedia(pageKey, files, onProgress) {
   const token = getAdminToken();
   const formData = new FormData();
   Array.from(files).forEach((f) => formData.append("files", f));
-  const res = await fetch(`${BASE_URL}/admin/page-heroes/${pageKey}/media`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE_URL}/admin/page-heroes/${pageKey}/media`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload. Please try again."));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — check your connection and try again."));
+
+    xhr.send(formData);
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload. Please try again.");
-  }
-  return data;
 }
 
 export function deleteAdminPageHeroMedia(pageKey, mediaId) {

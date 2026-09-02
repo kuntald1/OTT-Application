@@ -17,7 +17,6 @@ const PAGES = [
   { key: "plays", label: "Plays" },
   { key: "archive", label: "Archive" },
   { key: "community", label: "Community" },
-  { key: "ticketing", label: "Ticketing" },
 ];
 
 const CONTENT_TYPES = [
@@ -37,6 +36,7 @@ export default function AdminPageHeroesPage() {
   const [saved, setSaved] = useState(false);
 
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [deletingId, setDeletingId] = useState(null);
 
   const hero = heroesByKey[pageKey];
@@ -71,7 +71,9 @@ export default function AdminPageHeroesPage() {
     setError("");
     setSaved(false);
     try {
-      const updated = await updateAdminPageHeroDetails(pageKey, form);
+      const updated = await updateAdminPageHeroDetails(pageKey, {
+        contentType: form.content_type, eyebrow: form.eyebrow, headline: form.headline, subtext: form.subtext,
+      });
       setHeroesByKey((m) => ({ ...m, [pageKey]: updated }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -85,14 +87,16 @@ export default function AdminPageHeroesPage() {
   const handleUpload = async (fileList) => {
     if (!fileList || fileList.length === 0) return;
     setUploading(true);
+    setUploadProgress(0);
     setError("");
     try {
-      const updated = await addAdminPageHeroMedia(pageKey, fileList);
+      const updated = await addAdminPageHeroMedia(pageKey, fileList, setUploadProgress);
       setHeroesByKey((m) => ({ ...m, [pageKey]: updated }));
     } catch (err) {
       setError(err.message || "Couldn't upload.");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -207,11 +211,18 @@ export default function AdminPageHeroesPage() {
               )}
 
               <label
-                className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-sm font-medium hover:opacity-80"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-sm font-medium hover:opacity-80"
                 style={{ borderColor: "rgba(212,175,55,0.3)", color: uploading ? "rgba(245,235,221,0.4)" : COLORS.gold }}
               >
-                <UploadCloud className="h-4 w-4" />
-                {uploading ? "Uploading…" : `Click to add ${form.content_type === "image" ? "image(s)" : "video(s)"} — you can select more than one`}
+                <div className="flex items-center gap-2">
+                  <UploadCloud className="h-4 w-4" />
+                  {uploading ? `Uploading… ${uploadProgress}%` : `Click to add ${form.content_type === "image" ? "image(s)" : "video(s)"} — you can select more than one`}
+                </div>
+                {uploading && (
+                  <div className="h-1.5 w-full max-w-xs overflow-hidden rounded-full" style={{ background: "rgba(245,235,221,0.1)" }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: COLORS.gold }} />
+                  </div>
+                )}
                 <input
                   type="file"
                   accept={mediaAccept}
