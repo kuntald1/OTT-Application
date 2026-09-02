@@ -1030,3 +1030,29 @@ export function updateAdminArchiveHeroSlideText(slideId, { eyebrow, headline, su
 export function deleteAdminArchiveHeroSlide(slideId) {
   return request(`/admin/archive-hero-slides/${slideId}`, { method: "DELETE", auth: true });
 }
+
+// --- Content & Policy Management ---
+
+export function fetchAdminSitePages() {
+  return request("/admin/site-pages", { auth: true });
+}
+
+export function updateAdminSitePage(slug, { title, content }) {
+  return request(`/admin/site-pages/${slug}`, { method: "PUT", auth: true, body: { title, content } });
+}
+
+export function fetchAdminFaqs() {
+  return request("/admin/faqs", { auth: true });
+}
+
+export function createAdminFaq({ question, answer }) {
+  return request("/admin/faqs", { method: "POST", auth: true, body: { question, answer } });
+}
+
+export function updateAdminFaq(faqId, { question, answer }) {
+  return request(`/admin/faqs/${faqId}`, { method: "PUT", auth: true, body: { question, answer } });
+}
+
+export function deleteAdminFaq(faqId) {
+  return request(`/admin/faqs/${faqId}`, { method: "DELETE", auth: true });
+}

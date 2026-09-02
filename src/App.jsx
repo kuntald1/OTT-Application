@@ -18,6 +18,8 @@ import SubscriptionPage from './Subscription/SubscriptionPage'
 import CategoryPage from './Category/CategoryPage'
 import ActorProfilePage from './People/ActorProfilePage'
 import HelpCenterPage from './Help/HelpCenterPage'
+import StaticContentPage from './shared/StaticContentPage'
+import FaqPage from './shared/FaqPage'
 import ManageProfilePage from './Profile/ManageProfilePage'
 import BlogListPage from './Community/BlogListPage'
 import BlogDetailPage from './Community/BlogDetailPage'
@@ -192,6 +194,18 @@ export default function App() {
             <ArchiveHero />
             <ArchiveBrowsePage onNavigate={navigate} onOpenPerson={openPerson} />
           </div>
+        ) : route.view === 'about' ? (
+          <StaticContentPage slug="about" onBack={goBack} />
+        ) : route.view === 'contact' ? (
+          <StaticContentPage slug="contact" onBack={goBack} />
+        ) : route.view === 'privacy' ? (
+          <StaticContentPage slug="privacy" onBack={goBack} />
+        ) : route.view === 'terms' ? (
+          <StaticContentPage slug="terms" onBack={goBack} />
+        ) : route.view === 'cookies' ? (
+          <StaticContentPage slug="cookies" onBack={goBack} />
+        ) : route.view === 'faqs' ? (
+          <FaqPage onBack={goBack} />
         ) : route.view === 'mylist' ? (
           <MyListPage onNavigate={navigate} />
         ) : route.view === 'subscription' ? (

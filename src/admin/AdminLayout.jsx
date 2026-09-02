@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -23,6 +23,7 @@ import AdminReportsPage from "./AdminReportsPage";
 import AdminPageHeroesPage from "./AdminPageHeroesPage";
 import AdminTheaterHeroSlidesPage from "./AdminTheaterHeroSlidesPage";
 import AdminArchiveHeroSlidesPage from "./AdminArchiveHeroSlidesPage";
+import AdminContentPolicyPage from "./AdminContentPolicyPage";
 
 const COLORS = {
   bg: "#0a0104",
@@ -56,6 +57,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "page-heroes", label: "Page Heroes", icon: GalleryHorizontal, visible: true },
     { id: "theater-hero-slides", label: "Ticketing Hero Slides", icon: Contact2, visible: true },
     { id: "archive-hero-slides", label: "Archive Hero Slides", icon: Landmark, visible: true },
+    { id: "content-policy", label: "Content & Policy", icon: FileText, visible: true },
     { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
     { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
@@ -135,6 +137,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "page-heroes" && <AdminPageHeroesPage />}
           {activePage === "theater-hero-slides" && <AdminTheaterHeroSlidesPage />}
           {activePage === "archive-hero-slides" && <AdminArchiveHeroSlidesPage />}
+          {activePage === "content-policy" && <AdminContentPolicyPage />}
           {activePage === "enquiries" && <AdminEventEnquiriesPage />}
           {activePage === "revenue" && <AdminRevenuePage currentAdmin={currentAdmin} />}
           {activePage === "categories" && isSuperadmin && <AdminCategoriesPage />}

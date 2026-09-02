@@ -237,17 +237,30 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
       <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${T.border}` }}>
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {[
-            { heading: "theomy", links: ["About", "Jobs", "Press"] },
-            { heading: "Support", links: ["Help Center", "Account", "Devices"] },
-            { heading: "Watch", links: ["Films", "Series", "New & Popular"] },
-            { heading: "Legal", links: ["Privacy", "Terms", "Cookie Preferences"] },
+            { heading: "Company", links: [
+              { label: "About Us", view: "about" },
+              { label: "Contact Us", view: "contact" },
+              { label: "FAQs", view: "faqs" },
+            ] },
+            { heading: "Support", links: [{ label: "Help Center" }, { label: "Account" }, { label: "Devices" }] },
+            { heading: "Watch", links: [{ label: "Films" }, { label: "Series" }, { label: "New & Popular" }] },
+            { heading: "Legal", links: [
+              { label: "Privacy", view: "privacy" },
+              { label: "Terms", view: "terms" },
+              { label: "Cookie Preferences", view: "cookies" },
+            ] },
           ].map((col) => (
             <div key={col.heading}>
               <p className="mb-3 text-sm font-semibold" style={{ color: T.text }}>{col.heading}</p>
               <div className="flex flex-col gap-2">
                 {col.links.map((link) => (
-                  <span key={link} className="cursor-pointer text-sm" style={{ color: T.textFaint }}>
-                    {link}
+                  <span
+                    key={link.label}
+                    onClick={link.view ? () => onNavigate?.(link.view) : undefined}
+                    className="text-sm"
+                    style={{ color: T.textFaint, cursor: link.view ? "pointer" : "default" }}
+                  >
+                    {link.label}
                   </span>
                 ))}
               </div>

@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig, PageHero
+from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig, PageHero, SitePage, FaqItem
 from app.security import hash_password
 
 
@@ -316,6 +316,42 @@ def seed_page_heroes(db):
     print(f"Seeded {count} page hero(es).")
 
 
+def seed_site_content(db):
+    """Starter text for About/Contact/Privacy/Terms/Cookies and a
+    handful of FAQs — all placeholder copy for Kuntal to rewrite via
+    Admin > Content & Policy Management; nothing here is legally
+    binding as-is, especially the policy pages.
+    """
+    existing_slugs = {p.slug for p in db.query(SitePage).all()}
+    pages = [
+        {"slug": "about", "title": "About Us", "content": "theomy is a Bengali theatre streaming platform — plays, archival recordings, and live event ticketing in one place. This page is a placeholder; replace it with your own About Us copy from Admin > Content & Policy Management."},
+        {"slug": "contact", "title": "Contact Us", "content": "Have a question or need help? Reach us at support@theomy.com. This page is a placeholder; replace it with your real contact details from Admin > Content & Policy Management."},
+        {"slug": "privacy", "title": "Privacy Policy", "content": "This is a placeholder Privacy Policy. Replace it with your actual privacy policy — covering what data theomy collects, how it's used, and users' rights — from Admin > Content & Policy Management before relying on this page legally."},
+        {"slug": "terms", "title": "Terms of Service", "content": "This is a placeholder Terms of Service. Replace it with your actual terms — covering subscriptions, refunds, content usage, and account rules — from Admin > Content & Policy Management before relying on this page legally."},
+        {"slug": "cookies", "title": "Cookie Policy", "content": "This is a placeholder Cookie Policy. Replace it with your actual cookie policy — covering what cookies theomy uses and why — from Admin > Content & Policy Management before relying on this page legally."},
+    ]
+    page_count = 0
+    for p in pages:
+        if p["slug"] in existing_slugs:
+            continue
+        db.add(SitePage(**p))
+        page_count += 1
+
+    faq_count = 0
+    if db.query(FaqItem).count() == 0:
+        faqs = [
+            {"question": "What is theomy?", "answer": "theomy is a platform for streaming Bengali theatre — new plays, an archive of past performances, and ticketing for live shows.", "display_order": 0},
+            {"question": "How do I subscribe?", "answer": "Go to any plan page and choose Play, Archive, or Both, then pick a duration. Payment is handled securely through our payment gateway.", "display_order": 1},
+            {"question": "Can I watch on multiple devices?", "answer": "Yes — your plan includes a set number of screens, and you can add family sub-accounts from Manage Profile.", "display_order": 2},
+        ]
+        for f in faqs:
+            db.add(FaqItem(**f))
+        faq_count = len(faqs)
+
+    db.commit()
+    print(f"Seeded {page_count} site page(s) and {faq_count} FAQ(s).")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
@@ -328,5 +364,6 @@ if __name__ == "__main__":
         seed_exchange_rate(db)
         seed_reward_config(db)
         seed_page_heroes(db)
+        seed_site_content(db)
     finally:
         db.close()

@@ -1577,3 +1577,40 @@ class ArchiveHeroSlide(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class SitePage(Base):
+    """Static content pages (About Us, Contact Us, and the "applicable
+    policies" — Privacy, Terms, Cookie Policy) — admin-editable from
+    Admin > Content & Policy Management instead of being hardcoded
+    text in the frontend. slug is the fixed identifier used to fetch a
+    given page ("about" | "contact" | "privacy" | "terms" | "cookies").
+    """
+    __tablename__ = "site_pages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slug = Column(String(30), unique=True, nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False, default="")
+
+    updated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class FaqItem(Base):
+    """One question/answer pair on the FAQs page — admin-managed
+    (Admin > Content & Policy Management), add/edit/delete/reorder any
+    time.
+    """
+    __tablename__ = "faq_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    question = Column(String(500), nullable=False)
+    answer = Column(Text, nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

@@ -924,3 +924,13 @@ export function fetchTheaterHeroSlides() {
 export function fetchArchiveHeroSlides() {
   return request("/archive-hero-slides");
 }
+
+// --- Site Content (About/Contact/Privacy/Terms/Cookies + FAQs) ---
+
+export function fetchSitePage(slug) {
+  return request(`/site-pages/${slug}`);
+}
+
+export function fetchFaqs() {
+  return request("/faqs");
+}

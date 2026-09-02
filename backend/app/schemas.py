@@ -1508,3 +1508,35 @@ class ArchiveHeroSlideTextUpdate(BaseModel):
     eyebrow: Optional[str] = None
     headline: str = Field(min_length=1, max_length=255)
     subtext: Optional[str] = None
+
+
+class SitePageOut(BaseModel):
+    slug: str
+    title: str
+    content: str
+
+    model_config = {"from_attributes": True}
+
+
+class SitePageUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content: str = ""
+
+
+class FaqItemOut(BaseModel):
+    id: uuid.UUID
+    question: str
+    answer: str
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class FaqItemCreate(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1)
+
+
+class FaqItemUpdate(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1)
