@@ -162,8 +162,8 @@ export default function AdminRevenuePage({ currentAdmin }) {
     setConfigSaved(false);
     const rate = Number(configForm.ratePaisa);
     const commission = Number(configForm.commissionPercent);
-    if (!rate || rate <= 0) {
-      setConfigError("Rate must be a positive number (in paisa/min).");
+    if (Number.isNaN(rate) || rate < 0) {
+      setConfigError("Rate must be a number of 0 or more (in paisa/min).");
       return;
     }
     if (commission < 0 || commission > 100) {
