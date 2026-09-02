@@ -1467,3 +1467,38 @@ class VideoPurchase(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class PageHeroContentType(str, enum.Enum):
+    image = "image"
+    video = "video"
+    text = "text"
+
+
+class PageHero(Base):
+    """Admin-editable hero banner shown at the top of Plays, Archive,
+    Community, and Ticketing — replaces what used to be hardcoded
+    image/video files bundled straight into the frontend build (e.g.
+    src/assets/HeroVideo/, src/Archive/assets/ArchiveVideo/), which
+    required a developer to drop in a file and rebuild. One row per
+    page_key ("plays" | "archive" | "community" | "ticketing").
+    content_type picks what's shown as the background: an uploaded
+    image, an uploaded video, or no media at all (a plain-color
+    background with just the text) — media_url is only meaningful
+    when content_type is "image" or "video".
+    """
+    __tablename__ = "page_heroes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    page_key = Column(String(20), unique=True, nullable=False, index=True)
+    content_type = Column(Enum(PageHeroContentType), nullable=False, default=PageHeroContentType.text)
+    media_url = Column(String(500), nullable=True)
+
+    eyebrow = Column(String(100), nullable=True)
+    headline = Column(String(255), nullable=False)
+    subtext = Column(Text, nullable=True)
+
+    updated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

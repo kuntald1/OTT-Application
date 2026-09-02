@@ -1439,3 +1439,14 @@ class AdminDashboardOut(BaseModel):
     pending_enquiries: int
     total_transactions: int
     total_revenue_rupees: Decimal
+
+
+class PageHeroOut(BaseModel):
+    page_key: str
+    content_type: str
+    media_url: Optional[str] = None
+    eyebrow: Optional[str] = None
+    headline: str
+    subtext: Optional[str] = None
+
+    model_config = {"from_attributes": True}

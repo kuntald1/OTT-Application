@@ -898,3 +898,9 @@ export function createSubAccount({ name, email, password }) {
 export function deactivateSubAccount(subAccountId) {
   return request(`/sub-accounts/${subAccountId}/deactivate`, { method: "PATCH", auth: true });
 }
+
+// --- Page Heroes (Plays/Archive/Community/Ticketing banner, admin-managed) ---
+
+export function fetchPageHero(pageKey) {
+  return request(`/page-heroes/${pageKey}`);
+}

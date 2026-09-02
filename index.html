@@ -16,6 +16,13 @@
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="theomy" />
     <meta name="twitter:description" content="Watch plays, browse the archive, book tickets, and join the theatre community." />
+
+    <!-- Site-wide fonts — previously loaded via a useEffect inside
+         VideoStreaming/MovixHero.jsx (the Plays page's hero), which meant
+         every OTHER page depended on Plays' hero having mounted at least
+         once first. Moved here so it's guaranteed to load regardless of
+         which page a person lands on. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Silkscreen:wght@400;700&display=swap" />
   </head>
   <body>
     <div id="root"></div>

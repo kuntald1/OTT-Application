@@ -882,3 +882,29 @@ export async function downloadAdminReportCsv(reportType, dateRange) {
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+// --- Page Heroes (Plays/Archive/Community/Ticketing banner) ---
+
+export function fetchAdminPageHeroes() {
+  return request("/admin/page-heroes", { auth: true });
+}
+
+export async function updateAdminPageHero(pageKey, { contentType, eyebrow, headline, subtext, mediaFile }) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("content_type", contentType);
+  formData.append("eyebrow", eyebrow || "");
+  formData.append("headline", headline);
+  formData.append("subtext", subtext || "");
+  if (mediaFile) formData.append("media", mediaFile);
+  const res = await fetch(`${BASE_URL}/admin/page-heroes/${pageKey}`, {
+    method: "PUT",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't save the hero. Please try again.");
+  }
+  return data;
+}

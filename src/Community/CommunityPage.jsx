@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { MessageCircle, Plus, HandCoins, Users } from "lucide-react";
-import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, HERO_HEIGHT_CLASS, NAV_CLEARANCE_CLASS } from "../theme";
+import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { fetchBlogs } from "../api";
 import { useApp } from "../context/AppContext";
+import PageHero from "../shared/PageHero";
 
-import heroImage from "../Theater/assets/portraits/large/anna.jpg";
+const COMMUNITY_THEME = {
+  fallbackBg: COLORS.black,
+  scrim: "linear-gradient(180deg, rgba(61,0,13,0.35) 0%, rgba(61,0,13,0.15) 35%, rgba(61,0,13,0.85) 100%)",
+  glow: `radial-gradient(ellipse at 15% 100%, ${COLORS.burgundy}55 0%, transparent 45%), radial-gradient(ellipse at 100% 0%, ${COLORS.burgundy}40 0%, transparent 40%)`,
+  vignette: `radial-gradient(circle, transparent 40%, ${COLORS.black} 100%)`,
+};
 
 // ---------------------------------------------------------------------------
 // Community — a standalone page, reached via the "Community" nav link.
@@ -52,27 +58,7 @@ export default function CommunityPage({ onNavigate }) {
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       {/* ---------------- Hero ---------------- */}
-      <section className={`relative w-full overflow-hidden ${HERO_HEIGHT_CLASS}`}>
-        <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(61,0,13,0.35) 0%, rgba(61,0,13,0.15) 35%, rgba(61,0,13,0.85) 100%)" }} />
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: `radial-gradient(ellipse at 15% 100%, ${COLORS.burgundy}55 0%, transparent 45%), radial-gradient(ellipse at 100% 0%, ${COLORS.burgundy}40 0%, transparent 40%)` }}
-        />
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: `radial-gradient(circle, transparent 40%, ${COLORS.black} 100%)` }}
-        />
-        <div className="relative z-10 flex h-full w-full flex-col justify-end px-6 pb-10 sm:px-10 sm:pb-14 lg:px-16">
-          <p className="text-sm font-medium tracking-wide" style={{ color: COLORS.gold }}>MOVIX COMMUNITY</p>
-          <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-[1.1] sm:text-5xl lg:text-6xl" style={{ color: COLORS.cream }}>
-            A space to talk theatre
-          </h1>
-          <p className="mt-4 max-w-xl text-base leading-relaxed" style={{ color: "rgba(245,235,221,0.75)" }}>
-            Reviews, backstage stories, and conversations from people who love the stage as much as you do.
-          </p>
-        </div>
-      </section>
+      <PageHero pageKey="community" theme={COMMUNITY_THEME} />
 
       {/* ---------------- Blog + Community Room, side by side ---------------- */}
       <section className={`px-6 py-12 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>

@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig
+from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig, PageHero
 from app.security import hash_password
 
 
@@ -291,6 +291,31 @@ def seed_reward_config(db):
     print("Seeded reward config: 20% on subscriptions, 5% on ticket bookings.")
 
 
+def seed_page_heroes(db):
+    """Text-only defaults for all four hero-bearing pages — matches the
+    copy that used to be hardcoded in MovixHero.jsx/ArchiveHero.jsx/
+    CommunityPage.jsx, minus any image/video (there's no server-side
+    media to point at yet; an admin uploads one from Admin > Page
+    Heroes whenever they're ready, and content_type switches to image
+    or video at that point).
+    """
+    existing = {h.page_key for h in db.query(PageHero).all()}
+    heroes = [
+        {"page_key": "plays", "eyebrow": None, "headline": "Stream stories worth staying up for", "subtext": None},
+        {"page_key": "archive", "eyebrow": "MOVIX ARCHIVE", "headline": "Old stages, kept alive", "subtext": None},
+        {"page_key": "community", "eyebrow": "MOVIX COMMUNITY", "headline": "A space to talk theatre", "subtext": "Reviews, backstage stories, and conversations from people who love the stage as much as you do."},
+        {"page_key": "ticketing", "eyebrow": "MOVIX TICKETING", "headline": "Book your next night at the theatre", "subtext": "Real, admin-approved shows — browse by category, date, venue, and price."},
+    ]
+    count = 0
+    for h in heroes:
+        if h["page_key"] in existing:
+            continue
+        db.add(PageHero(content_type="text", **h))
+        count += 1
+    db.commit()
+    print(f"Seeded {count} page hero(es).")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
@@ -302,5 +327,6 @@ if __name__ == "__main__":
         seed_revenue_rate(db)
         seed_exchange_rate(db)
         seed_reward_config(db)
+        seed_page_heroes(db)
     finally:
         db.close()
