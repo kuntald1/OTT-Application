@@ -178,6 +178,7 @@ export default function App() {
           <LiveWatchPage liveStreamId={route.params.liveStreamId} onBack={goBack} />
         ) : route.view === 'accordion' ? (
           <div>
+            <ArchiveHero />
             <MovixGenreAccordion onSelectGenre={(id) => console.log('selected:', id)} />
             <MovixBrowsePage theme="dark" onOpenPerson={openPerson} onNavigate={navigate} openVideoId={route.params.openVideoId} />
           </div>
