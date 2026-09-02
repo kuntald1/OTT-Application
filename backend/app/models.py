@@ -1482,17 +1482,20 @@ class PageHero(Base):
     src/assets/HeroVideo/, src/Archive/assets/ArchiveVideo/), which
     required a developer to drop in a file and rebuild. One row per
     page_key ("plays" | "archive" | "community" | "ticketing").
-    content_type picks what's shown as the background: an uploaded
-    image, an uploaded video, or no media at all (a plain-color
-    background with just the text) — media_url is only meaningful
-    when content_type is "image" or "video".
+    content_type picks what's shown as the background: uploaded
+    image(s), uploaded video(s) — see PageHeroMedia, which holds the
+    (possibly several) media files for a slideshow/rotation, matching
+    the old multi-file HeroVideo folder / multi-poster fallback
+    behavior — or no media at all (a plain-color background with just
+    the text). `media_url` is legacy from before multi-media support
+    and is no longer written to; PageHeroMedia is the source of truth.
     """
     __tablename__ = "page_heroes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     page_key = Column(String(20), unique=True, nullable=False, index=True)
     content_type = Column(Enum(PageHeroContentType), nullable=False, default=PageHeroContentType.text)
-    media_url = Column(String(500), nullable=True)
+    media_url = Column(String(500), nullable=True)  # legacy, unused — see PageHeroMedia
 
     eyebrow = Column(String(100), nullable=True)
     headline = Column(String(255), nullable=False)
@@ -1501,4 +1504,27 @@ class PageHero(Base):
     updated_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    media = relationship("PageHeroMedia", order_by="PageHeroMedia.display_order", cascade="all, delete-orphan")
+
+
+class PageHeroMedia(Base):
+    """One image or video file belonging to a PageHero — a hero can hold
+    several (a slideshow of images, or several videos played one after
+    another), matching the old file-drop behavior where multiple files
+    in src/assets/HeroVideo/ all played in sequence, or multiple poster
+    images cross-faded. All items under one PageHero share that hero's
+    content_type (never mixed image+video within one page's hero).
+    display_order controls playback/slideshow order — lowest first.
+    """
+    __tablename__ = "page_hero_media"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    page_hero_id = Column(UUID(as_uuid=True), ForeignKey("page_heroes.id", ondelete="CASCADE"), nullable=False, index=True)
+    media_url = Column(String(500), nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

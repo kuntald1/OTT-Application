@@ -889,14 +889,13 @@ export function fetchAdminPageHeroes() {
   return request("/admin/page-heroes", { auth: true });
 }
 
-export async function updateAdminPageHero(pageKey, { contentType, eyebrow, headline, subtext, mediaFile }) {
+export async function updateAdminPageHeroDetails(pageKey, { contentType, eyebrow, headline, subtext }) {
   const token = getAdminToken();
   const formData = new FormData();
   formData.append("content_type", contentType);
   formData.append("eyebrow", eyebrow || "");
   formData.append("headline", headline);
   formData.append("subtext", subtext || "");
-  if (mediaFile) formData.append("media", mediaFile);
   const res = await fetch(`${BASE_URL}/admin/page-heroes/${pageKey}`, {
     method: "PUT",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -907,4 +906,26 @@ export async function updateAdminPageHero(pageKey, { contentType, eyebrow, headl
     throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't save the hero. Please try again.");
   }
   return data;
+}
+
+// files: a FileList or array of File objects — uploads all of them to
+// this hero's slideshow in one request.
+export async function addAdminPageHeroMedia(pageKey, files) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  Array.from(files).forEach((f) => formData.append("files", f));
+  const res = await fetch(`${BASE_URL}/admin/page-heroes/${pageKey}/media`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload. Please try again.");
+  }
+  return data;
+}
+
+export function deleteAdminPageHeroMedia(pageKey, mediaId) {
+  return request(`/admin/page-heroes/${pageKey}/media/${mediaId}`, { method: "DELETE", auth: true });
 }

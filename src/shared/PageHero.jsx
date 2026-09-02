@@ -5,52 +5,77 @@ import { fetchPageHero } from "../api";
 // ---------------------------------------------------------------------------
 // PageHero — one shared, admin-managed hero banner component used by Plays
 // (MovixHero.jsx), Archive (ArchiveHero.jsx), Community, and Ticketing.
-// Content (image/video/text, headline, eyebrow, subtext) comes from
-// GET /api/page-heroes/{pageKey} — editable at Admin > Page Heroes — instead
-// of being hardcoded/bundled into the frontend build. Only the color THEME
-// (scrim, glow, vignette, fallback background) stays per-page, passed in via
-// the `theme` prop, since that's each page's own visual identity rather than
-// admin-editable content.
+// Content (image/video/text, headline, eyebrow, subtext, and a slideshow of
+// one or more media files) comes from GET /api/page-heroes/{pageKey} —
+// editable at Admin > Page Heroes — instead of being hardcoded/bundled into
+// the frontend build. Only the color THEME (scrim, glow, vignette, fallback
+// background) stays per-page, passed in via the `theme` prop, since that's
+// each page's own visual identity rather than admin-editable content.
+//
+// Multiple images cross-fade on a timer; multiple videos play one after
+// another (advancing on each video's onEnded) and loop back to the first —
+// matches the old file-drop behavior where several files in
+// src/assets/HeroVideo/ all played in sequence.
 // ---------------------------------------------------------------------------
+
+const IMAGE_SLIDE_INTERVAL_MS = 5000;
 
 export default function PageHero({ pageKey, theme }) {
   const [hero, setHero] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [slideIndex, setSlideIndex] = useState(0);
 
   useEffect(() => {
     setLoading(true);
     fetchPageHero(pageKey)
-      .then(setHero)
+      .then((h) => { setHero(h); setSlideIndex(0); })
       .catch(() => setHero(null))
       .finally(() => setLoading(false));
   }, [pageKey]);
+
+  const media = hero?.media || [];
+  const isImageSlideshow = hero?.content_type === "image" && media.length > 0;
+  const isVideoSequence = hero?.content_type === "video" && media.length > 0;
+
+  useEffect(() => {
+    if (!isImageSlideshow || media.length < 2) return;
+    const id = setInterval(() => setSlideIndex((i) => (i + 1) % media.length), IMAGE_SLIDE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isImageSlideshow, media.length]);
 
   if (loading) {
     return <section className={`w-full ${HERO_HEIGHT_CLASS}`} style={{ background: theme.fallbackBg }} />;
   }
   if (!hero) return null;
 
-  const hasMedia = (hero.content_type === "image" || hero.content_type === "video") && hero.media_url;
-
   return (
     <section
       className={`relative w-full overflow-hidden ${HERO_HEIGHT_CLASS}`}
       style={{ fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {hasMedia && hero.content_type === "video" && (
+      {isVideoSequence && (
         <video
+          key={media[slideIndex].id} // remount on source change so the new file actually loads/plays
           className="absolute inset-0 h-full w-full object-cover object-top"
-          src={hero.media_url}
+          src={media[slideIndex].media_url}
           autoPlay
           muted
-          loop
           playsInline
+          onEnded={() => setSlideIndex((i) => (i + 1) % media.length)}
         />
       )}
-      {hasMedia && hero.content_type === "image" && (
-        <img src={hero.media_url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+      {isImageSlideshow && (
+        media.map((m, i) => (
+          <img
+            key={m.id}
+            src={m.media_url}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-1000 ease-in-out"
+            style={{ opacity: i === slideIndex ? 1 : 0 }}
+          />
+        ))
       )}
-      {!hasMedia && (
+      {!isVideoSequence && !isImageSlideshow && (
         <div className="absolute inset-0" style={{ background: theme.fallbackBg }} />
       )}
 

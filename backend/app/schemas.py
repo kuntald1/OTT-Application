@@ -1441,10 +1441,18 @@ class AdminDashboardOut(BaseModel):
     total_revenue_rupees: Decimal
 
 
+class PageHeroMediaOut(BaseModel):
+    id: uuid.UUID
+    media_url: str
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
 class PageHeroOut(BaseModel):
     page_key: str
     content_type: str
-    media_url: Optional[str] = None
+    media: List[PageHeroMediaOut] = []
     eyebrow: Optional[str] = None
     headline: str
     subtext: Optional[str] = None
