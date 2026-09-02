@@ -348,7 +348,6 @@ export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
       {/* The accordion itself */}
       <div className="flex h-full w-full">
         {genres.map((genre) => {
-          const Icon = genre.icon;
           const isHovered = hovered === genre.id;
           const isAnyHovered = hovered !== null;
           return (
@@ -408,34 +407,8 @@ export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
                 className="relative z-10 flex flex-col gap-3 transition-opacity duration-300"
                 style={{ opacity: isHovered ? 1 : 0 }}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: TEAL }}>
-                  <Icon className="h-5 w-5" style={{ color: NAVY_DEEP }} />
-                </div>
                 <h3 className="text-2xl font-semibold text-white sm:text-3xl">{genre.title}</h3>
                 <p className="max-w-xs text-sm leading-relaxed text-white/70">{genre.blurb}</p>
-                <div className="mt-2 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOverlay({ type: "browse", genreId: genre.id });
-                    }}
-                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-                    style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-                  >
-                    <Play className="h-4 w-4" /> Browse
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOverlay({ type: "details", genreId: genre.id, title: MOOD_CONTENT[genre.id].featured.title });
-                    }}
-                    className="flex items-center gap-2 rounded-full border border-white/25 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
-                  >
-                    <Info className="h-4 w-4" /> Details
-                  </button>
-                </div>
               </div>
             </div>
           );
