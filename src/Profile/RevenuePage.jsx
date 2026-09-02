@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2 } from "lucide-react";
+import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2, BarChart3, LayoutList } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry } from "../api";
 
@@ -29,7 +29,80 @@ const STATUS_STYLES = {
   rejected: { bg: "rgba(248,113,113,0.15)", color: "#f87171" },
 };
 
+// Fixed palette so a video/country keeps the same slice color across
+// re-renders (Object.values order can shift as new data streams in).
+const PIE_COLORS = ["#D4AF37", "#6FCF97", "#5B9BD5", "#E07B39", "#B76BD4", "#E0577B", "rgba(245,235,221,0.3)"];
+
+// Simple SVG donut — takes [{ label, value }], draws each slice as an
+// arc sized by its share of the total. No charting library needed for
+// this many slices (top 5 + "Other").
+function PieChart({ data, size = 160 }) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (total <= 0) return null;
+  const radius = size / 2;
+  const innerRadius = radius * 0.6;
+  const center = size / 2;
+
+  let angle = -Math.PI / 2; // start at 12 o'clock
+  const slices = data.map((d, i) => {
+    const fraction = d.value / total;
+    const startAngle = angle;
+    const endAngle = angle + fraction * Math.PI * 2;
+    angle = endAngle;
+
+    const x1 = center + radius * Math.cos(startAngle);
+    const y1 = center + radius * Math.sin(startAngle);
+    const x2 = center + radius * Math.cos(endAngle);
+    const y2 = center + radius * Math.sin(endAngle);
+    const ix1 = center + innerRadius * Math.cos(endAngle);
+    const iy1 = center + innerRadius * Math.sin(endAngle);
+    const ix2 = center + innerRadius * Math.cos(startAngle);
+    const iy2 = center + innerRadius * Math.sin(startAngle);
+    const largeArc = fraction > 0.5 ? 1 : 0;
+
+    const path = [
+      `M ${x1} ${y1}`,
+      `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
+      `L ${ix1} ${iy1}`,
+      `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${ix2} ${iy2}`,
+      "Z",
+    ].join(" ");
+
+    return { path, color: PIE_COLORS[i % PIE_COLORS.length], label: d.label, value: d.value, percent: (fraction * 100).toFixed(1) };
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {slices.map((s) => (
+          <path key={s.label} d={s.path} fill={s.color} />
+        ))}
+      </svg>
+      <div className="flex flex-col gap-1.5">
+        {slices.map((s) => (
+          <div key={s.label} className="flex items-center gap-2 text-xs">
+            <span className="h-2.5 w-2.5 flex-shrink-0 rounded-sm" style={{ background: s.color }} />
+            <span style={{ color: COLORS.cream }}>{s.label}</span>
+            <span style={{ color: "rgba(245,235,221,0.5)" }}>₹{s.value} · {s.percent}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Collapses a ranked list down to top N + "Other" for a pie chart, so
+// a creator with 20 videos doesn't get 20 illegible slices.
+function topNPlusOther(rows, labelKey, valueKey, n = 5) {
+  const sorted = [...rows].sort((a, b) => Number(b[valueKey]) - Number(a[valueKey]));
+  const top = sorted.slice(0, n).map((r) => ({ label: r[labelKey], value: Number(r[valueKey]) }));
+  const rest = sorted.slice(n).reduce((sum, r) => sum + Number(r[valueKey]), 0);
+  if (rest > 0) top.push({ label: "Other", value: rest });
+  return top;
+}
+
 export default function RevenuePage({ onBack }) {
+  const [pageTab, setPageTab] = useState("graph");
   const [rate, setRate] = useState(null);
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -127,6 +200,84 @@ export default function RevenuePage({ onBack }) {
           Views, withdrawal requests & payment tracking. Content performance analytics.
         </p>
 
+        <div className="mb-6 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPageTab("graph")}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90"
+            style={pageTab === "graph" ? { background: CTA_GRADIENT, color: CTA_TEXT_COLOR } : { background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
+          >
+            <BarChart3 className="h-3.5 w-3.5" /> Graph
+          </button>
+          <button
+            type="button"
+            onClick={() => setPageTab("details")}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90"
+            style={pageTab === "details" ? { background: CTA_GRADIENT, color: CTA_TEXT_COLOR } : { background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }}
+          >
+            <LayoutList className="h-3.5 w-3.5" /> Details
+          </button>
+        </div>
+
+        {pageTab === "graph" && (
+          <div>
+            <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+              Built from real watch events, not estimates. "Country" is each viewer's registered account country, not IP-based location.
+            </p>
+
+            {analyticsLoading || performanceLoading ? (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Your revenue — last 30 days
+                </p>
+                {revenueByDay.length === 0 ? (
+                  <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events in this window yet.</p>
+                ) : (
+                  <div className="mb-8 flex items-end gap-1 rounded-xl p-4" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)", height: 160 }}>
+                    {(() => {
+                      const max = Math.max(...revenueByDay.map((d) => Number(d.creator_earned_rupees)), 0.01);
+                      return revenueByDay.map((d) => (
+                        <div key={d.date} className="relative flex flex-1 flex-col items-center justify-end" style={{ height: "100%" }} title={`${d.date}: ₹${d.creator_earned_rupees}`}>
+                          <div
+                            className="w-full rounded-t"
+                            style={{ background: CTA_GRADIENT, height: `${Math.max(4, (Number(d.creator_earned_rupees) / max) * 100)}%` }}
+                          />
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Revenue share by video
+                </p>
+                {performance.length === 0 ? (
+                  <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No views tracked yet.</p>
+                ) : (
+                  <div className="mb-8 rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <PieChart data={topNPlusOther(performance, "title", "creator_earned_rupees")} />
+                  </div>
+                )}
+
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Revenue share by country
+                </p>
+                {revenueByCountry.length === 0 ? (
+                  <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+                ) : (
+                  <div className="rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <PieChart data={topNPlusOther(revenueByCountry, "country", "creator_earned_rupees")} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {pageTab === "details" && (
+          <>
         <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.25)" }}>
           <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Platform default rate</p>
           <p className="mt-1 text-2xl font-semibold" style={{ color: COLORS.gold }}>
@@ -349,6 +500,8 @@ export default function RevenuePage({ onBack }) {
             </>
           )}
         </div>
+          </>
+        )}
       </main>
     </div>
   );
