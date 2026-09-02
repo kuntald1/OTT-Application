@@ -910,3 +910,9 @@ export function fetchPageHero(pageKey) {
 export function fetchTheaterHeroSlides() {
   return request("/theater-hero-slides");
 }
+
+// --- Archive Hero Slides (ArchiveHero.jsx carousel, admin-managed) ---
+
+export function fetchArchiveHeroSlides() {
+  return request("/archive-hero-slides");
+}

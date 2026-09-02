@@ -1554,3 +1554,26 @@ class TheaterHeroSlide(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class ArchiveHeroSlide(Base):
+    """The Archive page's hero — same auto-advancing slideshow-with-
+    thumbnail-picker pattern as TheaterHeroSlide, but each Archive
+    slide gets its own eyebrow/headline/subtext text (Theater's
+    category/venue/title/synopsis don't map cleanly to Archive, which
+    has no venue). Fully admin-managed (Admin > Archive Hero Slides) —
+    replaces the older single-shared-text PageHero record for
+    page_key="archive", now that each slide needs its own caption.
+    """
+    __tablename__ = "archive_hero_slides"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    image_url = Column(String(500), nullable=False)
+    eyebrow = Column(String(100), nullable=True)
+    headline = Column(String(255), nullable=False)
+    subtext = Column(Text, nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

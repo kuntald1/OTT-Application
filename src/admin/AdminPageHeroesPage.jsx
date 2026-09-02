@@ -15,7 +15,6 @@ const labelStyle = {
 
 const PAGES = [
   { key: "plays", label: "Plays" },
-  { key: "archive", label: "Archive" },
   { key: "community", label: "Community" },
 ];
 

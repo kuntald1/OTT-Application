@@ -1477,3 +1477,20 @@ class TheaterHeroSlideTextUpdate(BaseModel):
     venue: Optional[str] = None
     title: str = Field(min_length=1, max_length=255)
     synopsis: Optional[str] = None
+
+
+class ArchiveHeroSlideOut(BaseModel):
+    id: uuid.UUID
+    image_url: str
+    eyebrow: Optional[str] = None
+    headline: str
+    subtext: Optional[str] = None
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class ArchiveHeroSlideTextUpdate(BaseModel):
+    eyebrow: Optional[str] = None
+    headline: str = Field(min_length=1, max_length=255)
+    subtext: Optional[str] = None
