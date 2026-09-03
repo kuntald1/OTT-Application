@@ -195,17 +195,17 @@ export default function App() {
             <ArchiveBrowsePage onNavigate={navigate} onOpenPerson={openPerson} />
           </div>
         ) : route.view === 'about' ? (
-          <StaticContentPage slug="about" onBack={goBack} />
+          <StaticContentPage slug="about" onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'contact' ? (
-          <StaticContentPage slug="contact" onBack={goBack} />
+          <StaticContentPage slug="contact" onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'privacy' ? (
-          <StaticContentPage slug="privacy" onBack={goBack} />
+          <StaticContentPage slug="privacy" onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'terms' ? (
-          <StaticContentPage slug="terms" onBack={goBack} />
+          <StaticContentPage slug="terms" onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'cookies' ? (
-          <StaticContentPage slug="cookies" onBack={goBack} />
+          <StaticContentPage slug="cookies" onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'faqs' ? (
-          <FaqPage onBack={goBack} />
+          <FaqPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'mylist' ? (
           <MyListPage onNavigate={navigate} />
         ) : route.view === 'subscription' ? (

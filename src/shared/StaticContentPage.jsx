@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { COLORS, NAV_CLEARANCE_CLASS } from "../theme";
+import { COLORS } from "../theme";
 import { fetchSitePage } from "../api";
+import Footer from "./Footer";
 
 // ---------------------------------------------------------------------------
 // Generic renderer for the site's static content pages — About Us, Contact
@@ -11,7 +12,7 @@ import { fetchSitePage } from "../api";
 // blank-line-separated block, so an admin can format with line breaks).
 // ---------------------------------------------------------------------------
 
-export default function StaticContentPage({ slug, onBack }) {
+export default function StaticContentPage({ slug, onBack, onNavigate }) {
   const [page, setPage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -27,7 +28,7 @@ export default function StaticContentPage({ slug, onBack }) {
 
   return (
     <div style={{ background: COLORS.black, minHeight: "100vh", fontFamily: "'Geist', -apple-system, sans-serif" }}>
-      <div className={`mx-auto max-w-2xl px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+      <main className="mx-auto max-w-2xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
         <button
           type="button"
           onClick={onBack}
@@ -53,7 +54,8 @@ export default function StaticContentPage({ slug, onBack }) {
             </div>
           </>
         )}
-      </div>
+      </main>
+      <Footer onNavigate={onNavigate} />
     </div>
   );
 }

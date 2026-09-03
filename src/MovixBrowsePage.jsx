@@ -4,6 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "./the
 import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
+import Footer from "./shared/Footer";
 import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories } from "./api";
 import { GenreRow as RealGenreRow, RealDetailModal, formatDuration } from "./VideoStreaming/VideoBrowsePage";
 
@@ -235,54 +236,7 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
         )}
       </main>
 
-      <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${t.border}` }}>
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-          {[
-            { heading: "Company", links: [
-              { label: "About Us", view: "about" },
-              { label: "Contact Us", view: "contact" },
-              { label: "FAQs", view: "faqs" },
-            ] },
-            { heading: "Support", links: [{ label: "Help Center" }, { label: "Account" }, { label: "Devices" }] },
-            { heading: "Watch", links: [{ label: "Films" }, { label: "Series" }, { label: "New & Popular" }] },
-            { heading: "Legal", links: [
-              { label: "Privacy", view: "privacy" },
-              { label: "Terms", view: "terms" },
-              { label: "Cookie Preferences", view: "cookies" },
-            ] },
-          ].map((col) => (
-            <div key={col.heading}>
-              <p className="mb-3 text-sm font-semibold" style={{ color: t.text }}>{col.heading}</p>
-              <div className="flex flex-col gap-2">
-                {col.links.map((link) => (
-                  <span
-                    key={link.label}
-                    onClick={link.view ? () => onNavigate?.(link.view) : undefined}
-                    className="text-sm"
-                    style={{ color: t.textFaint, cursor: link.view ? "pointer" : "default" }}
-                  >
-                    {link.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-10 flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: `1px solid ${t.border}` }}>
-          <div className="flex items-center gap-2" style={{ color: t.text }}>
-            <MovixMark className="h-5 w-5" style={{ fill: t.text }} />
-            <div>
-              <p className="text-sm font-semibold">theomy</p>
-              <p className="text-xs" style={{ color: t.textFaint }}>Stream films & series, beautifully.</p>
-            </div>
-          </div>
-          <p className="text-xs" style={{ color: t.textFainter }}>English</p>
-        </div>
-        <p className="mt-4 text-xs" style={{ color: t.textFainter }}>
-          theomy is a demo streaming concept. Titles and synopses are fictional; poster art is originally generated, not licensed photography.
-        </p>
-      </footer>
+      <Footer onNavigate={onNavigate} />
 
       {modal.item && modal.item.isReal ? (
         <RealDetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onNavigate={onNavigate} onSelectRelated={(relatedCard) => modal.open(relatedCard)} />

@@ -4,6 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
+import Footer from "../shared/Footer";
 import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
@@ -234,54 +235,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
       </main>
 
       {/* ---------------- Footer ---------------- */}
-      <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${T.border}` }}>
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-          {[
-            { heading: "Company", links: [
-              { label: "About Us", view: "about" },
-              { label: "Contact Us", view: "contact" },
-              { label: "FAQs", view: "faqs" },
-            ] },
-            { heading: "Support", links: [{ label: "Help Center" }, { label: "Account" }, { label: "Devices" }] },
-            { heading: "Watch", links: [{ label: "Films" }, { label: "Series" }, { label: "New & Popular" }] },
-            { heading: "Legal", links: [
-              { label: "Privacy", view: "privacy" },
-              { label: "Terms", view: "terms" },
-              { label: "Cookie Preferences", view: "cookies" },
-            ] },
-          ].map((col) => (
-            <div key={col.heading}>
-              <p className="mb-3 text-sm font-semibold" style={{ color: T.text }}>{col.heading}</p>
-              <div className="flex flex-col gap-2">
-                {col.links.map((link) => (
-                  <span
-                    key={link.label}
-                    onClick={link.view ? () => onNavigate?.(link.view) : undefined}
-                    className="text-sm"
-                    style={{ color: T.textFaint, cursor: link.view ? "pointer" : "default" }}
-                  >
-                    {link.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-10 flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: `1px solid ${T.border}` }}>
-          <div className="flex items-center gap-2" style={{ color: T.text }}>
-            <MovixMark className="h-5 w-5" style={{ fill: COLORS.gold }} />
-            <div>
-              <p className="text-sm font-semibold">theomy</p>
-              <p className="text-xs" style={{ color: T.textFaint }}>Stream stories, beautifully.</p>
-            </div>
-          </div>
-          <p className="text-xs" style={{ color: T.textFainter }}>English</p>
-        </div>
-        <p className="mt-4 text-xs" style={{ color: T.textFainter }}>
-          theomy is a demo streaming concept. Titles and descriptions are fictional; thumbnail art is originally generated, not licensed photography.
-        </p>
-      </footer>
+      <Footer onNavigate={onNavigate} />
 
       {modal.item && modal.item.isReal ? (
         <RealDetailModal
