@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
+from app.security import decode_access_token
 from app.models import (
     User, UserRole, Video, VideoPricing, VideoRevenueTier,
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
@@ -768,6 +769,103 @@ def get_published_video(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     return _to_out(video, db, current_user)
+
+
+def _resolve_viewer_for_vmap(current_user: User | None, token: str | None, db: Session) -> User | None:
+    """The Bearer-header auth (current_user) works whenever the caller
+    can attach a header — but ad SDKs (Google IMA on web, and mobile
+    equivalents) commonly fetch an adTagUrl/VMAP URL themselves,
+    without the app getting a chance to set headers on that request.
+    So this endpoint also accepts the JWT as a `?token=` query param
+    as a fallback, decoded the same way get_current_user_optional does
+    (same active-session-token check, so a since-logged-out session
+    doesn't keep pulling ads).
+    """
+    if current_user is not None:
+        return current_user
+    if not token:
+        return None
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+    user = db.query(User).filter(User.id == payload.get("sub")).first()
+    if user is None or not user.is_active:
+        return None
+    session_token = payload.get("sid")
+    if session_token and user.active_session_token and session_token != user.active_session_token:
+        return None
+    return user
+
+
+def _build_vmap_xml(cue_points: list[tuple[int, str]]) -> str:
+    """offset_seconds=0 uses timeOffset="start" (the standard convention
+    for a pre-roll); every other offset becomes an HH:MM:SS.mmm
+    timestamp. Each VAST tag URL is wrapped in CDATA rather than
+    entity-escaped by hand — it's an arbitrary third-party URL that may
+    contain characters (like &) XML would otherwise choke on.
+    """
+    breaks = []
+    for offset_seconds, vast_tag_url in cue_points:
+        if offset_seconds <= 0:
+            time_offset = "start"
+            break_id = "cue-0"
+        else:
+            hours, remainder = divmod(offset_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_offset = f"{hours:02d}:{minutes:02d}:{seconds:02d}.000"
+            break_id = f"cue-{offset_seconds}"
+        breaks.append(
+            f'  <vmap:AdBreak timeOffset="{time_offset}" breakType="linear" breakId="{break_id}">\n'
+            f'    <vmap:AdSource id="{break_id}-ad" allowMultipleAds="false" followRedirects="true">\n'
+            f'      <vmap:AdTagURI templateType="vast3"><![CDATA[{vast_tag_url}]]></vmap:AdTagURI>\n'
+            f'    </vmap:AdSource>\n'
+            f'  </vmap:AdBreak>'
+        )
+    breaks_xml = ("\n".join(breaks) + "\n") if breaks else ""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<vmap:VMAP xmlns:vmap="http://www.iab.net/videoad_vast_vmap_1" version="1.0">\n'
+        f'{breaks_xml}'
+        '</vmap:VMAP>'
+    )
+
+
+@router.get("/{video_id}/vmap")
+def get_video_vmap(
+    video_id: str,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    """VMAP for mid-roll ads — the URL a native ad SDK fetches directly
+    to get the full ad-break schedule for a video in one request,
+    instead of the player working from ad_cue_points embedded in the
+    video-detail JSON above. Same access gate as that field: only
+    returns ad breaks to a viewer who genuinely has playback access to
+    this video right now, and only while the video's has_ads is on —
+    see _check_video_access and AdCuePoint's docstring. A video with no
+    access/no ads gets a VMAP with zero AdBreaks (valid, empty XML),
+    not an error — an ad SDK handles "no ads" gracefully that way.
+    """
+    video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    viewer = _resolve_viewer_for_vmap(current_user, token, db)
+    has_access, _ = _check_video_access(video, viewer, db)
+
+    cue_points: list[tuple[int, str]] = []
+    if has_access and video.has_ads:
+        cue_rows = (
+            db.query(AdCuePoint, Ad)
+            .join(Ad, Ad.id == AdCuePoint.ad_id)
+            .filter(AdCuePoint.video_id == video.id, Ad.is_active == True)  # noqa: E712
+            .order_by(AdCuePoint.offset_seconds.asc())
+            .all()
+        )
+        cue_points = [(cue.offset_seconds, ad.vast_tag_url) for cue, ad in cue_rows]
+
+    return Response(content=_build_vmap_xml(cue_points), media_type="application/xml")
 
 
 ALLOWED_VIDEO_CONTENT_TYPES = {
