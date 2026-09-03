@@ -781,30 +781,19 @@ def _resolve_viewer_for_vmap(current_user: User | None, token: str | None, db: S
     (same active-session-token check, so a since-logged-out session
     doesn't keep pulling ads).
     """
-    print(f"[vmap-debug] current_user from header: {current_user.id if current_user else None}")
     if current_user is not None:
         return current_user
     if not token:
-        print("[vmap-debug] no ?token= provided")
         return None
     payload = decode_access_token(token)
     if payload is None:
-        print(f"[vmap-debug] decode_access_token FAILED for token starting: {token[:20]}...")
         return None
-    print(f"[vmap-debug] decoded payload: sub={payload.get('sub')} sid={payload.get('sid')}")
     user = db.query(User).filter(User.id == payload.get("sub")).first()
-    if user is None:
-        print(f"[vmap-debug] no User row found for sub={payload.get('sub')}")
-        return None
-    if not user.is_active:
-        print(f"[vmap-debug] user {user.id} is_active=False")
+    if user is None or not user.is_active:
         return None
     session_token = payload.get("sid")
-    print(f"[vmap-debug] user.active_session_token={user.active_session_token} vs token sid={session_token}")
     if session_token and user.active_session_token and session_token != user.active_session_token:
-        print("[vmap-debug] session token MISMATCH — rejecting (this session was superseded by a newer login)")
         return None
-    print(f"[vmap-debug] resolved viewer: {user.id} ({user.email})")
     return user
 
 
@@ -863,8 +852,7 @@ def get_video_vmap(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
     viewer = _resolve_viewer_for_vmap(current_user, token, db)
-    has_access, access_reason = _check_video_access(video, viewer, db)
-    print(f"[vmap-debug] video.has_ads={video.has_ads} has_access={has_access} access_reason={access_reason}")
+    has_access, _ = _check_video_access(video, viewer, db)
 
     cue_points: list[tuple[int, str]] = []
     if has_access and video.has_ads:
@@ -875,10 +863,12 @@ def get_video_vmap(
             .order_by(AdCuePoint.offset_seconds.asc())
             .all()
         )
-        cue_points = [(cue.offset_seconds, ad.vast_tag_url) for cue, ad in cue_rows]
-        print(f"[vmap-debug] cue_rows found: {len(cue_rows)}")
-    else:
-        print("[vmap-debug] SKIPPED cue-point query — has_access and video.has_ads must both be True")
+        # .strip() — Ad.vast_tag_url has been seen with stray leading/
+        # trailing whitespace (however it got pasted/stored), which
+        # lands inside the CDATA block untouched and makes Google IMA's
+        # strict URI parsing silently reject the whole AdBreak with no
+        # visible error — cue_rows found, VMAP 200 OK, just no ad.
+        cue_points = [(cue.offset_seconds, ad.vast_tag_url.strip()) for cue, ad in cue_rows]
 
     return Response(content=_build_vmap_xml(cue_points), media_type="application/xml")
 
