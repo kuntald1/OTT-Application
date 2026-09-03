@@ -1,4 +1,5 @@
 import secrets
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -56,6 +57,28 @@ def _issue_token_and_redirect(user: User, db: Session) -> RedirectResponse:
     # Frontend reads ?token=... on this page and stores it (e.g. in memory
     # or secure storage), then clears it from the URL.
     return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/callback?token={token}")
+
+
+def _issue_token_and_redirect_mobile(user: User, db: Session) -> RedirectResponse:
+    """Mobile counterpart to _issue_token_and_redirect above — same
+    single-session pinning, but redirects to the theomy React Native
+    app's custom URL scheme instead of the web frontend. name/email are
+    urlencoded (via urlencode, which also covers token/user_id/role —
+    none of those need it, but doing all five through one urlencode
+    call is simpler than hand-picking which fields to quote).
+    """
+    session_token = secrets.token_urlsafe(32)
+    user.active_session_token = session_token
+    db.commit()
+    token = create_access_token(subject=str(user.id), session_token=session_token)
+    params = urlencode({
+        "token": token,
+        "user_id": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "role": user.role.value,
+    })
+    return RedirectResponse(url=f"theomy://auth-callback?{params}")
 
 
 # ---------------------------------------------------------------- Google ---
@@ -129,10 +152,17 @@ def facebook_login():
     )
 
 
-@router.get("/facebook/callback")
-def facebook_callback(code: str, db: Session = Depends(get_db)):
-    redirect_uri = f"{settings.BACKEND_BASE_URL}/auth/facebook/callback"
-
+def _exchange_facebook_code_for_user(code: str, redirect_uri: str, db: Session) -> User:
+    """Shared by both the web and mobile Facebook callbacks below — code
+    exchange, profile fetch, and find-or-create, stopping right before
+    token issuance (that part differs: web redirects to FRONTEND_URL,
+    mobile redirects to the theomy:// custom scheme). redirect_uri must
+    be the EXACT one Facebook used to reach whichever callback called
+    this — OAuth requires the token-exchange redirect_uri to match the
+    one from the original authorize request, so the mobile app's own
+    Facebook login flow must open the dialog with redirect_uri set to
+    .../auth/facebook/callback/mobile, not the web one.
+    """
     with httpx.Client() as client:
         token_resp = client.get(
             "https://graph.facebook.com/v19.0/oauth/access_token",
@@ -162,11 +192,24 @@ def facebook_callback(code: str, db: Session = Depends(get_db)):
             detail="Facebook account has no email available",
         )
 
-    user = _find_or_create_social_user(
+    return _find_or_create_social_user(
         db,
         provider=AuthProvider.facebook,
         provider_id=info["id"],
         email=info["email"],
         name=info.get("name", info["email"]),
     )
+
+
+@router.get("/facebook/callback")
+def facebook_callback(code: str, db: Session = Depends(get_db)):
+    redirect_uri = f"{settings.BACKEND_BASE_URL}/auth/facebook/callback"
+    user = _exchange_facebook_code_for_user(code, redirect_uri, db)
     return _issue_token_and_redirect(user, db)
+
+
+@router.get("/facebook/callback/mobile")
+def facebook_callback_mobile(code: str, db: Session = Depends(get_db)):
+    redirect_uri = f"{settings.BACKEND_BASE_URL}/auth/facebook/callback/mobile"
+    user = _exchange_facebook_code_for_user(code, redirect_uri, db)
+    return _issue_token_and_redirect_mobile(user, db)
