@@ -99,10 +99,14 @@ def google_login():
     )
 
 
-@router.get("/google/callback")
-def google_callback(code: str, db: Session = Depends(get_db)):
-    redirect_uri = f"{settings.BACKEND_BASE_URL}/auth/google/callback"
-
+def _exchange_google_code_for_user(code: str, redirect_uri: str, db: Session) -> User:
+    """Shared by both the web and mobile Google callbacks below — same
+    reasoning as _exchange_facebook_code_for_user above: redirect_uri
+    must be the EXACT one Google used to reach whichever callback
+    called this, so the mobile app's own Google login flow must open
+    the consent screen with redirect_uri set to
+    .../auth/google/callback/mobile, not the web one.
+    """
     with httpx.Client() as client:
         token_resp = client.post(
             "https://oauth2.googleapis.com/token",
@@ -127,14 +131,27 @@ def google_callback(code: str, db: Session = Depends(get_db)):
         )
         info = userinfo_resp.json()
 
-    user = _find_or_create_social_user(
+    return _find_or_create_social_user(
         db,
         provider=AuthProvider.google,
         provider_id=info["sub"],
         email=info["email"],
         name=info.get("name", info["email"]),
     )
+
+
+@router.get("/google/callback")
+def google_callback(code: str, db: Session = Depends(get_db)):
+    redirect_uri = f"{settings.BACKEND_BASE_URL}/auth/google/callback"
+    user = _exchange_google_code_for_user(code, redirect_uri, db)
     return _issue_token_and_redirect(user, db)
+
+
+@router.get("/google/callback/mobile")
+def google_callback_mobile(code: str, db: Session = Depends(get_db)):
+    redirect_uri = f"{settings.BACKEND_BASE_URL}/auth/google/callback/mobile"
+    user = _exchange_google_code_for_user(code, redirect_uri, db)
+    return _issue_token_and_redirect_mobile(user, db)
 
 
 # -------------------------------------------------------------- Facebook ---
