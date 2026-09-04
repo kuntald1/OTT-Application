@@ -870,7 +870,19 @@ def get_video_vmap(
         # visible error — cue_rows found, VMAP 200 OK, just no ad.
         cue_points = [(cue.offset_seconds, ad.vast_tag_url.strip()) for cue, ad in cue_rows]
 
-    return Response(content=_build_vmap_xml(cue_points), media_type="application/xml")
+    return Response(
+        content=_build_vmap_xml(cue_points),
+        media_type="application/xml",
+        # IMA SDK runs inside its own WebView (imasdk.googleapis.com
+        # origin) and fetches this URL itself with a plain, credential-
+        # less GET (the token travels in the query string, not a
+        # cookie/header) — the site's global CORSMiddleware only
+        # allows the main frontend origin, so without this the browser
+        # blocks the response before IMA ever sees it: no error surfaces
+        # anywhere server-side, since the request itself succeeds —
+        # only the client-side read of the response is blocked.
+        headers={"Access-Control-Allow-Origin": "https://imasdk.googleapis.com"},
+    )
 
 
 ALLOWED_VIDEO_CONTENT_TYPES = {
