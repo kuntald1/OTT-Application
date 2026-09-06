@@ -781,17 +781,21 @@ def search_videos(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
-    """Real search across title, description, category, and cast/crew
-    NAMES — plain SQL text matching (ILIKE), deliberately not AI/
-    embedding-based. A name search wants exact/partial text matches,
-    not semantic similarity — "Pavel Smirnov" should find Pavel
-    Smirnov, not someone else vaguely similar. Declared before
-    GET /{video_id} so "/videos/search" isn't swallowed by that path
-    parameter.
+    """Real search across title, description, category, cast/crew
+    NAMES, and the uploader's (organiser/studio) name — plain SQL text
+    matching (ILIKE), deliberately not AI/embedding-based. A name
+    search wants exact/partial text matches, not semantic similarity —
+    "Pavel Smirnov" should find Pavel Smirnov, not someone else
+    vaguely similar. Declared before GET /{video_id} so
+    "/videos/search" isn't swallowed by that path parameter.
 
     section (play/archive), when given, scopes results to that section
     only — searching while on the Play tab shouldn't surface Archive
-    content and vice versa.
+    content and vice versa. This applies identically to every match
+    type below, including the uploader-name match, via the shared
+    _scoped() helper — so typing a studio's name (e.g. "Bohurupee")
+    while on Plays only returns THAT studio's Play uploads, never
+    their Archive-only ones.
     """
     q = q.strip()
     if not q:
@@ -835,6 +839,11 @@ def search_videos(
         .join(Video, Video.id == VideoCrew.video_id)
     ).filter(Person.name.ilike(pattern)).all()
     matching_ids.update(vid for (vid,) in crew_matches)
+
+    uploader_matches = _scoped(
+        db.query(Video.id).join(User, User.id == Video.uploaded_by_user_id)
+    ).filter(User.name.ilike(pattern)).all()
+    matching_ids.update(vid for (vid,) in uploader_matches)
 
     if not matching_ids:
         return []
