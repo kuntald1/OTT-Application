@@ -17,7 +17,7 @@ from app.models import (
     VideoSection, VideoStatus, VideoMonetization, AgeRating,
     VideoCategory, VideoCast, VideoCrew, Person, AdminUser,
     Subscription, SubscriptionPlan, VideoPurchase, PaymentStatus, VideoLike, MyListItem, WatchProgress,
-    Ad, AdCuePoint, Menu, VideoSubtitle,
+    Ad, AdCuePoint, Menu, VideoSubtitle, DiscoveryRowSetting, DiscoveryHiddenItem,
 )
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
@@ -702,9 +702,19 @@ def list_video_languages(
     so this groups in Python rather than SQL. Declared before
     GET /{video_id} so "/videos/languages" isn't swallowed by that
     path parameter.
+
+    Also honors Admin > Discovery Settings — the whole row can be
+    switched off, or individual languages hidden, independent of
+    whether they'd otherwise qualify by having published videos.
     """
     if section not in ("play", "archive"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
+
+    row_setting = db.query(DiscoveryRowSetting).filter(DiscoveryRowSetting.row_key == "languages").first()
+    if row_setting and not row_setting.is_visible:
+        return []
+    hidden = {h.item_key for h in db.query(DiscoveryHiddenItem).filter(DiscoveryHiddenItem.row_key == "languages").all()}
+
     videos = (
         db.query(Video)
         .filter(Video.status == VideoStatus.published, Video.section == VideoSection(section))
@@ -716,6 +726,8 @@ def list_video_languages(
         if not v.languages:
             continue
         for lang in [l.strip() for l in v.languages.split(",") if l.strip()]:
+            if lang in hidden:
+                continue
             entry = by_language.setdefault(lang, {"poster_image_url": None, "video_count": 0})
             entry["video_count"] += 1
             if entry["poster_image_url"] is None and v.poster_image_url:
@@ -735,9 +747,19 @@ def list_video_studios(
     Organiser with at least one published video in THIS section
     specifically (same section-scoping as /languages above — an
     organiser who's only published to Archive won't show on Plays).
+
+    Also honors Admin > Discovery Settings — the whole row can be
+    switched off, or individual studios hidden, independent of
+    whether they'd otherwise qualify by having published videos.
     """
     if section not in ("play", "archive"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
+
+    row_setting = db.query(DiscoveryRowSetting).filter(DiscoveryRowSetting.row_key == "studios").first()
+    if row_setting and not row_setting.is_visible:
+        return []
+    hidden = {h.item_key for h in db.query(DiscoveryHiddenItem).filter(DiscoveryHiddenItem.row_key == "studios").all()}
+
     section_enum = VideoSection(section)
 
     rows = (
@@ -755,6 +777,8 @@ def list_video_studios(
 
     results = []
     for user_id, name, video_count in rows:
+        if str(user_id) in hidden:
+            continue
         poster_row = (
             db.query(Video.poster_image_url)
             .filter(

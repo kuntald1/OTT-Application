@@ -1126,3 +1126,27 @@ export function updateAdminOrganiserSection(sectionId, { title, contentHtml }) {
 export function deleteAdminOrganiserSection(sectionId) {
   return request(`/admin/organiser-profile/sections/${sectionId}`, { method: "DELETE", auth: true });
 }
+
+// --- Discovery Row Settings (Popular Languages / Studios visibility) ---
+
+export function fetchAdminDiscoverySettings() {
+  return request("/admin/discovery-settings", { auth: true });
+}
+
+export function setAdminDiscoveryRowVisibility(rowKey, isVisible) {
+  return request(`/admin/discovery-settings/${rowKey}/visibility`, {
+    method: "PUT", auth: true, body: { is_visible: isVisible },
+  });
+}
+
+export function hideAdminDiscoveryItem(rowKey, itemKey) {
+  return request(`/admin/discovery-settings/${rowKey}/hide`, {
+    method: "POST", auth: true, body: { item_key: itemKey },
+  });
+}
+
+export function unhideAdminDiscoveryItem(rowKey, itemKey) {
+  return request(`/admin/discovery-settings/${rowKey}/hide/${encodeURIComponent(itemKey)}`, {
+    method: "DELETE", auth: true,
+  });
+}

@@ -1686,3 +1686,32 @@ class OrganiserProfileSection(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class DiscoveryRowSetting(Base):
+    """Whole-row on/off switch for the "Popular Languages" / "Studios"
+    discovery rows on Plays/Archive — row_key is "languages" |
+    "studios". Missing a row for a given key means "visible" (the
+    default) — a row only exists here once an admin has actually
+    touched its visibility.
+    """
+    __tablename__ = "discovery_row_settings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    row_key = Column(String(20), unique=True, nullable=False)
+    is_visible = Column(Boolean, nullable=False, default=True)
+
+
+class DiscoveryHiddenItem(Base):
+    """One specific hidden tile within a discovery row — e.g. hide just
+    "Bengali" from Popular Languages, or just one organiser from
+    Studios, without turning off the whole row. item_key is the
+    language name for row_key="languages", or the organiser's User.id
+    (as a string) for row_key="studios".
+    """
+    __tablename__ = "discovery_hidden_items"
+    __table_args__ = (UniqueConstraint("row_key", "item_key", name="uq_discovery_hidden_item"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    row_key = Column(String(20), nullable=False, index=True)
+    item_key = Column(String(255), nullable=False)

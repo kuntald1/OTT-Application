@@ -1592,3 +1592,27 @@ class VideoStudioOut(BaseModel):
     name: str
     poster_image_url: Optional[str] = None
     video_count: int
+
+
+class DiscoveryItemOut(BaseModel):
+    key: str
+    label: str
+    hidden: bool
+
+
+class DiscoveryRowOut(BaseModel):
+    is_visible: bool
+    all_items: List[DiscoveryItemOut]
+
+
+class DiscoverySettingsOut(BaseModel):
+    languages: DiscoveryRowOut
+    studios: DiscoveryRowOut
+
+
+class DiscoveryVisibilityUpdate(BaseModel):
+    is_visible: bool
+
+
+class DiscoveryHideItemRequest(BaseModel):
+    item_key: str
