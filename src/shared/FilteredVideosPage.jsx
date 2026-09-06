@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { COLORS, NAV_CLEARANCE_CLASS } from "../theme";
+import { COLORS } from "../theme";
 import { fetchPublishedVideos } from "../api";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ export default function FilteredVideosPage({ section, language, uploadedBy, titl
 
   return (
     <div style={{ background: COLORS.black, minHeight: "100vh", fontFamily: "'Geist', -apple-system, sans-serif" }}>
-      <main className={`px-6 pb-16 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+      <main className={`px-6 pb-16 pt-24 sm:px-10 sm:pt-28`}>
         <button
           type="button"
           onClick={onBack}
