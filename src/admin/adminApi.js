@@ -1104,3 +1104,25 @@ export function toggleAdminAdBanner(bannerId) {
 export function deleteAdminAdBanner(bannerId) {
   return request(`/admin/ad-banners/${bannerId}`, { method: "DELETE", auth: true });
 }
+
+// --- Organiser Profile (admin side — "About Page" for a Plays Organiser) ---
+
+export function fetchAdminOrganiserSections(userId) {
+  return request(`/admin/organiser-profile/${userId}/sections`, { auth: true });
+}
+
+export function createAdminOrganiserSection(userId, { title, contentHtml }) {
+  return request(`/admin/organiser-profile/${userId}/sections`, {
+    method: "POST", auth: true, body: { title, content_html: contentHtml },
+  });
+}
+
+export function updateAdminOrganiserSection(sectionId, { title, contentHtml }) {
+  return request(`/admin/organiser-profile/sections/${sectionId}`, {
+    method: "PUT", auth: true, body: { title, content_html: contentHtml },
+  });
+}
+
+export function deleteAdminOrganiserSection(sectionId) {
+  return request(`/admin/organiser-profile/sections/${sectionId}`, { method: "DELETE", auth: true });
+}

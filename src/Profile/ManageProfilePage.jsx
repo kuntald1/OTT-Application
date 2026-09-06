@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock, BookOpen } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword } from "../api";
+import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection } from "../api";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
 
 // ---------------------------------------------------------------------------
 // Manage Profile — reached from the profile menu. Edits photo, name, email,
@@ -29,6 +30,48 @@ export default function ManageProfilePage({ onBack }) {
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+
+  const [aboutSections, setAboutSections] = useState([]);
+  const [aboutLoading, setAboutLoading] = useState(true);
+  const [aboutError, setAboutError] = useState("");
+
+  useEffect(() => {
+    if (profile.role !== "plays_organiser") return;
+    fetchMyOrganiserSections()
+      .then(setAboutSections)
+      .catch((err) => setAboutError(err.message || "Couldn't load your About page."))
+      .finally(() => setAboutLoading(false));
+  }, [profile.role]);
+
+  const handleCreateSection = async ({ title, contentHtml }) => {
+    setAboutError("");
+    try {
+      const created = await createMyOrganiserSection({ title, contentHtml });
+      setAboutSections((list) => [...list, created]);
+    } catch (err) {
+      setAboutError(err.message || "Couldn't add section.");
+    }
+  };
+
+  const handleUpdateSection = async (id, { title, contentHtml }) => {
+    setAboutError("");
+    try {
+      const updated = await updateMyOrganiserSection(id, { title, contentHtml });
+      setAboutSections((list) => list.map((s) => (s.id === id ? updated : s)));
+    } catch (err) {
+      setAboutError(err.message || "Couldn't save section.");
+    }
+  };
+
+  const handleDeleteSection = async (id) => {
+    setAboutError("");
+    try {
+      await deleteMyOrganiserSection(id);
+      setAboutSections((list) => list.filter((s) => s.id !== id));
+    } catch (err) {
+      setAboutError(err.message || "Couldn't delete section.");
+    }
+  };
 
   const handleChangePassword = async () => {
     setPasswordError("");
@@ -276,6 +319,25 @@ export default function ManageProfilePage({ onBack }) {
             )}
           </div>
         </div>
+
+        {profile.role === "plays_organiser" && (
+          <div className="mt-6 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              <BookOpen className="h-4 w-4" style={{ color: COLORS.gold }} /> About {profile.name}
+            </h2>
+            <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+              Tell people about your organisation — add sections like About, Early Days, Selected Plays, or Awards.
+            </p>
+            <OrganiserProfileSectionsEditor
+              sections={aboutSections}
+              loading={aboutLoading}
+              error={aboutError}
+              onCreate={handleCreateSection}
+              onUpdate={handleUpdateSection}
+              onDelete={handleDeleteSection}
+            />
+          </div>
+        )}
 
         {myParent?.has_parent && (
           <div className="mt-6 rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>

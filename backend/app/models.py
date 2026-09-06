@@ -1659,3 +1659,30 @@ class AdBannerPage(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     ad_banner_id = Column(UUID(as_uuid=True), ForeignKey("ad_banners.id", ondelete="CASCADE"), nullable=False, index=True)
     page_key = Column(String(20), nullable=False, index=True)
+
+
+class OrganiserProfileSection(Base):
+    """One named, rich-text section of a Plays Organiser's "About"
+    page — e.g. "About", "Early days", "Selected plays", "Awards", or
+    any custom title the organiser/admin chooses. content_html is
+    produced by a simple contentEditable rich-text editor on the
+    frontend (bold/underline/color/font size), stored as sanitized-on-
+    render HTML — NOT arbitrary user HTML trusted blindly elsewhere.
+    Editable by the organiser themselves (Manage Profile > About) and
+    by an admin (User Management > that organiser's About Page).
+    """
+    __tablename__ = "organiser_profile_sections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    content_html = Column(Text, nullable=False, default="")
+    display_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

@@ -1560,3 +1560,22 @@ class AdBannerTextUpdate(BaseModel):
     start_date: date
     end_date: date
     pages: List[str] = Field(min_length=1)
+
+
+class OrganiserProfileSectionOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    content_html: str
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class OrganiserProfileSectionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content_html: str = ""
+
+
+class OrganiserProfileSectionUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content_html: str = ""

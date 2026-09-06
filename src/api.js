@@ -940,3 +940,25 @@ export function fetchFaqs() {
 export function fetchAdBanners(pageKey) {
   return request(`/ad-banners?page=${pageKey}`);
 }
+
+// --- Organiser Profile ("About [Organisation]" sections on Manage Profile) ---
+
+export function fetchMyOrganiserSections() {
+  return request("/organiser-profile/sections", { auth: true });
+}
+
+export function createMyOrganiserSection({ title, contentHtml }) {
+  return request("/organiser-profile/sections", {
+    method: "POST", auth: true, body: { title, content_html: contentHtml },
+  });
+}
+
+export function updateMyOrganiserSection(sectionId, { title, contentHtml }) {
+  return request(`/organiser-profile/sections/${sectionId}`, {
+    method: "PUT", auth: true, body: { title, content_html: contentHtml },
+  });
+}
+
+export function deleteMyOrganiserSection(sectionId) {
+  return request(`/organiser-profile/sections/${sectionId}`, { method: "DELETE", auth: true });
+}

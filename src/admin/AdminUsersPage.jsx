@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye } from "lucide-react";
-import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, fetchAdminUserSubscriptions, fetchAdminUserPayments } from "./adminApi";
+import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil } from "lucide-react";
+import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
+import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -75,6 +76,7 @@ export default function AdminUsersPage({ currentAdmin }) {
 
   const [confirmToggleUser, setConfirmToggleUser] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
+  const [viewingAboutUser, setViewingAboutUser] = useState(null);
 
   const handleToggleActiveConfirmed = async () => {
     const user = confirmToggleUser;
@@ -174,6 +176,16 @@ export default function AdminUsersPage({ currentAdmin }) {
             style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
           >
             <Key className="h-3.5 w-3.5" /> Password
+          </button>
+        )}
+        {u.role === "plays_organiser" && (
+          <button
+            type="button"
+            onClick={() => setViewingAboutUser(u)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+            style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}
+          >
+            <BookOpen className="h-3.5 w-3.5" /> About Page
           </button>
         )}
         {(u.role === "content_creator" || u.role === "plays_organiser") && (
@@ -377,6 +389,9 @@ export default function AdminUsersPage({ currentAdmin }) {
       {viewingUser && (
         <CustomerDetailModal user={viewingUser} onClose={() => setViewingUser(null)} />
       )}
+      {viewingAboutUser && (
+        <AboutPageModal user={viewingAboutUser} onClose={() => setViewingAboutUser(null)} />
+      )}
         </>
       )}
     </div>
@@ -525,6 +540,89 @@ function CustomerDetailModal({ user, onClose }) {
             })()}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// --------------------------------------------------------- About Page
+// Admin-side management of a Plays Organiser's "About [Organisation]"
+// sections — the same sections the organiser edits from their own
+// Manage Profile, exposed here so an admin can help/moderate.
+
+function AboutPageModal({ user, onClose }) {
+  const [sections, setSections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchAdminOrganiserSections(user.id)
+      .then(setSections)
+      .catch((err) => setError(err.message || "Couldn't load this organiser's About page."))
+      .finally(() => setLoading(false));
+  }, [user.id]);
+
+  const handleCreate = async ({ title, contentHtml }) => {
+    setError("");
+    try {
+      const created = await createAdminOrganiserSection(user.id, { title, contentHtml });
+      setSections((list) => [...list, created]);
+    } catch (err) {
+      setError(err.message || "Couldn't add section.");
+    }
+  };
+
+  const handleUpdate = async (id, { title, contentHtml }) => {
+    setError("");
+    try {
+      const updated = await updateAdminOrganiserSection(id, { title, contentHtml });
+      setSections((list) => list.map((s) => (s.id === id ? updated : s)));
+    } catch (err) {
+      setError(err.message || "Couldn't save section.");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    setError("");
+    try {
+      await deleteAdminOrganiserSection(id);
+      setSections((list) => list.filter((s) => s.id !== id));
+    } catch (err) {
+      setError(err.message || "Couldn't delete section.");
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl p-6"
+        style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.25)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              <BookOpen className="h-4 w-4" style={{ color: COLORS.gold }} /> About {user.name}
+            </h3>
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>{user.email}</p>
+          </div>
+          <button type="button" onClick={onClose} style={{ color: "rgba(245,235,221,0.5)" }}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <OrganiserProfileSectionsEditor
+          sections={sections}
+          loading={loading}
+          error={error}
+          onCreate={handleCreate}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+        />
       </div>
     </div>
   );
