@@ -159,7 +159,7 @@ export default function AdminUsersPage({ currentAdmin }) {
         )}
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-2">
+      <div className="flex flex-shrink-0 flex-nowrap items-center gap-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setViewingUser(u)}
