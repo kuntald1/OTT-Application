@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
 import Footer from "../shared/Footer";
+import DiscoveryRows from "../shared/DiscoveryRows";
 import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
@@ -235,6 +236,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
       </main>
 
       {/* ---------------- Footer ---------------- */}
+      <DiscoveryRows section="play" onNavigate={onNavigate} />
       <Footer onNavigate={onNavigate} />
 
       {modal.item && modal.item.isReal ? (

@@ -1579,3 +1579,16 @@ class OrganiserProfileSectionCreate(BaseModel):
 class OrganiserProfileSectionUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content_html: str = ""
+
+
+class VideoLanguageOut(BaseModel):
+    language: str
+    poster_image_url: Optional[str] = None
+    video_count: int
+
+
+class VideoStudioOut(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    poster_image_url: Optional[str] = None
+    video_count: int

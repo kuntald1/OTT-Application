@@ -5,6 +5,7 @@ import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
 import Footer from "./shared/Footer";
+import DiscoveryRows from "./shared/DiscoveryRows";
 import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories } from "./api";
 import { GenreRow as RealGenreRow, RealDetailModal, formatDuration } from "./VideoStreaming/VideoBrowsePage";
 
@@ -236,6 +237,7 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
         )}
       </main>
 
+      <DiscoveryRows section="archive" onNavigate={onNavigate} />
       <Footer onNavigate={onNavigate} />
 
       {modal.item && modal.item.isReal ? (

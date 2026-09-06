@@ -437,8 +437,21 @@ export function fetchMyVideos() {
   return request("/videos/mine", { auth: true });
 }
 
-export function fetchPublishedVideos(section) {
-  return request(`/videos${section ? `?section=${section}` : ""}`, { auth: true });
+export function fetchPublishedVideos(section, { language, uploadedBy } = {}) {
+  const params = new URLSearchParams();
+  if (section) params.set("section", section);
+  if (language) params.set("language", language);
+  if (uploadedBy) params.set("uploaded_by", uploadedBy);
+  const qs = params.toString();
+  return request(`/videos${qs ? `?${qs}` : ""}`, { auth: true });
+}
+
+export function fetchVideoLanguages(section) {
+  return request(`/videos/languages?section=${section}`);
+}
+
+export function fetchVideoStudios(section) {
+  return request(`/videos/studios?section=${section}`);
 }
 
 export function fetchVideoById(videoId) {

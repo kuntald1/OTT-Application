@@ -21,6 +21,7 @@ import HelpCenterPage from './Help/HelpCenterPage'
 import StaticContentPage from './shared/StaticContentPage'
 import FaqPage from './shared/FaqPage'
 import AdBannerCarousel from './shared/AdBannerCarousel'
+import FilteredVideosPage from './shared/FilteredVideosPage'
 import ManageProfilePage from './Profile/ManageProfilePage'
 import BlogListPage from './Community/BlogListPage'
 import BlogDetailPage from './Community/BlogDetailPage'
@@ -198,6 +199,22 @@ export default function App() {
             <ArchiveHero />
             <ArchiveBrowsePage onNavigate={navigate} onOpenPerson={openPerson} />
           </div>
+        ) : route.view === 'videosByLanguage' ? (
+          <FilteredVideosPage
+            section={route.params.section}
+            language={route.params.language}
+            title={`${route.params.language} — ${route.params.section === "archive" ? "Archive" : "Plays"}`}
+            onBack={goBack}
+            onOpenVideo={openVideo}
+          />
+        ) : route.view === 'videosByStudio' ? (
+          <FilteredVideosPage
+            section={route.params.section}
+            uploadedBy={route.params.uploadedBy}
+            title={`${route.params.studioName} — ${route.params.section === "archive" ? "Archive" : "Plays"}`}
+            onBack={goBack}
+            onOpenVideo={openVideo}
+          />
         ) : route.view === 'about' ? (
           <StaticContentPage slug="about" onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'contact' ? (

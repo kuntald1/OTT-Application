@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, Form
 from pathlib import Path
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -21,7 +22,7 @@ from app.models import (
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
     VideoCastOut, VideoCrewOut, PersonOut, VideoLikeToggleResponse, PlayerAdCuePointOut,
-    VideoSubtitleOut,
+    VideoSubtitleOut, VideoLanguageOut, VideoStudioOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -652,6 +653,8 @@ def list_my_videos(
 @router.get("", response_model=list[VideoOut])
 def list_published_videos(
     section: str | None = None,
+    language: str | None = None,
+    uploaded_by: str | None = None,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
@@ -662,13 +665,113 @@ def list_published_videos(
     # has_access reflects that viewer's real subscription/purchase
     # status, so the browse grid can show a lock badge on content they
     # can't actually play.
+    #
+    # language/uploaded_by power the "Popular Languages" and "Studios"
+    # discovery rows (see /languages and /studios below) — clicking a
+    # tile lands back here with the matching filter.
     query = db.query(Video).filter(Video.status == VideoStatus.published)
     if section:
         if section not in ("play", "archive"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
         query = query.filter(Video.section == VideoSection(section))
+    if uploaded_by:
+        query = query.filter(Video.uploaded_by_user_id == uploaded_by)
     videos = query.order_by(Video.published_at.desc()).all()
+    if language:
+        # languages is a free-text comma-separated column (see Video
+        # model) — no clean way to filter this in SQL, so it's done
+        # here in Python instead.
+        needle = language.strip().lower()
+        videos = [
+            v for v in videos
+            if v.languages and needle in [l.strip().lower() for l in v.languages.split(",")]
+        ]
     return [_to_out(v, db, current_user) for v in videos]
+
+
+@router.get("/languages", response_model=list[VideoLanguageOut])
+def list_video_languages(
+    section: str,
+    db: Session = Depends(get_db),
+):
+    """Powers the "Popular Languages" row on Plays/Archive — every
+    distinct language with at least one published video in THIS
+    section specifically (a language with only Archive videos won't
+    show on Plays, and vice versa — same section-scoping as
+    /studios below). languages is a free-text comma-separated column,
+    so this groups in Python rather than SQL. Declared before
+    GET /{video_id} so "/videos/languages" isn't swallowed by that
+    path parameter.
+    """
+    if section not in ("play", "archive"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
+    videos = (
+        db.query(Video)
+        .filter(Video.status == VideoStatus.published, Video.section == VideoSection(section))
+        .order_by(Video.published_at.desc())
+        .all()
+    )
+    by_language: dict[str, dict] = {}
+    for v in videos:
+        if not v.languages:
+            continue
+        for lang in [l.strip() for l in v.languages.split(",") if l.strip()]:
+            entry = by_language.setdefault(lang, {"poster_image_url": None, "video_count": 0})
+            entry["video_count"] += 1
+            if entry["poster_image_url"] is None and v.poster_image_url:
+                entry["poster_image_url"] = v.poster_image_url
+    return [
+        VideoLanguageOut(language=lang, poster_image_url=data["poster_image_url"], video_count=data["video_count"])
+        for lang, data in sorted(by_language.items(), key=lambda kv: -kv[1]["video_count"])
+    ]
+
+
+@router.get("/studios", response_model=list[VideoStudioOut])
+def list_video_studios(
+    section: str,
+    db: Session = Depends(get_db),
+):
+    """Powers the "Studios" row on Plays/Archive — every Plays
+    Organiser with at least one published video in THIS section
+    specifically (same section-scoping as /languages above — an
+    organiser who's only published to Archive won't show on Plays).
+    """
+    if section not in ("play", "archive"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
+    section_enum = VideoSection(section)
+
+    rows = (
+        db.query(User.id, User.name, func.count(Video.id).label("video_count"))
+        .join(Video, Video.uploaded_by_user_id == User.id)
+        .filter(
+            Video.status == VideoStatus.published,
+            Video.section == section_enum,
+            User.role == UserRole.plays_organiser,
+        )
+        .group_by(User.id, User.name)
+        .order_by(func.count(Video.id).desc())
+        .all()
+    )
+
+    results = []
+    for user_id, name, video_count in rows:
+        poster_row = (
+            db.query(Video.poster_image_url)
+            .filter(
+                Video.uploaded_by_user_id == user_id,
+                Video.status == VideoStatus.published,
+                Video.section == section_enum,
+                Video.poster_image_url.isnot(None),
+            )
+            .order_by(Video.published_at.desc())
+            .first()
+        )
+        results.append(VideoStudioOut(
+            user_id=user_id, name=name,
+            poster_image_url=poster_row[0] if poster_row else None,
+            video_count=video_count,
+        ))
+    return results
 
 
 @router.get("/search", response_model=list[VideoOut])
