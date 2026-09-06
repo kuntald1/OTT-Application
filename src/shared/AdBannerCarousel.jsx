@@ -29,7 +29,7 @@ export default function AdBannerCarousel({ pageKey }) {
   const banner = banners[active];
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16 / 3", maxHeight: 220 }}>
+    <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16 / 5", maxHeight: 380 }}>
       {banners.map((b, i) => (
         <a
           key={b.id}
