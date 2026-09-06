@@ -20,6 +20,7 @@ import ActorProfilePage from './People/ActorProfilePage'
 import HelpCenterPage from './Help/HelpCenterPage'
 import StaticContentPage from './shared/StaticContentPage'
 import FaqPage from './shared/FaqPage'
+import AdBannerCarousel from './shared/AdBannerCarousel'
 import ManageProfilePage from './Profile/ManageProfilePage'
 import BlogListPage from './Community/BlogListPage'
 import BlogDetailPage from './Community/BlogDetailPage'
@@ -172,6 +173,7 @@ export default function App() {
 
         {route.view === 'hero' ? (
           <div>
+            <AdBannerCarousel pageKey="plays" />
             <MovixHero />
             <VideoBrowsePage onOpenPerson={openPerson} onNavigate={navigate} openVideoId={route.params.openVideoId} />
           </div>
@@ -181,11 +183,13 @@ export default function App() {
           <LiveWatchPage liveStreamId={route.params.liveStreamId} onBack={goBack} />
         ) : route.view === 'accordion' ? (
           <div>
+            <AdBannerCarousel pageKey="archive" />
             <MovixGenreAccordion onSelectGenre={(id) => console.log('selected:', id)} />
             <MovixBrowsePage theme="dark" onOpenPerson={openPerson} onNavigate={navigate} openVideoId={route.params.openVideoId} />
           </div>
         ) : route.view === 'theater' ? (
           <div>
+            <AdBannerCarousel pageKey="ticketing" />
             <TheaterHero />
             <TheaterBrowsePage searchQuery={route.params.q} />
           </div>
@@ -207,7 +211,10 @@ export default function App() {
         ) : route.view === 'faqs' ? (
           <FaqPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'mylist' ? (
-          <MyListPage onNavigate={navigate} />
+          <div>
+            <AdBannerCarousel pageKey="mylist" />
+            <MyListPage onNavigate={navigate} />
+          </div>
         ) : route.view === 'subscription' ? (
           <SubscriptionPage onBack={goBack} />
         ) : route.view === 'category' ? (
@@ -245,7 +252,10 @@ export default function App() {
         ) : route.view === 'donation' ? (
           <DonationPage onBack={goBack} onNavigate={navigate} />
         ) : (
-          <CommunityPage onNavigate={navigate} />
+          <div>
+            <AdBannerCarousel pageKey="community" />
+            <CommunityPage onNavigate={navigate} />
+          </div>
         )}
       </div>
     </AppProvider>

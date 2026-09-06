@@ -1540,3 +1540,23 @@ class FaqItemCreate(BaseModel):
 class FaqItemUpdate(BaseModel):
     question: str = Field(min_length=1, max_length=500)
     answer: str = Field(min_length=1)
+
+
+class AdBannerOut(BaseModel):
+    id: uuid.UUID
+    image_url: str
+    redirect_url: str
+    start_date: date
+    end_date: date
+    is_active: bool
+    display_order: int
+    pages: List[str] = []
+
+    model_config = {"from_attributes": True}
+
+
+class AdBannerTextUpdate(BaseModel):
+    redirect_url: str = Field(min_length=1, max_length=2000)
+    start_date: date
+    end_date: date
+    pages: List[str] = Field(min_length=1)

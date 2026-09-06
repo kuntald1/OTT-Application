@@ -934,3 +934,9 @@ export function fetchSitePage(slug) {
 export function fetchFaqs() {
   return request("/faqs");
 }
+
+// --- Ad Banners (top-of-page promo carousel, admin-managed) ---
+
+export function fetchAdBanners(pageKey) {
+  return request(`/ad-banners?page=${pageKey}`);
+}

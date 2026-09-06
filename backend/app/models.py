@@ -1614,3 +1614,48 @@ class FaqItem(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class AdBanner(Base):
+    """Promotional image banner shown at the very top of a page, right
+    below the nav and above that page's own hero — auto-slides through
+    every currently-active banner assigned to that page (see
+    AdBannerPage). Fully admin-managed (Admin > Ad Banners): upload an
+    image, set where it opens (redirect_url, always in a new tab),
+    which page(s) it should appear on, and a start/end date window.
+    Only shown while is_active is on AND today falls within
+    [start_date, end_date] inclusive — both checked server-side in the
+    public endpoint, not left to the frontend to filter. is_active is
+    a manual override for "pause this without deleting or fiddling
+    with dates" — a banner can be within its date window and still be
+    switched off.
+    """
+    __tablename__ = "ad_banners"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    image_url = Column(String(500), nullable=False)
+    redirect_url = Column(String(2000), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    display_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    pages = relationship("AdBannerPage", cascade="all, delete-orphan")
+
+
+class AdBannerPage(Base):
+    """One page this AdBanner should appear on — page_key is one of
+    "plays" | "archive" | "mylist" | "community" | "ticketing". A
+    banner assigned to all 5 is just 5 rows here; there's no separate
+    "ALL" sentinel value — Admin's "select all" checkbox is purely a
+    UI convenience that ticks every individual page checkbox.
+    """
+    __tablename__ = "ad_banner_pages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ad_banner_id = Column(UUID(as_uuid=True), ForeignKey("ad_banners.id", ondelete="CASCADE"), nullable=False, index=True)
+    page_key = Column(String(20), nullable=False, index=True)
