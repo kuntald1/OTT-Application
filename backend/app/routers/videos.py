@@ -303,6 +303,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None, force_access:
     return VideoOut(
         id=video.id,
         uploaded_by_name=uploader_name,
+        uploaded_by_user_id=video.uploaded_by_user_id,
         title=video.title,
         description=video.description,
         section=video.section.value,

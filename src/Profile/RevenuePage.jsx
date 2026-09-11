@@ -1,22 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2, BarChart3, LayoutList } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { fetchRevenueRate, fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry } from "../api";
+import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry } from "../api";
 
 // ---------------------------------------------------------------------------
 // Revenue — Content Creator / Plays Organiser only.
 //
-// Everything here is now REAL: the per-minute fallback rate, total
-// earned / available balance (from creator_earnings, credited live by
-// the watch-heartbeat engine — see routers/watch.py), withdrawal
-// requests, and per-video content performance (unique viewers, watch
-// minutes, gross revenue, and what's actually been credited after
-// theomy's commission — see VideoWatchRecord). Revenue for a given
-// view is calculated from THAT video's own Revenue-Share Tiers (set at
-// upload, up to 5 bands) using a graduated calculation — the same
-// shape as a progressive tax bracket — not a flat platform-wide rate;
-// the rate box below is only the fallback used for older videos with
-// no tiers of their own.
+// Everything here is now REAL: total earned / available balance (from
+// creator_earnings, credited live by the watch-heartbeat engine — see
+// routers/watch.py), withdrawal requests, and per-video content
+// performance (unique viewers, watch minutes, gross revenue, and
+// what's actually been credited after theomy's commission — see
+// VideoWatchRecord). Revenue for a given video is calculated from
+// THAT video's own Revenue-Share Tiers (set at upload, up to 5 bands)
+// using a graduated calculation — the same shape as a progressive tax
+// bracket — not a flat platform-wide rate; the platform default rate
+// (a fallback for videos with no tiers of their own) isn't shown on
+// this page — it's an implementation detail, not something a creator
+// needs to see or act on.
 //
 // Withdrawal status changes (pending → approved/rejected/paid) are made
 // from the admin panel's Revenue Sharing tab.
@@ -103,7 +104,6 @@ function topNPlusOther(rows, labelKey, valueKey, n = 5) {
 
 export default function RevenuePage({ onBack }) {
   const [pageTab, setPageTab] = useState("graph");
-  const [rate, setRate] = useState(null);
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [history, setHistory] = useState([]);
@@ -132,7 +132,6 @@ export default function RevenuePage({ onBack }) {
   };
 
   useEffect(() => {
-    fetchRevenueRate().then(setRate).catch(() => setRate(null));
     setPerformanceLoading(true);
     loadAll(false);
     setPerformanceLoading(false);
@@ -278,16 +277,6 @@ export default function RevenuePage({ onBack }) {
 
         {pageTab === "details" && (
           <>
-        <div className="mb-6 rounded-2xl p-5" style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.25)" }}>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Platform default rate</p>
-          <p className="mt-1 text-2xl font-semibold" style={{ color: COLORS.gold }}>
-            {rate ? rate.rate_display : "Loading…"}
-          </p>
-          <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-            This is only a fallback — used for a video that has no custom Revenue-Share Tiers of its own. Any video with its own tiers (set at upload) earns at those rates instead, per minute watched.
-          </p>
-        </div>
-
         <div className="mb-8 grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
             <TrendingUp className="mb-2 h-5 w-5" style={{ color: "rgba(212,175,55,0.6)" }} />

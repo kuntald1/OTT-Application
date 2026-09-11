@@ -25,10 +25,17 @@ const FONT_SIZES = [
 // is a UX nicety, not the actual security boundary.
 // ---------------------------------------------------------------------------
 
-export default function RichTextEditor({ value, onChange, placeholder }) {
+export default function RichTextEditor({ value, onChange, placeholder, maxWords }) {
   const editorRef = useRef(null);
+  const lastValidHtmlRef = useRef(value || "");
   const [colorPickerOpen, setColorPickerOpen] = React.useState(false);
   const [sizePickerOpen, setSizePickerOpen] = React.useState(false);
+  const [wordCount, setWordCount] = React.useState(0);
+
+  const countWords = (html) => {
+    const text = (html || "").replace(/<[^>]*>/g, " ").trim();
+    return text ? text.split(/\s+/).length : 0;
+  };
 
   // Only sync from prop -> DOM on first mount / external reset (e.g.
   // switching which section is being edited) — never on every render,
@@ -37,11 +44,26 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "";
     }
+    lastValidHtmlRef.current = value || "";
+    setWordCount(countWords(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const emitChange = () => {
-    onChange(editorRef.current?.innerHTML || "");
+    const html = editorRef.current?.innerHTML || "";
+    const words = countWords(html);
+    // Hard-stops at the limit — once over, the DOM is reverted to the
+    // last valid content instead of letting it through, so 500 words
+    // is a real ceiling rather than a soft hint. Cursor position isn't
+    // preserved on a revert, but typing simply stops accepting more —
+    // acceptable for a limit that's rarely actually hit mid-word.
+    if (maxWords && words > maxWords) {
+      editorRef.current.innerHTML = lastValidHtmlRef.current;
+      return;
+    }
+    lastValidHtmlRef.current = html;
+    setWordCount(words);
+    onChange(html);
   };
 
   const runCommand = (command, arg) => {
@@ -133,6 +155,11 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
         style={{ color: COLORS.cream, background: "rgba(245,235,221,0.03)" }}
         suppressContentEditableWarning
       />
+      {maxWords && (
+        <div className="border-t px-3 py-1.5 text-right text-[11px]" style={{ borderColor: "rgba(245,235,221,0.1)", color: wordCount >= maxWords ? "#f87171" : "rgba(245,235,221,0.4)" }}>
+          {wordCount} / {maxWords} words
+        </div>
+      )}
       <style>{`
         .rich-text-editable:empty:before {
           content: attr(data-placeholder);

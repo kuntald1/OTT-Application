@@ -78,7 +78,7 @@ export default function OrganiserProfileSectionsEditor({ sections, loading, erro
               {editingId === s.id ? (
                 <div>
                   <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} placeholder="Section title" />
-                  <RichTextEditor value={editContent} onChange={setEditContent} placeholder="Write this section's content…" />
+                  <RichTextEditor value={editContent} onChange={setEditContent} placeholder="Write this section's content…" maxWords={500} />
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
@@ -139,7 +139,7 @@ export default function OrganiserProfileSectionsEditor({ sections, loading, erro
       {addingNew ? (
         <div className="mt-4 rounded-xl p-4" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>
           <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} placeholder="Section title — e.g. About, Early days, Awards" />
-          <RichTextEditor value={newContent} onChange={setNewContent} placeholder="Write this section's content…" />
+          <RichTextEditor value={newContent} onChange={setNewContent} placeholder="Write this section's content…" maxWords={500} />
           <div className="mt-3 flex gap-2">
             <button
               type="button"

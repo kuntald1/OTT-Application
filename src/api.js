@@ -975,3 +975,7 @@ export function updateMyOrganiserSection(sectionId, { title, contentHtml }) {
 export function deleteMyOrganiserSection(sectionId) {
   return request(`/organiser-profile/sections/${sectionId}`, { method: "DELETE", auth: true });
 }
+
+export function fetchOrganiserProfileSections(userId) {
+  return request(`/organiser-profile/${userId}/sections`);
+}

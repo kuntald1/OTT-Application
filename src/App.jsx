@@ -239,7 +239,7 @@ export default function App() {
         ) : route.view === 'actor' ? (
           <ActorProfilePage personId={route.params.personId} onBack={goBack} />
         ) : route.view === 'videoDetail' ? (
-          <VideoDetailPage videoId={route.params.videoId} onBack={goBack} onViewPerson={openRealPerson} />
+          <VideoDetailPage videoId={route.params.videoId} onBack={goBack} onViewPerson={openRealPerson} onNavigate={navigate} />
         ) : route.view === 'personProfile' ? (
           <PersonProfilePage personId={route.params.personId} onBack={goBack} />
         ) : route.view === 'help' ? (

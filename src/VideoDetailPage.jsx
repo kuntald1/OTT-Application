@@ -18,7 +18,7 @@ import { fetchVideoById, getToken } from "./api";
 // for free here, that part IS safe.
 // ---------------------------------------------------------------------------
 
-export default function VideoDetailPage({ videoId, onBack, onViewPerson }) {
+export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavigate }) {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -136,8 +136,22 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson }) {
         )}
 
         {video.languages.length > 0 && (
-          <p className="mb-6 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+          <p className="mb-2 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
             <span style={{ color: "rgba(245,235,221,0.6)" }}>Available in:</span> {video.languages.join(", ")}
+          </p>
+        )}
+
+        {video.uploaded_by_user_id && (
+          <p className="mb-6 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+            <span style={{ color: "rgba(245,235,221,0.6)" }}>Studio:</span>{" "}
+            <button
+              type="button"
+              onClick={() => onNavigate?.("videosByStudio", { section: video.section, uploadedBy: video.uploaded_by_user_id, studioName: video.uploaded_by_name })}
+              className="font-medium hover:underline"
+              style={{ color: COLORS.gold }}
+            >
+              {video.uploaded_by_name}
+            </button>
           </p>
         )}
 

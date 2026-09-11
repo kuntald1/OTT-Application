@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { COLORS } from "../theme";
-import { fetchPublishedVideos } from "../api";
+import { fetchPublishedVideos, fetchOrganiserProfileSections } from "../api";
 
 // ---------------------------------------------------------------------------
 // The video grid shown after clicking a tile in DiscoveryRows — either every
 // published video in a language, or every published video from one studio
 // (Plays Organiser), always scoped to the section (Play/Archive) the tile
-// was clicked from.
+// was clicked from. When viewing a studio (uploadedBy set), also shows that
+// organiser's public "About" sections below the video grid — read-only,
+// same rich-text content they manage from Manage Profile.
 // ---------------------------------------------------------------------------
 
 export default function FilteredVideosPage({ section, language, uploadedBy, title, onBack, onOpenVideo }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [aboutSections, setAboutSections] = useState([]);
 
   useEffect(() => {
     setLoading(true);
@@ -21,6 +24,11 @@ export default function FilteredVideosPage({ section, language, uploadedBy, titl
       .catch(() => setVideos([]))
       .finally(() => setLoading(false));
   }, [section, language, uploadedBy]);
+
+  useEffect(() => {
+    if (!uploadedBy) { setAboutSections([]); return; }
+    fetchOrganiserProfileSections(uploadedBy).then(setAboutSections).catch(() => setAboutSections([]));
+  }, [uploadedBy]);
 
   return (
     <div style={{ background: COLORS.black, minHeight: "100vh", fontFamily: "'Geist', -apple-system, sans-serif" }}>
@@ -57,6 +65,22 @@ export default function FilteredVideosPage({ section, language, uploadedBy, titl
                 <p className="truncate text-sm font-medium" style={{ color: COLORS.cream }}>{v.title}</p>
                 <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{v.release_year}</p>
               </button>
+            ))}
+          </div>
+        )}
+
+        {aboutSections.length > 0 && (
+          <div className="mt-12 flex flex-col gap-4 border-t pt-8" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            <h2 className="text-xl font-semibold" style={{ color: COLORS.cream }}>About {title.split(" — ")[0]}</h2>
+            {aboutSections.map((s) => (
+              <div key={s.id}>
+                <p className="mb-1.5 text-sm font-semibold" style={{ color: COLORS.gold }}>{s.title}</p>
+                <div
+                  className="text-sm leading-relaxed"
+                  style={{ color: "rgba(245,235,221,0.75)" }}
+                  dangerouslySetInnerHTML={{ __html: s.content_html }}
+                />
+              </div>
             ))}
           </div>
         )}

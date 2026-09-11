@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime, date
 from decimal import Decimal
@@ -1242,6 +1243,11 @@ class VideoPricingOut(BaseModel):
 class VideoOut(BaseModel):
     id: uuid.UUID
     uploaded_by_name: str
+    # Only set for a real organiser/creator's own upload (never for an
+    # admin-uploaded video) — powers the "Studio" link on the video
+    # detail page, since there's no user account to click through to
+    # for an admin upload.
+    uploaded_by_user_id: Optional[uuid.UUID] = None
     title: str
     description: Optional[str] = None
     section: str
@@ -1575,10 +1581,29 @@ class OrganiserProfileSectionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content_html: str = ""
 
+    @field_validator("content_html")
+    @classmethod
+    def limit_words(cls, v):
+        # Same 500-word ceiling the frontend's RichTextEditor enforces
+        # live — checked again here since a client-side limit alone is
+        # never real enforcement (a direct API call could skip it).
+        word_count = len(re.sub(r"<[^>]*>", " ", v or "").split())
+        if word_count > 500:
+            raise ValueError(f"Content must be 500 words or fewer (currently {word_count}).")
+        return v
+
 
 class OrganiserProfileSectionUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content_html: str = ""
+
+    @field_validator("content_html")
+    @classmethod
+    def limit_words(cls, v):
+        word_count = len(re.sub(r"<[^>]*>", " ", v or "").split())
+        if word_count > 500:
+            raise ValueError(f"Content must be 500 words or fewer (currently {word_count}).")
+        return v
 
 
 class VideoLanguageOut(BaseModel):

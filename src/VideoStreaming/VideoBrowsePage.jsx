@@ -1374,6 +1374,22 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                       <p style={{ color: T.textMuted }}>{video.languages.join(", ")}</p>
                     </div>
                   )}
+                  {video.uploaded_by_user_id && (
+                    <div>
+                      <p className="mb-1" style={{ color: T.textFainter }}>STUDIO</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onNavigate?.("videosByStudio", { section: video.section, uploadedBy: video.uploaded_by_user_id, studioName: video.uploaded_by_name });
+                        }}
+                        className="text-left font-medium hover:underline"
+                        style={{ color: GOLD }}
+                      >
+                        {video.uploaded_by_name}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

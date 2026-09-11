@@ -138,6 +138,17 @@ export default function MyVideoListPage({ onBack }) {
   useEffect(() => { loadVideos(); }, []);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  // Word-count-limited text change handler — used for Description
+  // (200 words). Rejects the keystroke outright once at the limit,
+  // rather than silently truncating after the fact, so the cursor
+  // never jumps around mid-typing.
+  const updateWithWordLimit = (field, maxWords) => (e) => {
+    const value = e.target.value;
+    const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
+    if (wordCount > maxWords) return;
+    setForm((f) => ({ ...f, [field]: value }));
+  };
   const toggleCategory = (cat) => setForm((f) => {
     const has = f.categories.includes(cat);
     if (has) return { ...f, categories: f.categories.filter((c) => c !== cat) };
@@ -350,7 +361,10 @@ export default function MyVideoListPage({ onBack }) {
               </div>
               <div>
                 <label style={labelStyle}>Description</label>
-                <textarea rows={3} value={form.description} onChange={update("description")} style={{ ...inputStyle, resize: "vertical" }} />
+                <textarea rows={3} value={form.description} onChange={updateWithWordLimit("description", 200)} style={{ ...inputStyle, resize: "vertical" }} />
+                <p className="mt-1 text-right text-[11px]" style={{ color: (form.description.trim() ? form.description.trim().split(/\s+/).length : 0) >= 200 ? "#f87171" : "rgba(245,235,221,0.4)" }}>
+                  {form.description.trim() ? form.description.trim().split(/\s+/).length : 0} / 200 words
+                </p>
               </div>
             </div>
 
@@ -390,52 +404,12 @@ export default function MyVideoListPage({ onBack }) {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label style={labelStyle}>Languages</label>
-                <input type="text" placeholder="e.g. Bengali, English" value={form.languages} onChange={update("languages")} style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Ads</label>
-                <button
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, has_ads: !f.has_ads }))}
-                  className="flex w-full items-center justify-between gap-2 rounded-lg border px-4 py-2.5 text-left text-sm"
-                  style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {form.has_ads ? <Megaphone className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-                    {form.has_ads ? "Ad Present" : "Ad Free"}
-                  </span>
-                  <div className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5" style={{ background: form.has_ads ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}>
-                    <div className="h-4 w-4 rounded-full bg-white transition-transform" style={{ transform: form.has_ads ? "translateX(16px)" : "translateX(0)" }} />
-                  </div>
-                </button>
-              </div>
+            <div>
+              <label style={labelStyle}>Languages</label>
+              <input type="text" placeholder="e.g. Bengali, English" value={form.languages} onChange={update("languages")} style={inputStyle} />
             </div>
 
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-            <div>
-              <label style={labelStyle}>Monetization</label>
-              <div className="flex gap-2">
-                {[["subscription_only", "Subscription Only"], ["pay_per_video", "Pay Per Video"]].map(([val, label]) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, monetization_type: val }))}
-                    className="rounded-full border px-3 py-1.5 text-xs font-medium"
-                    style={{
-                      borderColor: form.monetization_type === val ? COLORS.gold : "rgba(245,235,221,0.15)",
-                      background: form.monetization_type === val ? "rgba(212,175,55,0.14)" : "transparent",
-                      color: form.monetization_type === val ? COLORS.gold : "rgba(245,235,221,0.7)",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {isPayPerVideo && (
               <div className="grid gap-4 sm:grid-cols-2">

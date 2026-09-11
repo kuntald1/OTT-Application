@@ -11,6 +11,21 @@ from app.schemas import OrganiserProfileSectionOut, OrganiserProfileSectionCreat
 router = APIRouter(prefix="/organiser-profile", tags=["organiser-profile"])
 
 
+@router.get("/{user_id}/sections", response_model=list[OrganiserProfileSectionOut])
+def list_public_sections(user_id: str, db: Session = Depends(get_db)):
+    """Public, read-only — powers the "About [Studio]" block shown
+    under a studio's video list (clicking the "Studio" link on a
+    video detail page). Anyone's sections are visible here regardless
+    of role; there's nothing sensitive in an About page.
+    """
+    return (
+        db.query(OrganiserProfileSection)
+        .filter(OrganiserProfileSection.user_id == user_id)
+        .order_by(OrganiserProfileSection.display_order)
+        .all()
+    )
+
+
 @router.get("/sections", response_model=list[OrganiserProfileSectionOut])
 def list_my_sections(
     current_user: User = Depends(get_current_user),

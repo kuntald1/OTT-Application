@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { COLORS, NAV_CLEARANCE_CLASS } from "../theme";
+import { COLORS } from "../theme";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions, fetchPublishedVideos } from "../api";
 import { useApp } from "../context/AppContext";
@@ -61,6 +61,7 @@ function toggleInSet(set, value) {
 
 export default function CategoryPage({ initialCategory, onNavigate }) {
   const [categoryFilter, setCategoryFilter] = useState(new Set(initialCategory ? [initialCategory] : []));
+  const [languageFilter, setLanguageFilter] = useState(new Set());
   const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
   const [allVideos, setAllVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +85,7 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
             videoId: v.id,
             trailerUrl: v.trailer_playback_url || null,
             categories: v.categories || [],
+            languages: v.languages || [],
             releaseYear: v.release_year,
             durationLabel: v.duration_seconds ? formatDuration(Math.round(v.duration_seconds / 60)) : null,
           }))
@@ -96,10 +98,23 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
+  // Derived from whatever's actually in the fetched videos — unlike
+  // Category, there's no separate admin-managed language list to pull
+  // from (see the "Popular Languages" discovery row for the same
+  // language-name-parsing pattern).
+  const LANGUAGES = useMemo(() => {
+    const set = new Set();
+    allVideos.forEach((v) => v.languages.forEach((l) => set.add(l)));
+    return Array.from(set).sort();
+  }, [allVideos]);
+
   const filtered = useMemo(() => {
-    if (categoryFilter.size === 0) return allVideos;
-    return allVideos.filter((v) => v.categories.some((c) => categoryFilter.has(c)));
-  }, [allVideos, categoryFilter]);
+    return allVideos.filter((v) => {
+      if (categoryFilter.size > 0 && !v.categories.some((c) => categoryFilter.has(c))) return false;
+      if (languageFilter.size > 0 && !v.languages.some((l) => languageFilter.has(l))) return false;
+      return true;
+    });
+  }, [allVideos, categoryFilter, languageFilter]);
 
   const handleCardClick = (card) => {
     if (!isLoggedIn) {
@@ -111,7 +126,7 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
-      <main className={`px-6 pb-12 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
+      <main className={`px-6 pb-12 pt-24 sm:px-10 sm:pt-28`}>
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Browse by Category</h1>
         <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
           Every published title, filterable by category.
@@ -124,13 +139,26 @@ export default function CategoryPage({ initialCategory, onNavigate }) {
           >
             <h2 className="mb-4 text-lg font-semibold" style={{ color: COLORS.cream }}>Filters</h2>
             <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.5)" }}>Category</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="mb-5 flex flex-wrap gap-2">
               {CATEGORIES.map((c) => (
                 <FilterPill key={c} active={categoryFilter.has(c)} onClick={() => setCategoryFilter((s) => toggleInSet(s, c))}>
                   {c}
                 </FilterPill>
               ))}
             </div>
+
+            {LANGUAGES.length > 0 && (
+              <>
+                <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.5)" }}>Language</p>
+                <div className="flex flex-wrap gap-2">
+                  {LANGUAGES.map((l) => (
+                    <FilterPill key={l} active={languageFilter.has(l)} onClick={() => setLanguageFilter((s) => toggleInSet(s, l))}>
+                      {l}
+                    </FilterPill>
+                  ))}
+                </div>
+              </>
+            )}
           </aside>
 
           <div className="min-w-0 flex-1">
