@@ -37,6 +37,14 @@ export default function PageHero({ pageKey, theme }) {
   const isImageSlideshow = hero?.content_type === "image" && media.length > 0;
   const isVideoSequence = hero?.content_type === "video" && media.length > 0;
 
+  // The currently-playing/shown item's own text, if it has any set —
+  // falls back to the hero's shared eyebrow/headline/subtext when this
+  // item has none of its own (see PageHeroMedia's docstring).
+  const activeItem = (isVideoSequence || isImageSlideshow) ? media[slideIndex] : null;
+  const displayEyebrow = activeItem?.eyebrow || hero?.eyebrow;
+  const displayHeadline = activeItem?.headline || hero?.headline;
+  const displaySubtext = activeItem?.subtext || hero?.subtext;
+
   useEffect(() => {
     if (!isImageSlideshow || media.length < 2) return;
     const id = setInterval(() => setSlideIndex((i) => (i + 1) % media.length), IMAGE_SLIDE_INTERVAL_MS);
@@ -88,15 +96,15 @@ export default function PageHero({ pageKey, theme }) {
       <div className="relative z-10 flex h-full w-full flex-col">
         <main className="mt-auto flex flex-col gap-6 px-5 pb-8 sm:gap-8 sm:px-8 sm:pb-12 lg:px-12 lg:pb-16">
           <div className="max-w-2xl">
-            {hero.eyebrow && (
-              <p className="mb-2 text-sm font-medium tracking-wide" style={{ color: COLORS.gold }}>{hero.eyebrow}</p>
+            {displayEyebrow && (
+              <p className="mb-2 text-sm font-medium tracking-wide" style={{ color: COLORS.gold }}>{displayEyebrow}</p>
             )}
             <h1 className="text-3xl font-semibold leading-[1.1] tracking-tight sm:text-4xl lg:text-[3.5rem]" style={{ color: COLORS.cream }}>
-              {hero.headline}
+              {displayHeadline}
             </h1>
-            {hero.subtext && (
+            {displaySubtext && (
               <p className="mt-4 max-w-xl text-base leading-relaxed" style={{ color: "rgba(245,235,221,0.75)" }}>
-                {hero.subtext}
+                {displaySubtext}
               </p>
             )}
           </div>

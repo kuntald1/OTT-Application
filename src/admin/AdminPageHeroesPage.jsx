@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Image as ImageIcon, Video as VideoIcon, Type, Clapperboard, UploadCloud, X } from "lucide-react";
-import { fetchAdminPageHeroes, updateAdminPageHeroDetails, addAdminPageHeroMedia, deleteAdminPageHeroMedia } from "./adminApi";
+import { fetchAdminPageHeroes, updateAdminPageHeroDetails, addAdminPageHeroMedia, deleteAdminPageHeroMedia, updateAdminPageHeroMediaText } from "./adminApi";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -37,6 +37,10 @@ export default function AdminPageHeroesPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [deletingId, setDeletingId] = useState(null);
+
+  const [editingMediaId, setEditingMediaId] = useState(null);
+  const [mediaTextForm, setMediaTextForm] = useState({ eyebrow: "", headline: "", subtext: "" });
+  const [savingMediaText, setSavingMediaText] = useState(false);
 
   const hero = heroesByKey[pageKey];
 
@@ -112,6 +116,25 @@ export default function AdminPageHeroesPage() {
     }
   };
 
+  const startEditMediaText = (m) => {
+    setEditingMediaId(m.id);
+    setMediaTextForm({ eyebrow: m.eyebrow || "", headline: m.headline || "", subtext: m.subtext || "" });
+  };
+
+  const handleSaveMediaText = async () => {
+    setSavingMediaText(true);
+    setError("");
+    try {
+      const updated = await updateAdminPageHeroMediaText(pageKey, editingMediaId, mediaTextForm);
+      setHeroesByKey((m) => ({ ...m, [pageKey]: updated }));
+      setEditingMediaId(null);
+    } catch (err) {
+      setError(err.message || "Couldn't save text.");
+    } finally {
+      setSavingMediaText(false);
+    }
+  };
+
   const mediaAccept = form.content_type === "image" ? "image/jpeg,image/png,image/webp" : "video/mp4,video/webm,video/quicktime";
   const showMediaSection = form.content_type === "image" || form.content_type === "video";
 
@@ -180,30 +203,94 @@ export default function AdminPageHeroesPage() {
                   ? "Add one or more photos — with more than one, they'll cross-fade in a slideshow."
                   : "Add one or more video clips — with more than one, they'll play one after another in a loop."}
                 {" "}Changes here save immediately, no need to click Save below.
+                {hero?.media?.length > 1 && " Give each one its own text below, like Archive Hero Slides — leave a field blank to fall back to the shared text in step 3."}
               </p>
 
               {hero?.media?.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-3">
+                <div className="mb-3 flex flex-col gap-3">
                   {hero.media.map((m, i) => (
-                    <div key={m.id} className="relative">
-                      {form.content_type === "image" ? (
-                        <img src={m.media_url} alt="" className="h-20 w-32 rounded-lg object-cover" style={{ border: "1px solid rgba(245,235,221,0.15)" }} />
-                      ) : (
-                        <video src={m.media_url} className="h-20 w-32 rounded-lg object-cover" style={{ border: "1px solid rgba(245,235,221,0.15)" }} muted />
-                      )}
-                      <span className="absolute left-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(0,0,0,0.6)", color: COLORS.cream }}>
-                        {i + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMedia(m.id)}
-                        disabled={deletingId === m.id}
-                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full disabled:opacity-50"
-                        style={{ background: "#f87171", color: "#fff" }}
-                        title="Remove"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                    <div key={m.id} className="rounded-lg p-3" style={{ background: "rgba(0,0,0,0.15)", border: "1px solid rgba(245,235,221,0.08)" }}>
+                      <div className="flex items-start gap-3">
+                        <div className="relative flex-shrink-0">
+                          {form.content_type === "image" ? (
+                            <img src={m.media_url} alt="" className="h-20 w-32 rounded-lg object-cover" style={{ border: "1px solid rgba(245,235,221,0.15)" }} />
+                          ) : (
+                            <video src={m.media_url} className="h-20 w-32 rounded-lg object-cover" style={{ border: "1px solid rgba(245,235,221,0.15)" }} muted />
+                          )}
+                          <span className="absolute left-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(0,0,0,0.6)", color: COLORS.cream }}>
+                            {i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMedia(m.id)}
+                            disabled={deletingId === m.id}
+                            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full disabled:opacity-50"
+                            style={{ background: "#f87171", color: "#fff" }}
+                            title="Remove"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          {editingMediaId === m.id ? (
+                            <div className="flex flex-col gap-2">
+                              <input
+                                type="text" placeholder="Eyebrow (optional)"
+                                value={mediaTextForm.eyebrow}
+                                onChange={(e) => setMediaTextForm((f) => ({ ...f, eyebrow: e.target.value }))}
+                                style={inputStyle}
+                              />
+                              <input
+                                type="text" placeholder="Headline"
+                                value={mediaTextForm.headline}
+                                onChange={(e) => setMediaTextForm((f) => ({ ...f, headline: e.target.value }))}
+                                style={inputStyle}
+                              />
+                              <textarea
+                                rows={2} placeholder="Subtext (optional)"
+                                value={mediaTextForm.subtext}
+                                onChange={(e) => setMediaTextForm((f) => ({ ...f, subtext: e.target.value }))}
+                                style={{ ...inputStyle, resize: "vertical" }}
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleSaveMediaText}
+                                  disabled={savingMediaText}
+                                  className="rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-50"
+                                  style={{ background: COLORS.gold, color: "#0a0104" }}
+                                >
+                                  {savingMediaText ? "Saving…" : "Save"}
+                                </button>
+                                <button type="button" onClick={() => setEditingMediaId(null)} className="rounded-full px-4 py-1.5 text-xs font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              {m.headline || m.eyebrow || m.subtext ? (
+                                <>
+                                  {m.eyebrow && <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: COLORS.gold }}>{m.eyebrow}</p>}
+                                  {m.headline && <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{m.headline}</p>}
+                                  {m.subtext && <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{m.subtext}</p>}
+                                </>
+                              ) : (
+                                <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>No text set — using the shared text from step 3.</p>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => startEditMediaText(m)}
+                                className="mt-2 rounded-full px-3 py-1 text-xs font-medium"
+                                style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}
+                              >
+                                {m.headline || m.eyebrow || m.subtext ? "Edit text" : "Add text for this item"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

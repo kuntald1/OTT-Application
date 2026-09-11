@@ -1522,6 +1522,13 @@ class PageHeroMedia(Base):
     images cross-faded. All items under one PageHero share that hero's
     content_type (never mixed image+video within one page's hero).
     display_order controls playback/slideshow order — lowest first.
+
+    eyebrow/headline/subtext are OPTIONAL per-item overrides — when set,
+    this item shows its own text while it's playing/displayed (matching
+    ArchiveHeroSlide/TheaterHeroSlide's per-slide text); when left null,
+    the item falls back to the parent PageHero's shared eyebrow/
+    headline/subtext, so an existing single-text-for-all-media hero
+    keeps working unchanged.
     """
     __tablename__ = "page_hero_media"
 
@@ -1529,6 +1536,10 @@ class PageHeroMedia(Base):
     page_hero_id = Column(UUID(as_uuid=True), ForeignKey("page_heroes.id", ondelete="CASCADE"), nullable=False, index=True)
     media_url = Column(String(500), nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
+
+    eyebrow = Column(String(100), nullable=True)
+    headline = Column(String(255), nullable=True)
+    subtext = Column(Text, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

@@ -946,6 +946,12 @@ export function deleteAdminPageHeroMedia(pageKey, mediaId) {
   return request(`/admin/page-heroes/${pageKey}/media/${mediaId}`, { method: "DELETE", auth: true });
 }
 
+export function updateAdminPageHeroMediaText(pageKey, mediaId, { eyebrow, headline, subtext }) {
+  return request(`/admin/page-heroes/${pageKey}/media/${mediaId}/text`, {
+    method: "PUT", auth: true, body: { eyebrow, headline, subtext },
+  });
+}
+
 // --- Theater Hero Slides (TheaterHero.jsx carousel) ---
 
 export function fetchAdminTheaterHeroSlides() {

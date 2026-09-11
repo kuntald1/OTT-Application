@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, PageHero, PageHeroMedia, PageHeroContentType
-from app.schemas import PageHeroOut
+from app.schemas import PageHeroOut, PageHeroMediaTextUpdate
 
 router = APIRouter(prefix="/admin/page-heroes", tags=["admin-page-heroes"])
 
@@ -107,6 +107,33 @@ async def add_page_hero_media(
         db.add(PageHeroMedia(page_hero_id=hero.id, media_url=f"/api/uploads/page_hero_media/{stored_name}", display_order=next_order))
         next_order += 1
 
+    db.commit()
+    db.refresh(hero)
+    return hero
+
+
+@router.put("/{page_key}/media/{media_id}/text", response_model=PageHeroOut)
+def update_page_hero_media_text(
+    page_key: str,
+    media_id: str,
+    payload: PageHeroMediaTextUpdate,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Per-item text override — matching ArchiveHeroSlide/
+    TheaterHeroSlide's per-slide eyebrow/headline/subtext, but for a
+    Page Hero's individual media items (used when content_type is
+    "image" or "video" with more than one item, so each one can show
+    its own text while it plays). Leaving a field blank clears that
+    override, falling back to the hero's shared text for this item.
+    """
+    hero = _get_or_create_hero(page_key, db)
+    item = db.query(PageHeroMedia).filter(PageHeroMedia.id == media_id, PageHeroMedia.page_hero_id == hero.id).first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media item not found.")
+    item.eyebrow = payload.eyebrow or None
+    item.headline = payload.headline or None
+    item.subtext = payload.subtext or None
     db.commit()
     db.refresh(hero)
     return hero

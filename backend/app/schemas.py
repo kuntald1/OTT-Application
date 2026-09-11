@@ -1465,8 +1465,17 @@ class PageHeroMediaOut(BaseModel):
     id: uuid.UUID
     media_url: str
     display_order: int
+    eyebrow: Optional[str] = None
+    headline: Optional[str] = None
+    subtext: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class PageHeroMediaTextUpdate(BaseModel):
+    eyebrow: Optional[str] = None
+    headline: Optional[str] = None
+    subtext: Optional[str] = None
 
 
 class PageHeroOut(BaseModel):
