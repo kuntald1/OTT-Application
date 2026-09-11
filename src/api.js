@@ -520,8 +520,8 @@ export function saveWatchProgress(videoId, positionSeconds) {
   });
 }
 
-export function fetchContinueWatching() {
-  return request(`/videos/continue-watching/mine`, { auth: true });
+export function fetchContinueWatching(section) {
+  return request(`/videos/continue-watching/mine${section ? `?section=${section}` : ""}`, { auth: true });
 }
 
 export function fetchWatchHistory() {

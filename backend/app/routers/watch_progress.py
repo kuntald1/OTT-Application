@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User, Video, VideoStatus, WatchProgress
+from app.models import User, Video, VideoStatus, VideoSection, WatchProgress
 from app.schemas import WatchProgressUpdate, ContinueWatchingOut, WatchHistoryOut
 
 router = APIRouter(prefix="/videos", tags=["watch-progress"])
@@ -79,19 +79,27 @@ def _is_finished(position: int, duration: int | None) -> bool:
 
 @router.get("/continue-watching/mine", response_model=list[ContinueWatchingOut])
 def get_continue_watching(
+    section: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Videos this viewer has started but not finished, most recently
-    watched first — powers the "Continue Watching" row.
+    watched first — powers the "Continue Watching" row. section
+    ("play" | "archive"), when given, scopes this to only that
+    section's videos — the Plays page and Archive page each pass
+    their own section, so a video in progress on one never shows up
+    on the other.
     """
-    rows = (
+    query = (
         db.query(WatchProgress, Video)
         .join(Video, Video.id == WatchProgress.video_id)
         .filter(WatchProgress.user_id == current_user.id, Video.status == VideoStatus.published)
-        .order_by(WatchProgress.updated_at.desc())
-        .all()
     )
+    if section:
+        if section not in ("play", "archive"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
+        query = query.filter(Video.section == VideoSection(section))
+    rows = query.order_by(WatchProgress.updated_at.desc()).all()
     out = []
     for progress, video in rows:
         if _is_finished(progress.position_seconds, video.duration_seconds):

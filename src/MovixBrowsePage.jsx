@@ -121,14 +121,14 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
-  // "Continue Watching" — real, from WatchProgress, same
-  // fetchContinueWatching() call (and same unfiltered-across-both-
-  // sections logic) as VideoStreaming/VideoBrowsePage.jsx's Plays
-  // page — kept unchanged, just also rendered here.
+  // "Continue Watching" — real, from WatchProgress, scoped to this
+  // page's own section ("archive") — a video in progress on Plays
+  // never shows up here, and vice versa (see watch_progress.py's
+  // get_continue_watching).
   const [continueWatching, setContinueWatching] = useState([]);
   useEffect(() => {
     if (!isLoggedIn) { setContinueWatching([]); return; }
-    fetchContinueWatching()
+    fetchContinueWatching("archive")
       .then((items) => {
         setContinueWatching(
           items.map((v) => ({

@@ -148,7 +148,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
       setContinueWatching([]);
       return;
     }
-    fetchContinueWatching()
+    fetchContinueWatching("play")
       .then((items) => {
         setContinueWatching(
           items.map((v) => ({
