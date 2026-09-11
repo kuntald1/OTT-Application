@@ -224,15 +224,15 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
             onSelect={handleSelectCard}
           />
         ))}
-        {continueWatching.length > 0 && (
-          <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
-        )}
         {recommended.length > 0 && (
           <GenreRow category="Recommended for You" cards={recommended} onSelect={handleSelectCard} />
         )}
         {Object.entries(realVideosByCategory).map(([category, cards]) => (
           <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} />
         ))}
+        {continueWatching.length > 0 && (
+          <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
+        )}
       </main>
 
       {/* ---------------- Footer ---------------- */}

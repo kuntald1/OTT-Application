@@ -6,7 +6,7 @@ import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
 import Footer from "./shared/Footer";
 import DiscoveryRows from "./shared/DiscoveryRows";
-import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories } from "./api";
+import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories, fetchContinueWatching } from "./api";
 import { GenreRow as RealGenreRow, RealDetailModal, formatDuration } from "./VideoStreaming/VideoBrowsePage";
 
 import filmsPoster from "./assets/posters/films.jpg";
@@ -121,6 +121,30 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
   const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
 
+  // "Continue Watching" — real, from WatchProgress, same
+  // fetchContinueWatching() call (and same unfiltered-across-both-
+  // sections logic) as VideoStreaming/VideoBrowsePage.jsx's Plays
+  // page — kept unchanged, just also rendered here.
+  const [continueWatching, setContinueWatching] = useState([]);
+  useEffect(() => {
+    if (!isLoggedIn) { setContinueWatching([]); return; }
+    fetchContinueWatching()
+      .then((items) => {
+        setContinueWatching(
+          items.map((v) => ({
+            id: v.video_id,
+            title: v.title,
+            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.video_id) % POSTER_POOL.length],
+            isReal: true,
+            videoId: v.video_id,
+            progressPercent: v.progress_percent,
+            trailerUrl: v.trailer_playback_url || null,
+          }))
+        );
+      })
+      .catch(() => setContinueWatching([]));
+  }, [isLoggedIn]);
+
   // Auto-opens a specific video's real detail modal when arriving here
   // with openVideoId set (from search results) — same pattern as
   // VideoStreaming/VideoBrowsePage.jsx.
@@ -234,6 +258,9 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
           Object.entries(realVideosByCategory).map(([category, cards]) => (
             <RealGenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} showCaption />
           ))
+        )}
+        {continueWatching.length > 0 && (
+          <RealGenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} showCaption />
         )}
       </main>
 
