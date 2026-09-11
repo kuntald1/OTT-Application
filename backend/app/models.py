@@ -48,6 +48,11 @@ class User(Base):
     # Relative URL to the uploaded profile photo, e.g. "/api/uploads/profile_photos/<uuid>.jpg"
     # Null until the user uploads one.
     profile_photo_url = Column(String(500), nullable=True)
+    # A Plays Organiser's studio cover/banner image — shown at the top
+    # of their public video list (e.g. "Bohurupee — Plays"), above the
+    # About sections. Null until they upload one; irrelevant for a
+    # plain "user" role account.
+    studio_cover_image_url = Column(String(500), nullable=True)
     country = Column(String(100), nullable=False, default="India")
 
     # Real per-user reward balance. 1 point = ₹1. Earned automatically on

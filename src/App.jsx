@@ -211,6 +211,7 @@ export default function App() {
           <FilteredVideosPage
             section={route.params.section}
             uploadedBy={route.params.uploadedBy}
+            studioName={route.params.studioName}
             title={`${route.params.studioName} — ${route.params.section === "archive" ? "Archive" : "Plays"}`}
             onBack={goBack}
             onOpenVideo={openVideo}

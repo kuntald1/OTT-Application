@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil } from "lucide-react";
-import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection } from "./adminApi";
+import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil, ImagePlus } from "lucide-react";
+import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
@@ -555,12 +555,33 @@ function AboutPageModal({ user, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [coverImageUrl, setCoverImageUrl] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState("");
+
   useEffect(() => {
     fetchAdminOrganiserSections(user.id)
       .then(setSections)
       .catch((err) => setError(err.message || "Couldn't load this organiser's About page."))
       .finally(() => setLoading(false));
+    fetchAdminStudioCoverImage(user.id)
+      .then((r) => setCoverImageUrl(r.cover_image_url))
+      .catch(() => {});
   }, [user.id]);
+
+  const handleUploadCover = async (file) => {
+    if (!file) return;
+    setUploadingCover(true);
+    setCoverError("");
+    try {
+      const result = await uploadAdminStudioCoverImage(user.id, file);
+      setCoverImageUrl(result.cover_image_url);
+    } catch (err) {
+      setCoverError(err.message || "Couldn't upload cover image.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
 
   const handleCreate = async ({ title, contentHtml }) => {
     setError("");
@@ -613,6 +634,32 @@ function AboutPageModal({ user, onClose }) {
           <button type="button" onClick={onClose} style={{ color: "rgba(245,235,221,0.5)" }}>
             <X className="h-4 w-4" />
           </button>
+        </div>
+
+        <div className="mb-6">
+          <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Cover Image
+          </label>
+          {coverImageUrl && (
+            <div className="mb-3 overflow-hidden rounded-xl" style={{ aspectRatio: "16 / 6", border: "1px solid rgba(245,235,221,0.15)" }}>
+              <img src={coverImageUrl} alt="" className="h-full w-full object-cover" />
+            </div>
+          )}
+          {coverError && <p className="mb-2 text-xs font-medium" style={{ color: "#f87171" }}>{coverError}</p>}
+          <label
+            className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium hover:opacity-80"
+            style={{ borderColor: "rgba(212,175,55,0.3)", color: uploadingCover ? "rgba(245,235,221,0.4)" : COLORS.gold }}
+          >
+            <ImagePlus className="h-4 w-4" />
+            {uploadingCover ? "Uploading…" : coverImageUrl ? "Replace cover image" : "Upload a cover image"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={uploadingCover}
+              className="hidden"
+              onChange={(e) => handleUploadCover(e.target.files?.[0])}
+            />
+          </label>
         </div>
 
         <OrganiserProfileSectionsEditor

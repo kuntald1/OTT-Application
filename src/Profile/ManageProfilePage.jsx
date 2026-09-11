@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock, BookOpen } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock, BookOpen, ImagePlus } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection } from "../api";
+import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection, uploadMyStudioCoverImage, fetchStudioCoverImage } from "../api";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
 
@@ -35,13 +35,34 @@ export default function ManageProfilePage({ onBack }) {
   const [aboutLoading, setAboutLoading] = useState(true);
   const [aboutError, setAboutError] = useState("");
 
+  const [coverImageUrl, setCoverImageUrl] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState("");
+
   useEffect(() => {
     if (profile.role !== "plays_organiser") return;
     fetchMyOrganiserSections()
       .then(setAboutSections)
       .catch((err) => setAboutError(err.message || "Couldn't load your About page."))
       .finally(() => setAboutLoading(false));
-  }, [profile.role]);
+    fetchStudioCoverImage(profile.id)
+      .then((r) => setCoverImageUrl(r.cover_image_url))
+      .catch(() => {});
+  }, [profile.role, profile.id]);
+
+  const handleUploadCover = async (file) => {
+    if (!file) return;
+    setUploadingCover(true);
+    setCoverError("");
+    try {
+      const result = await uploadMyStudioCoverImage(file);
+      setCoverImageUrl(result.cover_image_url);
+    } catch (err) {
+      setCoverError(err.message || "Couldn't upload cover image.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
 
   const handleCreateSection = async ({ title, contentHtml }) => {
     setAboutError("");
@@ -328,6 +349,36 @@ export default function ManageProfilePage({ onBack }) {
             <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
               Tell people about your organisation — add sections like About, Early Days, Selected Plays, or Awards.
             </p>
+
+            <div className="mb-6">
+              <label style={{ marginBottom: 8, display: "block", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "rgba(245,235,221,0.5)" }}>
+                Cover Image
+              </label>
+              {coverImageUrl && (
+                <div className="mb-3 overflow-hidden rounded-xl" style={{ aspectRatio: "16 / 6", border: "1px solid rgba(245,235,221,0.15)" }}>
+                  <img src={coverImageUrl} alt="" className="h-full w-full object-cover" />
+                </div>
+              )}
+              {coverError && <p className="mb-2 text-xs font-medium" style={{ color: "#f87171" }}>{coverError}</p>}
+              <label
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm font-medium hover:opacity-80"
+                style={{ borderColor: "rgba(212,175,55,0.3)", color: uploadingCover ? "rgba(245,235,221,0.4)" : COLORS.gold }}
+              >
+                <ImagePlus className="h-4 w-4" />
+                {uploadingCover ? "Uploading…" : coverImageUrl ? "Replace cover image" : "Upload a cover image"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={uploadingCover}
+                  className="hidden"
+                  onChange={(e) => handleUploadCover(e.target.files?.[0])}
+                />
+              </label>
+              <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                Shown at the top of your video list (e.g. "{profile.name} — Plays"). Recommended: a wide banner image, at least 1600px across.
+              </p>
+            </div>
+
             <OrganiserProfileSectionsEditor
               sections={aboutSections}
               loading={aboutLoading}

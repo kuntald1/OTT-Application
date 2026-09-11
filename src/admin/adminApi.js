@@ -1150,3 +1150,25 @@ export function unhideAdminDiscoveryItem(rowKey, itemKey) {
     method: "DELETE", auth: true,
   });
 }
+
+export async function uploadAdminStudioCoverImage(userId, file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/organiser-profile/${userId}/cover-image`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't upload cover image.");
+  }
+  return data;
+}
+
+export function fetchAdminStudioCoverImage(userId) {
+  return request(`/organiser-profile/${userId}/cover`, { auth: true });
+}

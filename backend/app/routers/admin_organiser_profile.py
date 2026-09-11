@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -9,6 +13,48 @@ from app.models import AdminUser, User, OrganiserProfileSection
 from app.schemas import OrganiserProfileSectionOut, OrganiserProfileSectionCreate, OrganiserProfileSectionUpdate
 
 router = APIRouter(prefix="/admin/organiser-profile", tags=["admin-organiser-profile"])
+
+COVER_UPLOAD_DIR = Path("uploads/studio_covers")
+ALLOWED_COVER_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_COVER_BYTES = 8 * 1024 * 1024
+
+
+@router.post("/{user_id}/cover-image", response_model=dict)
+async def upload_cover_image_admin(
+    user_id: str,
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin > User Management's "About Page" — lets an admin set a
+    studio's cover image on their behalf, same as organiser_profile.py's
+    self-service version.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    if file.content_type not in ALLOWED_COVER_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only JPEG, PNG, or WEBP images are allowed.")
+
+    contents = await file.read()
+    if len(contents) > MAX_COVER_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be smaller than 8MB.")
+
+    COVER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    filename = f"{uuid.uuid4()}{ext}"
+    with open(COVER_UPLOAD_DIR / filename, "wb") as f:
+        f.write(contents)
+
+    if user.studio_cover_image_url:
+        old_filename = user.studio_cover_image_url.rsplit("/", 1)[-1]
+        old_path = COVER_UPLOAD_DIR / old_filename
+        if old_path.exists() and old_path.is_file():
+            old_path.unlink(missing_ok=True)
+
+    user.studio_cover_image_url = f"/api/uploads/studio_covers/{filename}"
+    db.commit()
+    return {"cover_image_url": user.studio_cover_image_url}
 
 
 @router.get("/{user_id}/sections", response_model=list[OrganiserProfileSectionOut])

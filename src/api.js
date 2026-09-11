@@ -979,3 +979,31 @@ export function deleteMyOrganiserSection(sectionId) {
 export function fetchOrganiserProfileSections(userId) {
   return request(`/organiser-profile/${userId}/sections`);
 }
+
+export async function uploadMyStudioCoverImage(file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/organiser-profile/cover-image`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const message =
+      typeof data.detail === "string"
+        ? data.detail
+        : "Couldn't upload cover image. Please try again.";
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+export function fetchStudioCoverImage(userId) {
+  return request(`/organiser-profile/${userId}/cover`);
+}
