@@ -30,7 +30,7 @@ export default function AdBannerCarousel({ pageKey }) {
   const banner = banners[active];
 
   return (
-    <div className="px-6 pt-24 sm:px-10 sm:pt-28" style={{ background: COLORS.black }}>
+    <div className="px-6 pt-20 sm:px-10 sm:pt-24" style={{ background: COLORS.black }}>
       <div
         className="relative w-full overflow-hidden rounded-xl"
         style={{ aspectRatio: "16 / 4.5", maxHeight: 260, border: "1px solid rgba(212,175,55,0.3)" }}
