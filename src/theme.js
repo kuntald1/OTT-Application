@@ -30,7 +30,10 @@ export const CURTAIN_GRADIENT = `linear-gradient(105deg, ${COLORS.black} 0%, ${C
 // Nav header fade — muted red at the top, sinking through shadow into full
 // transparency by the bottom edge, so the nav bleeds directly into whatever
 // hero content sits beneath it instead of hard-stopping as a flat bar.
-export const NAV_GRADIENT = `linear-gradient(180deg, ${COLORS.burgundyMuted}E6 0%, ${COLORS.burgundyDark}99 60%, transparent 100%)`;
+// Solid, fully opaque — deliberately NOT a fade-to-transparent gradient,
+// so content scrolling underneath (hero banners, ad banners) never shows
+// through the nav bar.
+export const NAV_GRADIENT = COLORS.burgundyMuted;
 
 // Marquee-curtain gradient — the one recurring "premium/cinema" cue used on
 // every primary button across the site. Gold, matching the reference
