@@ -29,30 +29,35 @@ export default function AdBannerCarousel({ pageKey }) {
   const banner = banners[active];
 
   return (
-    <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16 / 3", maxHeight: 200, border: "1px solid rgba(212,175,55,0.25)" }}>
-      {banners.map((b, i) => (
-        <a
-          key={b.id}
-          href={b.redirect_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute inset-0 block transition-opacity duration-700 ease-in-out"
-          style={{ opacity: i === active ? 1 : 0, pointerEvents: i === active ? "auto" : "none" }}
-        >
-          <img src={b.image_url} alt="Advertisement" className="h-full w-full object-cover" />
-        </a>
-      ))}
-      {banners.length > 1 && (
-        <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
-          {banners.map((b, i) => (
-            <span
-              key={b.id}
-              className="h-1.5 w-1.5 rounded-full transition-opacity"
-              style={{ background: "#fff", opacity: i === active ? 1 : 0.4 }}
-            />
-          ))}
-        </div>
-      )}
+    <div className="px-6 pt-24 sm:px-10 sm:pt-28">
+      <div
+        className="relative w-full overflow-hidden rounded-xl"
+        style={{ aspectRatio: "16 / 4.5", maxHeight: 260, border: "1px solid rgba(212,175,55,0.3)" }}
+      >
+        {banners.map((b, i) => (
+          <a
+            key={b.id}
+            href={b.redirect_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute inset-0 block transition-opacity duration-700 ease-in-out"
+            style={{ opacity: i === active ? 1 : 0, pointerEvents: i === active ? "auto" : "none" }}
+          >
+            <img src={b.image_url} alt="Advertisement" className="h-full w-full object-cover" />
+          </a>
+        ))}
+        {banners.length > 1 && (
+          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
+            {banners.map((b, i) => (
+              <span
+                key={b.id}
+                className="h-1.5 w-1.5 rounded-full transition-opacity"
+                style={{ background: "#fff", opacity: i === active ? 1 : 0.4 }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
