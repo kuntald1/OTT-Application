@@ -343,7 +343,11 @@ export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
   return (
     <section
       className={`relative w-full overflow-hidden ${HERO_HEIGHT_CLASS}`}
-      style={{ background: ARCHIVE_BG, fontFamily: "'Geist', -apple-system, sans-serif" }}
+      style={{
+        background: ARCHIVE_BG,
+        fontFamily: "'Geist', -apple-system, sans-serif",
+        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18)",
+      }}
     >
       {/* The accordion itself */}
       <div className="flex h-full w-full">
