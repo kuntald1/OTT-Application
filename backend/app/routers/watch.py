@@ -266,18 +266,18 @@ def get_content_performance_breakdown(
 ):
     """Per-viewer, then per-tier drill-down behind a video's row in
     "Top performing content" — the collapsible breakdown showing
-    exactly how "You Earned" adds up. Recomputed on demand from each
-    viewer's stored max_session_seconds against the video's current
-    Revenue-Share Tiers and the current platform commission rate (see
-    RevenueRateConfig) — this assumes commission hasn't changed since
-    these views were originally credited, which is fine for a single
-    admin-set rate but means the tier-level rupee figures are an
-    illustrative recompute, not a replay of history. The viewer-level
-    total (creator_earned_rupees on the outer object) is the real,
-    already-credited amount from VideoWatchRecord, not a recompute.
+    exactly how "You Earned" adds up.
 
-    Viewers are anonymized (no name/email exposed) — "Viewer 1",
-    "Viewer 2"... ordered by watch time, most-engaged first.
+    Both levels are pinned to real, already-credited ground truth from
+    VideoWatchRecord (watch_minutes from max_session_seconds,
+    creator_earned_rupees from creator_credited_paisa) — never an
+    independent recompute that could drift from what was actually
+    paid. The tier-level split only decides HOW that same fixed total
+    gets divided across tiers (using current VideoRevenueTier rows as
+    the relative weighting), with the last tier absorbing whatever
+    paisa rounding remainder is left — so the tier rows always sum to
+    exactly the viewer's total, to the paisa, never off by a cent from
+    accumulated per-tier rounding.
     """
     video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
     if not video:
@@ -286,31 +286,45 @@ def get_content_performance_breakdown(
     tiers = db.query(VideoRevenueTier).filter(VideoRevenueTier.video_id == video.id).all()
     rate_config = db.query(RevenueRateConfig).first()
     fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
-    commission_percent = rate_config.platform_commission_percent if rate_config else Decimal("20")
 
     records = (
-        db.query(VideoWatchRecord)
+        db.query(VideoWatchRecord, User)
+        .join(User, User.id == VideoWatchRecord.user_id)
         .filter(VideoWatchRecord.video_id == video.id)
         .order_by(VideoWatchRecord.max_session_seconds.desc())
         .all()
     )
 
     result = []
-    for i, record in enumerate(records, start=1):
+    for record, viewer in records:
         tier_rows = _compute_tier_breakdown_paisa(record.max_session_seconds, tiers, fallback_rate)
+        total_gross_paisa = sum(t["gross_paisa"] for t in tier_rows)
+
         tier_out = []
-        for t in tier_rows:
-            creator_paisa = int(
-                (Decimal(t["gross_paisa"]) * (100 - commission_percent) / 100)
-                .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-            )
+        allocated_paisa = 0
+        for idx, t in enumerate(tier_rows):
+            is_last = idx == len(tier_rows) - 1
+            if is_last:
+                # Absorbs whatever's left, guaranteeing the tiers sum
+                # to record.creator_credited_paisa exactly — no
+                # accumulated per-tier rounding drift.
+                tier_creator_paisa = record.creator_credited_paisa - allocated_paisa
+            elif total_gross_paisa > 0:
+                tier_creator_paisa = int(
+                    (Decimal(record.creator_credited_paisa) * t["gross_paisa"] / total_gross_paisa)
+                    .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                )
+            else:
+                tier_creator_paisa = 0
+            allocated_paisa += tier_creator_paisa
             tier_out.append(ContentPerformanceTierBreakdownOut(
                 range_label=t["range_label"],
                 minutes_in_tier=t["minutes_in_tier"],
-                creator_earned_rupees=(Decimal(creator_paisa) / 100).quantize(Decimal("0.01")),
+                creator_earned_rupees=(Decimal(tier_creator_paisa) / 100).quantize(Decimal("0.01")),
             ))
+
         result.append(ContentPerformanceViewerBreakdownOut(
-            viewer_label=f"Viewer {i}",
+            viewer_label=viewer.name,
             watch_minutes=(Decimal(record.max_session_seconds) / 60).quantize(Decimal("0.01")),
             creator_earned_rupees=(Decimal(record.creator_credited_paisa) / 100).quantize(Decimal("0.01")),
             tier_breakdown=tier_out,
