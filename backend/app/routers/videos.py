@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid as uuid_module
 from datetime import datetime, timezone
@@ -1038,14 +1039,31 @@ async def _upload_to_bunny(video: Video, file: UploadFile, db: Session) -> Video
             detail="Only MP4, MOV, MKV, WEBM, or AVI files are allowed.",
         )
 
-    contents = await file.read()
-    if len(contents) > MAX_VIDEO_BYTES:
+    # Don't materialize the whole file into RAM (a 1GB `await file.read()`
+    # blows up process memory on this modest shared VPS, running
+    # alongside every other Vorpet product). The file is already sitting
+    # in FastAPI's spooled temp file at this point — find its real size
+    # by seeking, then stream it to Bunny in chunks instead.
+    file.file.seek(0, os.SEEK_END)
+    total_bytes = file.file.tell()
+    file.file.seek(0)
+    if total_bytes > MAX_VIDEO_BYTES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 2GB size limit.")
     if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Video hosting isn't configured yet. Bunny Stream credentials are missing.",
         )
+
+    CHUNK_SIZE = 8 * 1024 * 1024  # 8MB
+
+    async def _chunks():
+        file.file.seek(0)
+        while True:
+            chunk = await file.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            yield chunk
 
     async with httpx.AsyncClient(timeout=900.0) as client:  # 15 min — generous for 2GB files on modest upload speeds
         create_resp = await client.post(
@@ -1060,15 +1078,27 @@ async def _upload_to_bunny(video: Video, file: UploadFile, db: Session) -> Video
             )
         bunny_video_id = create_resp.json()["guid"]
 
-        upload_resp = await client.put(
-            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{bunny_video_id}",
-            headers={"AccessKey": settings.BUNNY_API_KEY},
-            content=contents,
-        )
+        # Bunny's large-file PUT upload occasionally comes back with a
+        # transient 500 on the first attempt (seen in practice on
+        # ~1GB files) — one retry with the same stream clears it most
+        # of the time, so don't fail the whole upload on the first try.
+        upload_resp = None
+        last_error_text = ""
+        for attempt in range(2):
+            upload_resp = await client.put(
+                f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{bunny_video_id}",
+                headers={"AccessKey": settings.BUNNY_API_KEY, "Content-Length": str(total_bytes)},
+                content=_chunks(),
+            )
+            if upload_resp.status_code in (200, 201):
+                break
+            last_error_text = upload_resp.text
+            if attempt == 0:
+                await asyncio.sleep(3)
         if upload_resp.status_code not in (200, 201):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Couldn't upload video file to Bunny Stream: {upload_resp.text}",
+                detail=f"Couldn't upload video file to Bunny Stream: {last_error_text}",
             )
 
     video.bunny_video_id = bunny_video_id
