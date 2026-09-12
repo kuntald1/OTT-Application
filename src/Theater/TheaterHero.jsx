@@ -40,7 +40,10 @@ export default function TheaterHero() {
   const slide = slides[active];
 
   return (
-    <section className={`relative w-full overflow-hidden font-[Geist,system-ui,sans-serif] ${HERO_HEIGHT_CLASS}`}>
+    <section
+      className={`relative w-full overflow-hidden font-[Geist,system-ui,sans-serif] ${HERO_HEIGHT_CLASS}`}
+      style={{ boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18)" }}
+    >
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(4px); }
