@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
@@ -41,6 +41,8 @@ const LOGIN_VIDEOS = Object.keys(loginVideoModules).sort().map((key) => loginVid
 export default function TopNav({ query, onQueryChange, onNavigate, activeView, currentSection }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [localQuery, setLocalQuery] = useState(query ?? "");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
@@ -190,53 +192,74 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
           })}
         </div>
 
-        {/* Search (always visible) + auth */}
+        {/* Search — icon by default, expands to the same input+submit
+            on click, on every tab (Plays/Archive/My List/Community/
+            Ticketing). Submit logic is untouched from before. */}
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-          <div
-            className="flex items-center overflow-hidden rounded-full"
-            style={{ border: `1px solid rgba(212,175,55,0.4)` }}
-          >
-            <input
-              type="text"
-              value={localQuery}
-              onChange={(e) => updateQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                const trimmed = localQuery.trim();
-                if (currentSection === "ticketing") {
-                  onNavigate?.("theater", { q: trimmed || undefined });
-                  return;
-                }
-                if (trimmed) {
-                  onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
-                } else {
-                  onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
-                }
-              }}
-              placeholder="Search"
-              className="w-24 bg-transparent px-3 py-1.5 text-sm outline-none placeholder-white/40 sm:w-40 sm:px-4 md:w-56"
-              style={{ color: COLORS.cream }}
-            />
+          {searchOpen ? (
+            <div
+              className="flex items-center overflow-hidden rounded-full"
+              style={{ border: `1px solid rgba(212,175,55,0.4)` }}
+            >
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={localQuery}
+                onChange={(e) => updateQuery(e.target.value)}
+                onBlur={() => { if (!localQuery.trim()) setSearchOpen(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { setSearchOpen(false); return; }
+                  if (e.key !== "Enter") return;
+                  const trimmed = localQuery.trim();
+                  if (currentSection === "ticketing") {
+                    onNavigate?.("theater", { q: trimmed || undefined });
+                    return;
+                  }
+                  if (trimmed) {
+                    onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
+                  } else {
+                    onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
+                  }
+                }}
+                placeholder="Search"
+                className="w-24 bg-transparent px-3 py-1.5 text-sm outline-none placeholder-white/40 sm:w-40 sm:px-4 md:w-56"
+                style={{ color: COLORS.cream }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = localQuery.trim();
+                  if (currentSection === "ticketing") {
+                    onNavigate?.("theater", { q: trimmed || undefined });
+                    return;
+                  }
+                  if (trimmed) {
+                    onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
+                  } else {
+                    onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
+                  }
+                }}
+                className="flex items-center justify-center px-3 py-1.5 text-white sm:px-4"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              >
+                <Search className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               onClick={() => {
-                const trimmed = localQuery.trim();
-                if (currentSection === "ticketing") {
-                  onNavigate?.("theater", { q: trimmed || undefined });
-                  return;
-                }
-                if (trimmed) {
-                  onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
-                } else {
-                  onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
-                }
+                setSearchOpen(true);
+                // input isn't mounted yet on this same render — focus on the next tick
+                setTimeout(() => searchInputRef.current?.focus(), 0);
               }}
-              className="flex items-center justify-center px-3 py-1.5 text-white sm:px-4"
-              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
+              style={{ border: `1px solid rgba(212,175,55,0.4)`, color: COLORS.cream }}
+              aria-label="Search"
             >
-              <Search className="h-3.5 w-3.5" />
+              <Search className="h-4 w-4" />
             </button>
-          </div>
+          )}
 
           {isLoggedIn && !isSubscribed && (
             <button
