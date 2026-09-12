@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { adminLogin, setAdminToken } from "./adminApi";
 
 const COLORS = {
-  bg: "#0a0104",
+  bg: "radial-gradient(ellipse at top right, rgba(212,175,55,0.16) 0%, transparent 45%), radial-gradient(ellipse at bottom left, rgba(94,22,22,0.55) 0%, transparent 55%) #0a0104",
   panel: "#150307",
   cream: "#f5ebdd",
   gold: "#D4AF37",
@@ -40,7 +40,7 @@ export default function AdminLoginPage({ onLoggedIn }) {
         className="w-full max-w-sm rounded-2xl p-8"
         style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.2)" }}
       >
-        <h1 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>theomy Admin</h1>
+        <h1 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>THEOMY Admin</h1>
         <p className="mb-6 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Staff sign-in only.</p>
 
         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Email</label>

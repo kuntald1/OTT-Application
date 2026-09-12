@@ -28,7 +28,7 @@ import AdminAdBannersPage from "./AdminAdBannersPage";
 import AdminDiscoverySettingsPage from "./AdminDiscoverySettingsPage";
 
 const COLORS = {
-  bg: "#0a0104",
+  bg: "radial-gradient(ellipse at top right, rgba(212,175,55,0.16) 0%, transparent 45%), radial-gradient(ellipse at bottom left, rgba(94,22,22,0.55) 0%, transparent 55%) #0a0104",
   panel: "#150307",
   cream: "#f5ebdd",
   gold: "#D4AF37",
@@ -112,7 +112,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
       >
         <div>
           <div className="mb-8 px-2">
-            <h1 className="text-base font-semibold" style={{ color: COLORS.cream }}>theomy Admin</h1>
+            <h1 className="text-base font-semibold" style={{ color: COLORS.cream }}>THEOMY Admin</h1>
             <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
               {currentAdmin.name} · <span className="capitalize">{currentAdmin.role}</span>
             </p>
