@@ -9,7 +9,7 @@ from app.date_range import parse_date_range
 from app.deps import get_current_admin
 from app.models import (
     AdminUser, User, UserRole, Subscription, Video, VideoStatus, EventEnquiry, EnquiryStatus,
-    Payment, PaymentStatus, CreatorEarnings,
+    Payment, PaymentStatus, CreatorEarnings, VideoPurchase,
 )
 from app.schemas import AdminDashboardOut
 
@@ -85,16 +85,22 @@ def get_dashboard_summary(
         .scalar() or 0
     )
 
-    # INR only — summing INR (Razorpay) and USD (Stripe) rows together
-    # would silently mix currencies into one meaningless number. USD
-    # revenue isn't shown separately here; the Reports page's
-    # "transactions" export includes every row with its own currency.
     # Subscription checkouts only — Payment.subscription_id/plan_name
     # mean this table is subscription-specific; pay-per-video purchases
     # live in the separate VideoPurchase table and aren't included here.
     total_revenue_rupees = (
         db.query(func.coalesce(func.sum(Payment.total_amount), 0))
         .filter(Payment.status == PaymentStatus.paid, Payment.currency == "INR", Payment.created_at >= start, Payment.created_at <= end)
+        .scalar() or 0
+    )
+
+    # Pay-per-video: a viewer buying permanent, one-time access to a
+    # single video (instead of a Play/Archive subscription) — see
+    # VideoPurchase's docstring. INR/Razorpay only, same as above —
+    # USD pay-per-video checkout isn't built yet.
+    video_purchase_revenue_rupees = (
+        db.query(func.coalesce(func.sum(VideoPurchase.amount), 0))
+        .filter(VideoPurchase.status == PaymentStatus.paid, VideoPurchase.currency == "INR", VideoPurchase.created_at >= start, VideoPurchase.created_at <= end)
         .scalar() or 0
     )
 
@@ -110,6 +116,7 @@ def get_dashboard_summary(
         published_videos=published_videos, pending_review_videos=pending_review_videos,
         approved_events=approved_events, pending_enquiries=pending_enquiries,
         total_revenue_rupees=Decimal(total_revenue_rupees),
+        video_purchase_revenue_rupees=Decimal(video_purchase_revenue_rupees),
         total_reward_points=total_reward_points,
         revenue_pending_pay_rupees=(Decimal(revenue_pending_pay_paisa) / 100).quantize(Decimal("0.01")),
     )

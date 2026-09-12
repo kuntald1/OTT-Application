@@ -70,7 +70,8 @@ export default function AdminDashboardPage({ onDrillDown }) {
           <Card icon={CreditCard} label="Subscriptions" value={data.active_subscriptions} sub={`${data.expired_subscriptions} expired`} accent="#6FCF97" onClick={() => onDrillDown?.("reports", "subscriptions")} />
           <Card icon={Clapperboard} label="OTT Content" value={data.published_videos} sub={`${data.pending_review_videos} pending review`} onClick={() => onDrillDown?.("reports", "content")} />
           <Card icon={CalendarCheck} label="Theatre Events" value={data.approved_events} sub={`${data.pending_enquiries} pending enquiries`} onClick={() => onDrillDown?.("reports", "enquiries")} />
-          <Card icon={IndianRupee} label="Revenue (INR)" value={`₹${data.total_revenue_rupees}`} sub="from successful subscription payments" accent="#6FCF97" onClick={() => onDrillDown?.("reports", "revenue")} />
+          <Card icon={IndianRupee} label="Revenue (INR) from Subscription" value={`₹${data.total_revenue_rupees}`} sub="successful subscription payments" accent="#6FCF97" onClick={() => onDrillDown?.("reports", "revenue")} />
+          <Card icon={Clapperboard} label="Revenue (INR) from Pay-Per-Video" value={`₹${data.video_purchase_revenue_rupees}`} sub="one-time pay-per-video purchases" accent="#6FCF97" />
           <Card icon={Clock} label="Pending Enquiries" value={data.pending_enquiries} sub="theatre events awaiting approval" accent="#f87171" onClick={() => onDrillDown?.("reports", "enquiries")} />
           <Card icon={Gift} label="Total Rewards" value={data.total_reward_points} sub="reward points balance, all users" />
           <Card icon={Wallet} label="Revenue Pending Pay" value={`₹${data.revenue_pending_pay_rupees}`} sub="owed to creators, not yet withdrawn" accent="#5B9BD5" onClick={() => onDrillDown?.("revenue")} />

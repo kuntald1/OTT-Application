@@ -345,6 +345,18 @@ def get_revenue_by_creator(
     full Gross → Platform/Creator Share → Paid → Pending chain.
     All-time. Most gross revenue first. creator_id, when given,
     narrows this to that one creator's single row.
+
+    Pending here is CreatorEarnings.available_balance_paisa — the same
+    number the Dashboard's "Revenue Pending Pay" card uses — NOT a
+    naive (creator_share - paid) calculation. Those two differ
+    whenever a withdrawal request is currently sitting pending: the
+    request flow reserves that amount out of available_balance the
+    moment it's submitted (see routers/withdrawals.py), before an
+    admin has approved or rejected it, specifically so the same money
+    can't be requested twice. A naive (creator_share - paid) doesn't
+    know about that in-flight reservation, so it would overstate what's
+    actually still available — using available_balance_paisa here
+    keeps this report and the Dashboard always in agreement.
     """
     gross_query = (
         db.query(
@@ -371,6 +383,10 @@ def get_revenue_by_creator(
 
     creator_ids = [r.creator_user_id for r in gross_rows]
     creators = {u.id: u for u in db.query(User).filter(User.id.in_(creator_ids)).all()} if creator_ids else {}
+    earnings_by_creator = (
+        {e.creator_user_id: e.available_balance_paisa for e in db.query(CreatorEarnings).filter(CreatorEarnings.creator_user_id.in_(creator_ids)).all()}
+        if creator_ids else {}
+    )
 
     results = []
     for r in gross_rows:
@@ -379,7 +395,7 @@ def get_revenue_by_creator(
         creator_paisa = r.creator_paisa or 0
         platform_paisa = gross_paisa - creator_paisa
         paid_paisa = paid_by_creator.get(r.creator_user_id, 0)
-        pending_paisa = max(0, creator_paisa - paid_paisa)
+        pending_paisa = max(0, earnings_by_creator.get(r.creator_user_id, 0))
         results.append(AdminRevenueByCreatorOut(
             creator_user_id=r.creator_user_id,
             creator_name=creator.name if creator else "Unknown",

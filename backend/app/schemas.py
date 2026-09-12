@@ -1489,6 +1489,7 @@ class AdminDashboardOut(BaseModel):
     approved_events: int
     pending_enquiries: int
     total_revenue_rupees: Decimal
+    video_purchase_revenue_rupees: Decimal
     total_reward_points: int
     revenue_pending_pay_rupees: Decimal
 

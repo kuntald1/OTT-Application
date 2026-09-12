@@ -10,7 +10,6 @@ const REPORT_TABS = [
   { id: "subscriptions", label: "Subscriptions" },
   { id: "content", label: "Content" },
   { id: "enquiries", label: "Events / Enquiries" },
-  { id: "transactions", label: "Transactions" },
   { id: "revenue", label: "Revenue" },
 ];
 
@@ -48,7 +47,7 @@ export default function AdminReportsPage({ initialTab }) {
         <BarChart3 className="h-6 w-6" style={{ color: COLORS.gold }} /> Reports and Analytics
       </h1>
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-        Basic reports covering customers, subscriptions, events, content, enquiries, transactions and revenue — export any of these as CSV.
+        Basic reports covering customers, subscriptions, events, content, enquiries, and revenue — export any of these as CSV.
       </p>
 
       <div className="mb-4">
