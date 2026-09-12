@@ -1479,7 +1479,8 @@ class AdminDashboardOut(BaseModel):
     yet (only EventTicketTier, which defines prices, not actual
     purchases), same gap flagged for Customer Management earlier.
     """
-    total_customers: int
+    total_users: int
+    total_organisers: int
     active_customers: int
     active_subscriptions: int
     expired_subscriptions: int
@@ -1487,8 +1488,9 @@ class AdminDashboardOut(BaseModel):
     pending_review_videos: int
     approved_events: int
     pending_enquiries: int
-    total_transactions: int
     total_revenue_rupees: Decimal
+    total_reward_points: int
+    revenue_pending_pay_rupees: Decimal
 
 
 class PageHeroMediaOut(BaseModel):

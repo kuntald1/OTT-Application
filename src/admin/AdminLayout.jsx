@@ -59,6 +59,16 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
   const [activePage, setActivePage] = useState(() =>
     canSeeMenu("dashboard") ? "dashboard" : (currentAdmin.allowed_menu_keys?.[0] || "dashboard")
   );
+  // Set by a Dashboard card's "View details" drill-down — which
+  // Reports & Analytics sub-tab to land on. Cleared once consumed so
+  // navigating away and back to Reports normally doesn't keep forcing
+  // a stale tab.
+  const [reportsInitialTab, setReportsInitialTab] = useState(null);
+
+  const handleDrillDown = (pageId, subTab) => {
+    setActivePage(pageId);
+    if (pageId === "reports" && subTab) setReportsInitialTab(subTab);
+  };
 
   const NAV_ITEMS = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, visible: canSeeMenu("dashboard") },
@@ -143,8 +153,8 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
       {/* Content */}
       <main className="flex-1 px-8 py-8">
         <div className="mx-auto max-w-3xl">
-          {activePage === "dashboard" && <AdminDashboardPage />}
-          {activePage === "reports" && <AdminReportsPage />}
+          {activePage === "dashboard" && <AdminDashboardPage onDrillDown={handleDrillDown} />}
+          {activePage === "reports" && <AdminReportsPage key={reportsInitialTab} initialTab={reportsInitialTab} />}
           {activePage === "videos" && <AdminVideoReviewPage />}
           {activePage === "add-video" && <AdminAddVideoPage />}
           {activePage === "cast-crew" && <AdminCastCrewPage />}

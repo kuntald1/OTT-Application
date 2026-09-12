@@ -8,8 +8,8 @@ from app.database import get_db
 from app.date_range import parse_date_range
 from app.deps import get_current_admin
 from app.models import (
-    AdminUser, User, Subscription, Video, VideoStatus, EventEnquiry, EnquiryStatus,
-    Payment, PaymentStatus,
+    AdminUser, User, UserRole, Subscription, Video, VideoStatus, EventEnquiry, EnquiryStatus,
+    Payment, PaymentStatus, CreatorEarnings,
 )
 from app.schemas import AdminDashboardOut
 
@@ -34,9 +34,14 @@ def get_dashboard_summary(
     """
     start, end = parse_date_range(start_date, end_date)
 
-    total_customers = (
+    total_users = (
         db.query(func.count(User.id))
-        .filter(User.created_at >= start, User.created_at <= end)
+        .filter(User.created_at >= start, User.created_at <= end, User.role == UserRole.user)
+        .scalar() or 0
+    )
+    total_organisers = (
+        db.query(func.count(User.id))
+        .filter(User.created_at >= start, User.created_at <= end, User.role == UserRole.plays_organiser)
         .scalar() or 0
     )
     active_customers = (
@@ -80,25 +85,31 @@ def get_dashboard_summary(
         .scalar() or 0
     )
 
-    total_transactions = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.status == PaymentStatus.paid, Payment.created_at >= start, Payment.created_at <= end)
-        .scalar() or 0
-    )
     # INR only — summing INR (Razorpay) and USD (Stripe) rows together
     # would silently mix currencies into one meaningless number. USD
     # revenue isn't shown separately here; the Reports page's
     # "transactions" export includes every row with its own currency.
+    # Subscription checkouts only — Payment.subscription_id/plan_name
+    # mean this table is subscription-specific; pay-per-video purchases
+    # live in the separate VideoPurchase table and aren't included here.
     total_revenue_rupees = (
         db.query(func.coalesce(func.sum(Payment.total_amount), 0))
         .filter(Payment.status == PaymentStatus.paid, Payment.currency == "INR", Payment.created_at >= start, Payment.created_at <= end)
         .scalar() or 0
     )
 
+    # All-time, not date-scoped — these are current standing balances
+    # (how many reward points exist right now, how much creators are
+    # currently owed), not activity that happened within the window.
+    total_reward_points = db.query(func.coalesce(func.sum(User.reward_points_balance), 0)).scalar() or 0
+    revenue_pending_pay_paisa = db.query(func.coalesce(func.sum(CreatorEarnings.available_balance_paisa), 0)).scalar() or 0
+
     return AdminDashboardOut(
-        total_customers=total_customers, active_customers=active_customers,
+        total_users=total_users, total_organisers=total_organisers, active_customers=active_customers,
         active_subscriptions=active_subscriptions, expired_subscriptions=expired_subscriptions,
         published_videos=published_videos, pending_review_videos=pending_review_videos,
         approved_events=approved_events, pending_enquiries=pending_enquiries,
-        total_transactions=total_transactions, total_revenue_rupees=Decimal(total_revenue_rupees),
+        total_revenue_rupees=Decimal(total_revenue_rupees),
+        total_reward_points=total_reward_points,
+        revenue_pending_pay_rupees=(Decimal(revenue_pending_pay_paisa) / 100).quantize(Decimal("0.01")),
     )

@@ -14,8 +14,8 @@ const REPORT_TABS = [
   { id: "revenue", label: "Revenue" },
 ];
 
-export default function AdminReportsPage() {
-  const [tab, setTab] = useState("customers");
+export default function AdminReportsPage({ initialTab }) {
+  const [tab, setTab] = useState(initialTab || "customers");
   const [dateRange, setDateRange] = useState(defaultDateRange());
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
