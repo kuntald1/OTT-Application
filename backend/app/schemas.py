@@ -968,6 +968,19 @@ class ContentPerformanceOut(BaseModel):
     creator_earned_rupees: Decimal
 
 
+class ContentPerformanceTierBreakdownOut(BaseModel):
+    range_label: str
+    minutes_in_tier: Decimal
+    creator_earned_rupees: Decimal
+
+
+class ContentPerformanceViewerBreakdownOut(BaseModel):
+    viewer_label: str
+    watch_minutes: Decimal
+    creator_earned_rupees: Decimal
+    tier_breakdown: List[ContentPerformanceTierBreakdownOut]
+
+
 class AdminRevenueConfigUpdate(BaseModel):
     rate_paisa_per_minute: int = Field(ge=0)
     platform_commission_percent: Decimal = Field(ge=0, le=100)

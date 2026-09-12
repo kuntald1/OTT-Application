@@ -14,6 +14,7 @@ from app.models import (
 from app.routers.videos import _check_video_access
 from app.schemas import (
     WatchHeartbeatRequest, WatchHeartbeatResponse, ContentPerformanceOut,
+    ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut,
     RevenueByDayOut, RevenueByCountryOut,
 )
 
@@ -55,7 +56,46 @@ def _compute_gross_revenue_paisa(session_seconds: int, tiers: list[VideoRevenueT
     return int(total_paisa.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-@router.post("/{video_id}/watch-heartbeat", response_model=WatchHeartbeatResponse)
+def _compute_tier_breakdown_paisa(session_seconds: int, tiers: list[VideoRevenueTier], fallback_rate_paisa_per_minute: int) -> list[dict]:
+    """Same graduated-band logic as _compute_gross_revenue_paisa above,
+    but returns the per-tier split instead of a single total — powers
+    the "how did this add up" breakdown a creator can drill into on
+    Revenue > Details, showing exactly which band of a viewer's watch
+    time earned what. Only bands the session actually reached appear
+    (a 2-minute session on a video with a 500+ minute second tier
+    never mentions that second tier at all).
+    """
+    minutes = Decimal(session_seconds) / Decimal(60)
+    if not tiers:
+        return [{
+            "range_label": "Flat rate (no custom tiers)",
+            "minutes_in_tier": minutes.quantize(Decimal("0.01")),
+            "gross_paisa": int((minutes * fallback_rate_paisa_per_minute).quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+        }]
+
+    breakdown = []
+    remaining = minutes
+    for tier in sorted(tiers, key=lambda t: t.min_minutes):
+        if remaining <= 0:
+            break
+        band_start = Decimal(tier.min_minutes) - 1
+        band_end = Decimal(tier.max_minutes) if tier.max_minutes is not None else None
+        band_width = (band_end - band_start) if band_end is not None else remaining
+        minutes_in_band = min(remaining, band_width)
+        if minutes_in_band <= 0:
+            continue
+        gross_paisa_in_band = int((minutes_in_band * tier.rate_per_minute_inr * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        range_label = f"{tier.min_minutes}\u2013{tier.max_minutes if tier.max_minutes is not None else 'Max'}"
+        breakdown.append({
+            "range_label": range_label,
+            "minutes_in_tier": minutes_in_band.quantize(Decimal("0.01")),
+            "gross_paisa": gross_paisa_in_band,
+        })
+        remaining -= minutes_in_band
+    return breakdown
+
+
+
 def watch_heartbeat(
     video_id: str,
     payload: WatchHeartbeatRequest,
@@ -94,10 +134,22 @@ def watch_heartbeat(
 
     credited_this_call_paisa = 0
 
+    # Never trust session_seconds beyond the video's own length — a
+    # legitimate continuous session can't physically exceed how long
+    # the video actually is. Without this cap, a looping video (whose
+    # player timer doesn't reset between loop iterations) or a
+    # malicious client sending an inflated number would get credited
+    # for a session far longer than anyone could have really watched —
+    # exactly what happened here: a 51-second video showing a genuine
+    # viewer's max_session_seconds at 5922 (~98.7 minutes).
+    effective_session_seconds = payload.session_seconds
+    if video.duration_seconds:
+        effective_session_seconds = min(effective_session_seconds, video.duration_seconds)
+
     # Only the "max single-session view" ever grows revenue — a
     # heartbeat reporting fewer seconds than the existing best (e.g. a
     # short re-watch) is recorded but credits nothing further.
-    if payload.session_seconds > record.max_session_seconds:
+    if effective_session_seconds > record.max_session_seconds:
         tiers = (
             db.query(VideoRevenueTier)
             .filter(VideoRevenueTier.video_id == video.id)
@@ -107,7 +159,7 @@ def watch_heartbeat(
         fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
         commission_percent = rate_config.platform_commission_percent if rate_config else Decimal("20")
 
-        new_gross_paisa = _compute_gross_revenue_paisa(payload.session_seconds, tiers, fallback_rate)
+        new_gross_paisa = _compute_gross_revenue_paisa(effective_session_seconds, tiers, fallback_rate)
         delta_gross_paisa = max(0, new_gross_paisa - record.gross_revenue_paisa)
 
         if delta_gross_paisa > 0:
@@ -140,7 +192,7 @@ def watch_heartbeat(
                 ))
 
         record.gross_revenue_paisa = new_gross_paisa
-        record.max_session_seconds = payload.session_seconds
+        record.max_session_seconds = effective_session_seconds
 
     # Keeps this device's screens-limit slot alive for as long as it
     # keeps sending heartbeats — a stopped/closed player naturally stops
@@ -204,6 +256,66 @@ def get_my_content_performance(
         )
         for r in rows
     ]
+
+
+@router.get("/{video_id}/content-performance-breakdown", response_model=list[ContentPerformanceViewerBreakdownOut])
+def get_content_performance_breakdown(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-viewer, then per-tier drill-down behind a video's row in
+    "Top performing content" — the collapsible breakdown showing
+    exactly how "You Earned" adds up. Recomputed on demand from each
+    viewer's stored max_session_seconds against the video's current
+    Revenue-Share Tiers and the current platform commission rate (see
+    RevenueRateConfig) — this assumes commission hasn't changed since
+    these views were originally credited, which is fine for a single
+    admin-set rate but means the tier-level rupee figures are an
+    illustrative recompute, not a replay of history. The viewer-level
+    total (creator_earned_rupees on the outer object) is the real,
+    already-credited amount from VideoWatchRecord, not a recompute.
+
+    Viewers are anonymized (no name/email exposed) — "Viewer 1",
+    "Viewer 2"... ordered by watch time, most-engaged first.
+    """
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found.")
+
+    tiers = db.query(VideoRevenueTier).filter(VideoRevenueTier.video_id == video.id).all()
+    rate_config = db.query(RevenueRateConfig).first()
+    fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
+    commission_percent = rate_config.platform_commission_percent if rate_config else Decimal("20")
+
+    records = (
+        db.query(VideoWatchRecord)
+        .filter(VideoWatchRecord.video_id == video.id)
+        .order_by(VideoWatchRecord.max_session_seconds.desc())
+        .all()
+    )
+
+    result = []
+    for i, record in enumerate(records, start=1):
+        tier_rows = _compute_tier_breakdown_paisa(record.max_session_seconds, tiers, fallback_rate)
+        tier_out = []
+        for t in tier_rows:
+            creator_paisa = int(
+                (Decimal(t["gross_paisa"]) * (100 - commission_percent) / 100)
+                .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            )
+            tier_out.append(ContentPerformanceTierBreakdownOut(
+                range_label=t["range_label"],
+                minutes_in_tier=t["minutes_in_tier"],
+                creator_earned_rupees=(Decimal(creator_paisa) / 100).quantize(Decimal("0.01")),
+            ))
+        result.append(ContentPerformanceViewerBreakdownOut(
+            viewer_label=f"Viewer {i}",
+            watch_minutes=(Decimal(record.max_session_seconds) / 60).quantize(Decimal("0.01")),
+            creator_earned_rupees=(Decimal(record.creator_credited_paisa) / 100).quantize(Decimal("0.01")),
+            tier_breakdown=tier_out,
+        ))
+    return result
 
 
 @router.get("/revenue/by-day/mine", response_model=list[RevenueByDayOut])

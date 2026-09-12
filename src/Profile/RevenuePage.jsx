@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2, BarChart3, LayoutList } from "lucide-react";
+import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2, BarChart3, LayoutList, ChevronDown, ChevronRight } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry } from "../api";
+import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry, fetchContentPerformanceBreakdown } from "../api";
 
 // ---------------------------------------------------------------------------
 // Revenue — Content Creator / Plays Organiser only.
@@ -116,6 +116,26 @@ export default function RevenuePage({ onBack }) {
 
   const [performance, setPerformance] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(true);
+
+  const [expandedVideoId, setExpandedVideoId] = useState(null);
+  const [breakdownByVideoId, setBreakdownByVideoId] = useState({});
+  const [breakdownLoadingId, setBreakdownLoadingId] = useState(null);
+  const [expandedViewerKey, setExpandedViewerKey] = useState(null);
+
+  const toggleVideoBreakdown = (videoId) => {
+    if (expandedVideoId === videoId) {
+      setExpandedVideoId(null);
+      return;
+    }
+    setExpandedVideoId(videoId);
+    if (!breakdownByVideoId[videoId]) {
+      setBreakdownLoadingId(videoId);
+      fetchContentPerformanceBreakdown(videoId)
+        .then((rows) => setBreakdownByVideoId((m) => ({ ...m, [videoId]: rows })))
+        .catch(() => setBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })))
+        .finally(() => setBreakdownLoadingId(null));
+    }
+  };
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
@@ -409,15 +429,104 @@ export default function RevenuePage({ onBack }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {performance.map((row, i) => (
-                    <tr key={row.video_id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                      <td className="px-4 py-2.5" style={{ color: "rgba(245,235,221,0.4)" }}>{i + 1}</td>
-                      <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.title}</td>
-                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.unique_viewers}</td>
-                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.total_watch_minutes}</td>
-                      <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
-                    </tr>
-                  ))}
+                  {performance.map((row, i) => {
+                    const isExpanded = expandedVideoId === row.video_id;
+                    const viewers = breakdownByVideoId[row.video_id];
+                    const isLoadingThis = breakdownLoadingId === row.video_id;
+                    return (
+                      <React.Fragment key={row.video_id}>
+                        <tr
+                          style={{ borderTop: "1px solid rgba(255,255,255,0.06)", cursor: "pointer" }}
+                          onClick={() => toggleVideoBreakdown(row.video_id)}
+                        >
+                          <td className="px-4 py-2.5" style={{ color: "rgba(245,235,221,0.4)" }}>
+                            <span className="flex items-center gap-1.5">
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                              {i + 1}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.title}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.unique_viewers}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.total_watch_minutes}</td>
+                          <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                        </tr>
+
+                        {isExpanded && (
+                          <tr style={{ background: "rgba(0,0,0,0.15)" }}>
+                            <td colSpan={5} className="px-4 py-3 sm:px-8">
+                              {isLoadingThis ? (
+                                <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading breakdown…</p>
+                              ) : !viewers || viewers.length === 0 ? (
+                                <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No viewer data yet.</p>
+                              ) : (
+                                <div className="overflow-hidden rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr>
+                                        <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>Details</th>
+                                        <th className="px-3 py-2 text-right font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>Watch Minutes</th>
+                                        <th className="px-3 py-2 text-right font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>You Earned</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {viewers.map((v) => {
+                                        const viewerKey = `${row.video_id}:${v.viewer_label}`;
+                                        const viewerExpanded = expandedViewerKey === viewerKey;
+                                        return (
+                                          <React.Fragment key={viewerKey}>
+                                            <tr
+                                              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", cursor: "pointer" }}
+                                              onClick={() => setExpandedViewerKey(viewerExpanded ? null : viewerKey)}
+                                            >
+                                              <td className="px-3 py-2" style={{ color: COLORS.cream }}>
+                                                <span className="flex items-center gap-1.5">
+                                                  {viewerExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                                  {v.viewer_label}
+                                                </span>
+                                              </td>
+                                              <td className="px-3 py-2 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{v.watch_minutes}</td>
+                                              <td className="px-3 py-2 text-right font-medium" style={{ color: COLORS.gold }}>₹{v.creator_earned_rupees}</td>
+                                            </tr>
+                                            {viewerExpanded && (
+                                              <tr style={{ background: "rgba(0,0,0,0.2)" }}>
+                                                <td colSpan={3} className="px-3 py-2 sm:px-6">
+                                                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>
+                                                    Revenue-Share Tiers — {v.viewer_label}
+                                                  </p>
+                                                  <table className="w-full text-[11px]">
+                                                    <thead>
+                                                      <tr>
+                                                        <th className="py-1 text-left font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Tier (minutes)</th>
+                                                        <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Minutes in tier</th>
+                                                        <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>You Earned</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {v.tier_breakdown.map((t, ti) => (
+                                                        <tr key={ti} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                                          <td className="py-1" style={{ color: "rgba(245,235,221,0.7)" }}>{t.range_label}</td>
+                                                          <td className="py-1 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{t.minutes_in_tier}</td>
+                                                          <td className="py-1 text-right" style={{ color: COLORS.gold }}>₹{t.creator_earned_rupees}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

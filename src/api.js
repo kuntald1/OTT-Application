@@ -569,6 +569,10 @@ export function fetchMyContentPerformance() {
   return request(`/videos/content-performance/mine`, { auth: true });
 }
 
+export function fetchContentPerformanceBreakdown(videoId) {
+  return request(`/videos/${videoId}/content-performance-breakdown`, { auth: true });
+}
+
 // Creator-facing Analytics — real event-log-backed revenue trend and
 // viewer-by-country breakdown, scoped to this creator's own content
 // (same data shape as the admin panel's platform-wide version).
