@@ -287,6 +287,7 @@ export function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = fals
   const [hovering, setHovering] = useState(autoPlay);
   const [trailerReady, setTrailerReady] = useState(false);
   const [titleVisible, setTitleVisible] = useState(true);
+  const [muted, setMuted] = useState(false);
   const hoverTimerRef = useRef(null);
   const titleTimerRef = useRef(null);
   const hlsRef = useRef(null);
@@ -370,12 +371,23 @@ export function HoverTrailerPreview({ poster, trailerUrl, title, autoPlay = fals
       {hovering && trailerUrl && (
         <video
           ref={videoRef}
-          muted
+          muted={muted}
           playsInline
           loop
           className="absolute inset-0 h-full w-full object-cover"
           style={{ opacity: trailerReady ? 1 : 0, transition: "opacity 300ms" }}
         />
+      )}
+      {hovering && trailerReady && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
+          className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full"
+          style={{ background: "rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.3)" }}
+          aria-label={muted ? "Unmute preview" : "Mute preview"}
+        >
+          {muted ? <VolumeX className="h-4 w-4 text-white" /> : <Volume2 className="h-4 w-4 text-white" />}
+        </button>
       )}
       {hovering && trailerReady && title && (
         <div
