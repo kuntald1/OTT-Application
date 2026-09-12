@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import { BarChart3, Download } from "lucide-react";
 import { fetchAdminReport, downloadAdminReportCsv } from "./adminApi";
 import DateRangePicker, { defaultDateRange } from "./DateRangePicker";
+import AdminPartnersTab from "./AdminPartnersTab";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
 const REPORT_TABS = [
   { id: "customers", label: "Customers" },
+  { id: "partners", label: "Partner" },
   { id: "subscriptions", label: "Subscriptions" },
   { id: "content", label: "Content" },
   { id: "enquiries", label: "Events / Enquiries" },
@@ -81,6 +83,7 @@ export default function AdminReportsPage({ initialTab }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
+    if (tab === "partners") return;
     setLoading(true);
     setError("");
     fetchAdminReport(tab, dateRange)
@@ -145,7 +148,7 @@ export default function AdminReportsPage({ initialTab }) {
       </p>
 
       <div className="mb-4">
-        <DateRangePicker startDate={dateRange.startDate} endDate={dateRange.endDate} onChange={setDateRange} />
+        {tab !== "partners" && <DateRangePicker startDate={dateRange.startDate} endDate={dateRange.endDate} onChange={setDateRange} />}
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -162,20 +165,24 @@ export default function AdminReportsPage({ initialTab }) {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exporting || loading}
-          className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-50"
-          style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}
-        >
-          <Download className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export CSV"}
-        </button>
+        {tab !== "partners" && (
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || loading}
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-50"
+            style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}
+          >
+            <Download className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export CSV"}
+          </button>
+        )}
       </div>
 
       {error && <p className="mb-4 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}
 
-      {loading ? (
+      {tab === "partners" ? (
+        <AdminPartnersTab />
+      ) : loading ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
       ) : !report || report.rows.length === 0 ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No data for this report.</p>

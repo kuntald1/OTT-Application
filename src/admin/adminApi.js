@@ -353,6 +353,10 @@ export function rejectWithdrawal(withdrawalId, adminNote) {
   });
 }
 
+export function fetchAdminPartners() {
+  return request("/admin/partners", { auth: true });
+}
+
 export function fetchAdminContentPerformance(creatorId) {
   return request(`/admin/revenue/content-performance${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
 }

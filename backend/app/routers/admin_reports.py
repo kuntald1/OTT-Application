@@ -10,7 +10,7 @@ from app.database import get_db
 from app.date_range import parse_date_range
 from app.deps import get_current_admin
 from app.models import (
-    AdminUser, User, Subscription, Video, EventEnquiry, Payment, PaymentStatus,
+    AdminUser, User, UserRole, Subscription, Video, EventEnquiry, Payment, PaymentStatus,
 )
 
 router = APIRouter(prefix="/admin/reports", tags=["admin-reports"])
@@ -31,7 +31,13 @@ router = APIRouter(prefix="/admin/reports", tags=["admin-reports"])
 def _report_customers(db: Session, start: datetime, end: datetime):
     headers = ["Name", "Email", "Role", "Status", "Joined"]
     rows = []
-    query = db.query(User).filter(User.created_at >= start, User.created_at <= end).order_by(User.created_at.desc())
+    # plays_organiser accounts are theomy's PARTNERS, not customers —
+    # see /admin/partners and the "Partner" tab for those.
+    query = (
+        db.query(User)
+        .filter(User.created_at >= start, User.created_at <= end, User.role != UserRole.plays_organiser)
+        .order_by(User.created_at.desc())
+    )
     for u in query.all():
         rows.append([u.name, u.email, u.role.value, "Active" if u.is_active else "Deactivated", u.created_at.strftime("%Y-%m-%d")])
     return headers, rows

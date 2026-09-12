@@ -1683,3 +1683,11 @@ class DiscoveryVisibilityUpdate(BaseModel):
 
 class DiscoveryHideItemRequest(BaseModel):
     item_key: str
+
+
+class AdminPartnerOut(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    email: EmailStr
+    joined: datetime
+    category: str  # "registered" | "active" | "inactive" | "deactivated"
