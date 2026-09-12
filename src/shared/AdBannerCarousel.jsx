@@ -33,7 +33,7 @@ export default function AdBannerCarousel({ pageKey }) {
     <div className="px-6 pt-20 sm:px-10 sm:pt-24" style={{ background: COLORS.black }}>
       <div
         className="relative w-full overflow-hidden rounded-xl"
-        style={{ aspectRatio: "16 / 4", maxHeight: 300, border: "1px solid rgba(212,175,55,0.3)" }}
+        style={{ aspectRatio: "16 / 3", maxHeight: 160, border: "1px solid rgba(212,175,55,0.3)" }}
       >
         {banners.map((b, i) => (
           <a

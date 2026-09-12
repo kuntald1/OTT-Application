@@ -126,7 +126,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
         {/* Logo */}
         <div className="flex flex-shrink-0 items-center gap-2" style={{ color: COLORS.cream }}>
           <MovixMark className="h-6 w-6" style={{ fill: COLORS.gold }} />
-          <span className="text-lg font-semibold tracking-wide">theomy</span>
+          <span className="text-lg font-semibold tracking-wide">Theomy</span>
         </div>
 
         {/* Desktop menu */}
