@@ -192,74 +192,82 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
           })}
         </div>
 
-        {/* Search — icon by default, expands to the same input+submit
-            on click, on every tab (Plays/Archive/My List/Community/
-            Ticketing). Submit logic is untouched from before. */}
+        {/* Search — a pill that smoothly morphs from a plain icon into
+            the full input+submit box on click, on every tab (Plays/
+            Archive/My List/Community/Ticketing). The input/button stay
+            mounted throughout (never swapped in/out) so the width and
+            opacity transitions run smoothly instead of popping. Submit
+            logic itself is untouched from before. */}
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-          {searchOpen ? (
-            <div
-              className="flex items-center overflow-hidden rounded-full"
-              style={{ border: `1px solid rgba(212,175,55,0.4)` }}
-            >
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={localQuery}
-                onChange={(e) => updateQuery(e.target.value)}
-                onBlur={() => { if (!localQuery.trim()) setSearchOpen(false); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") { setSearchOpen(false); return; }
-                  if (e.key !== "Enter") return;
-                  const trimmed = localQuery.trim();
-                  if (currentSection === "ticketing") {
-                    onNavigate?.("theater", { q: trimmed || undefined });
-                    return;
-                  }
-                  if (trimmed) {
-                    onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
-                  } else {
-                    onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
-                  }
-                }}
-                placeholder="Search"
-                className="w-24 bg-transparent px-3 py-1.5 text-sm outline-none placeholder-white/40 sm:w-40 sm:px-4 md:w-56"
-                style={{ color: COLORS.cream }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const trimmed = localQuery.trim();
-                  if (currentSection === "ticketing") {
-                    onNavigate?.("theater", { q: trimmed || undefined });
-                    return;
-                  }
-                  if (trimmed) {
-                    onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
-                  } else {
-                    onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
-                  }
-                }}
-                className="flex items-center justify-center px-3 py-1.5 text-white sm:px-4"
-                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-              >
-                <Search className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
+          <div
+            className="flex items-center overflow-hidden rounded-full transition-all duration-300 ease-out"
+            style={{
+              border: `1px solid rgba(212,175,55,0.4)`,
+              width: searchOpen ? 224 : 36,
+              boxShadow: searchOpen ? "0 8px 24px -8px rgba(0,0,0,0.5)" : "none",
+            }}
+          >
             <button
               type="button"
               onClick={() => {
+                if (searchOpen) return;
                 setSearchOpen(true);
-                // input isn't mounted yet on this same render — focus on the next tick
-                setTimeout(() => searchInputRef.current?.focus(), 0);
+                setTimeout(() => searchInputRef.current?.focus(), 50);
               }}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
-              style={{ border: `1px solid rgba(212,175,55,0.4)`, color: COLORS.cream }}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center"
+              style={{ color: searchOpen ? "rgba(245,235,221,0.5)" : COLORS.cream, cursor: searchOpen ? "default" : "pointer" }}
               aria-label="Search"
+              tabIndex={searchOpen ? -1 : 0}
             >
               <Search className="h-4 w-4" />
             </button>
-          )}
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={localQuery}
+              onChange={(e) => updateQuery(e.target.value)}
+              onBlur={() => { if (!localQuery.trim()) setSearchOpen(false); }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { setSearchOpen(false); searchInputRef.current?.blur(); return; }
+                if (e.key !== "Enter") return;
+                const trimmed = localQuery.trim();
+                if (currentSection === "ticketing") {
+                  onNavigate?.("theater", { q: trimmed || undefined });
+                  return;
+                }
+                if (trimmed) {
+                  onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
+                } else {
+                  onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
+                }
+              }}
+              placeholder="Search"
+              tabIndex={searchOpen ? 0 : -1}
+              className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none placeholder-white/40 transition-opacity duration-200"
+              style={{ color: COLORS.cream, opacity: searchOpen ? 1 : 0 }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!searchOpen) return;
+                const trimmed = localQuery.trim();
+                if (currentSection === "ticketing") {
+                  onNavigate?.("theater", { q: trimmed || undefined });
+                  return;
+                }
+                if (trimmed) {
+                  onNavigate?.("search", { q: trimmed, section: currentSection || "play" });
+                } else {
+                  onNavigate?.(currentSection === "archive" ? "accordion" : "hero");
+                }
+              }}
+              tabIndex={searchOpen ? 0 : -1}
+              className="flex h-9 w-11 flex-shrink-0 items-center justify-center text-white transition-opacity duration-200"
+              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR, opacity: searchOpen ? 1 : 0 }}
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          </div>
 
           {isLoggedIn && !isSubscribed && (
             <button
