@@ -103,7 +103,7 @@ export default function MyVideoListPage({ onBack }) {
   const [showUpload, setShowUpload] = useState(false);
 
   const [form, setForm] = useState({
-    title: "", description: "", section: "play", categories: [], release_year: "", age_rating: "", languages: "",
+    title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: "",
     has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "",
   });
   const [tiers, setTiers] = useState([makeEmptyTier()]);
@@ -208,7 +208,7 @@ export default function MyVideoListPage({ onBack }) {
   const canSubmit = form.title.trim() && form.categories.length > 0 && form.release_year && form.age_rating && tiersValid && pricingValid;
 
   const resetForm = () => {
-    setForm({ title: "", description: "", section: "play", categories: [], release_year: "", age_rating: "", languages: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
+    setForm({ title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
     setTiers([makeEmptyTier()]);
     setCast([]);
     setCrew([]);

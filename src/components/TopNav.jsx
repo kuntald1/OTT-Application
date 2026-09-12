@@ -709,7 +709,7 @@ function LoginModal({ onClose }) {
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          {mode === "login" ? "Log in to theomy"
+          {mode === "login" ? "Log in to THEOMY"
             : mode === "forgot" ? "Reset your password"
             : mode === "otpLogin" ? "Log in with OTP"
             : "Create your account"}
