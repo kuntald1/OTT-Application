@@ -328,8 +328,12 @@ export function rejectWithdrawal(withdrawalId, adminNote) {
   });
 }
 
-export function fetchAdminContentPerformance() {
-  return request(`/admin/revenue/content-performance`, { auth: true });
+export function fetchAdminContentPerformance(creatorId) {
+  return request(`/admin/revenue/content-performance${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
+}
+
+export function fetchAdminContentPerformanceBreakdown(videoId) {
+  return request(`/admin/revenue/content-performance/${videoId}/breakdown`, { auth: true });
 }
 
 // Category management — powers the Admin > Categories page. Every
@@ -410,12 +414,12 @@ export function deleteAdminCategory(categoryId) {
 }
 
 // Revenue Summary (platform-wide KPIs) + Revenue Share Report (per creator).
-export function fetchAdminRevenueSummary() {
-  return request(`/admin/revenue/summary`, { auth: true });
+export function fetchAdminRevenueSummary(creatorId) {
+  return request(`/admin/revenue/summary${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
 }
 
-export function fetchAdminRevenueByCreator() {
-  return request(`/admin/revenue/by-creator`, { auth: true });
+export function fetchAdminRevenueByCreator(creatorId) {
+  return request(`/admin/revenue/by-creator${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
 }
 
 // Platform default rate + commission — superadmin-only editing.

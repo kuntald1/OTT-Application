@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
@@ -9,13 +9,15 @@ from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
 from app.models import (
     AdminUser, User, Video, VideoWatchRecord, WithdrawalRequest, WithdrawalStatus, CreatorEarnings,
-    RevenueRateConfig, RevenueLedgerEntry,
+    RevenueRateConfig, RevenueLedgerEntry, VideoRevenueTier,
 )
 from app.notifications import send_withdrawal_paid_email, send_withdrawal_paid_whatsapp, send_withdrawal_rejected_email
+from app.routers.watch import _compute_tier_breakdown_paisa
 from app.schemas import (
     AdminWithdrawalOut, AdminWithdrawalActionRequest, AdminContentPerformanceOut,
     AdminRevenueConfigUpdate, RevenueByDayOut, RevenueByCountryOut, RevenueRateOut,
     AdminRevenueSummaryOut, AdminRevenueByCreatorOut,
+    ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut,
 )
 from app.models import VideoStatus
 
@@ -281,6 +283,7 @@ def get_revenue_by_country(
 
 @router.get("/summary", response_model=AdminRevenueSummaryOut)
 def get_revenue_summary(
+    creator_id: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -291,15 +294,25 @@ def get_revenue_summary(
     records could in principle have used a different rate at the time).
     All-time — Revenue Sharing Management deliberately isn't scoped to
     a date range (unlike Dashboard/Reports & Analytics, which are).
+
+    creator_id, when given, scopes every number on this card row to
+    just that one creator's videos — the whole Content Performance tab
+    (this, /by-creator, and /content-performance) filters together off
+    the same selection.
     """
-    totals = db.query(
+    totals_query = db.query(
         func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
         func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("creator_paisa"),
         func.coalesce(func.sum(VideoWatchRecord.max_session_seconds), 0).label("total_seconds"),
         func.count(VideoWatchRecord.id).label("viewer_records"),
-    ).first()
+    )
+    videos_query = db.query(func.count(Video.id)).filter(Video.status == VideoStatus.published)
+    if creator_id:
+        totals_query = totals_query.join(Video, Video.id == VideoWatchRecord.video_id).filter(Video.uploaded_by_user_id == creator_id)
+        videos_query = videos_query.filter(Video.uploaded_by_user_id == creator_id)
+    totals = totals_query.first()
 
-    total_videos = db.query(func.count(Video.id)).filter(Video.status == VideoStatus.published).scalar() or 0
+    total_videos = videos_query.scalar() or 0
 
     gross_paisa = totals.gross_paisa or 0
     creator_paisa = totals.creator_paisa or 0
@@ -324,14 +337,16 @@ def get_revenue_summary(
 
 @router.get("/by-creator", response_model=list[AdminRevenueByCreatorOut])
 def get_revenue_by_creator(
+    creator_id: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """The "Revenue Share Report" — one row per creator showing the
     full Gross → Platform/Creator Share → Paid → Pending chain.
-    All-time. Most gross revenue first.
+    All-time. Most gross revenue first. creator_id, when given,
+    narrows this to that one creator's single row.
     """
-    gross_rows = (
+    gross_query = (
         db.query(
             Video.uploaded_by_user_id.label("creator_user_id"),
             func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
@@ -339,9 +354,10 @@ def get_revenue_by_creator(
         )
         .join(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
         .filter(Video.uploaded_by_user_id.isnot(None))
-        .group_by(Video.uploaded_by_user_id)
-        .all()
     )
+    if creator_id:
+        gross_query = gross_query.filter(Video.uploaded_by_user_id == creator_id)
+    gross_rows = gross_query.group_by(Video.uploaded_by_user_id).all()
     paid_rows = (
         db.query(
             WithdrawalRequest.creator_user_id,
@@ -380,15 +396,17 @@ def get_revenue_by_creator(
 
 @router.get("/content-performance", response_model=list[AdminContentPerformanceOut])
 def get_all_content_performance(
+    creator_id: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Platform-wide "Content performance analytics" — same shape as a
     creator's own /videos/content-performance/mine, but across every
     uploaded video, with the creator's name attached so an admin can
-    see who's generating what. All-time.
+    see who's generating what. All-time. creator_id, when given,
+    narrows this to just that one creator's videos.
     """
-    rows = (
+    query = (
         db.query(
             Video.id,
             Video.title,
@@ -400,6 +418,11 @@ def get_all_content_performance(
         )
         .outerjoin(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
         .outerjoin(User, User.id == Video.uploaded_by_user_id)
+    )
+    if creator_id:
+        query = query.filter(Video.uploaded_by_user_id == creator_id)
+    rows = (
+        query
         .group_by(Video.id, Video.title, User.name)
         .order_by(func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).desc())
         .all()
@@ -416,3 +439,65 @@ def get_all_content_performance(
         )
         for r in rows
     ]
+
+
+@router.get("/content-performance/{video_id}/breakdown", response_model=list[ContentPerformanceViewerBreakdownOut])
+def get_admin_content_performance_breakdown(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin equivalent of a creator's own
+    /videos/{video_id}/content-performance-breakdown — same per-viewer,
+    then per-tier drill-down (see that endpoint's docstring for the
+    exact-reconciliation logic), just without the "must own this
+    video" restriction, since an admin can inspect any video's.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found.")
+
+    tiers = db.query(VideoRevenueTier).filter(VideoRevenueTier.video_id == video.id).all()
+    rate_config = db.query(RevenueRateConfig).first()
+    fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
+
+    records = (
+        db.query(VideoWatchRecord, User)
+        .join(User, User.id == VideoWatchRecord.user_id)
+        .filter(VideoWatchRecord.video_id == video.id)
+        .order_by(VideoWatchRecord.max_session_seconds.desc())
+        .all()
+    )
+
+    result = []
+    for record, viewer in records:
+        tier_rows = _compute_tier_breakdown_paisa(record.max_session_seconds, tiers, fallback_rate)
+        total_gross_paisa = sum(t["gross_paisa"] for t in tier_rows)
+
+        tier_out = []
+        allocated_paisa = 0
+        for idx, t in enumerate(tier_rows):
+            is_last = idx == len(tier_rows) - 1
+            if is_last:
+                tier_creator_paisa = record.creator_credited_paisa - allocated_paisa
+            elif total_gross_paisa > 0:
+                tier_creator_paisa = int(
+                    (Decimal(record.creator_credited_paisa) * t["gross_paisa"] / total_gross_paisa)
+                    .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                )
+            else:
+                tier_creator_paisa = 0
+            allocated_paisa += tier_creator_paisa
+            tier_out.append(ContentPerformanceTierBreakdownOut(
+                range_label=t["range_label"],
+                minutes_in_tier=t["minutes_in_tier"],
+                creator_earned_rupees=(Decimal(tier_creator_paisa) / 100).quantize(Decimal("0.01")),
+            ))
+
+        result.append(ContentPerformanceViewerBreakdownOut(
+            viewer_label=viewer.name,
+            watch_minutes=(Decimal(record.max_session_seconds) / 60).quantize(Decimal("0.01")),
+            creator_earned_rupees=(Decimal(record.creator_credited_paisa) / 100).quantize(Decimal("0.01")),
+            tier_breakdown=tier_out,
+        ))
+    return result

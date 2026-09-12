@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, IndianRupee, Users, Film as FilmIcon, Award, Sparkles } from "lucide-react";
+import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, IndianRupee, Users, Film as FilmIcon, Award, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
 import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
-  fetchAdminContentPerformance, fetchAdminRevenueConfig, updateAdminRevenueConfig,
+  fetchAdminContentPerformance, fetchAdminContentPerformanceBreakdown, fetchAdminRevenueConfig, updateAdminRevenueConfig,
   fetchAIConfig, updateAIConfig,
   fetchRevenueByDay, fetchRevenueByCountry, fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
   fetchAnalyticsInsights,
@@ -48,6 +48,28 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [summary, setSummary] = useState(null);
   const [byCreator, setByCreator] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [creatorFilter, setCreatorFilter] = useState("");
+  const [creatorOptions, setCreatorOptions] = useState([]);
+
+  const [expandedVideoId, setExpandedVideoId] = useState(null);
+  const [breakdownByVideoId, setBreakdownByVideoId] = useState({});
+  const [breakdownLoadingId, setBreakdownLoadingId] = useState(null);
+  const [expandedViewerKey, setExpandedViewerKey] = useState(null);
+
+  const toggleVideoBreakdown = (videoId) => {
+    if (expandedVideoId === videoId) {
+      setExpandedVideoId(null);
+      return;
+    }
+    setExpandedVideoId(videoId);
+    if (!breakdownByVideoId[videoId]) {
+      setBreakdownLoadingId(videoId);
+      fetchAdminContentPerformanceBreakdown(videoId)
+        .then((rows) => setBreakdownByVideoId((m) => ({ ...m, [videoId]: rows })))
+        .catch(() => setBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })))
+        .finally(() => setBreakdownLoadingId(null));
+    }
+  };
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
@@ -92,14 +114,22 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
   useEffect(() => {
     if (tab !== "performance") return;
+    // Unfiltered, once per tab-visit — powers the filter dropdown's
+    // options (name/email per creator), independent of whatever the
+    // selected filter narrows the tables below to.
+    fetchAdminRevenueByCreator().then(setCreatorOptions).catch(() => setCreatorOptions([]));
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "performance") return;
     setPerformanceLoading(true);
-    fetchAdminContentPerformance()
+    fetchAdminContentPerformance(creatorFilter || undefined)
       .then(setPerformance)
       .catch(() => setPerformance([]))
       .finally(() => setPerformanceLoading(false));
 
     setSummaryLoading(true);
-    Promise.all([fetchAdminRevenueSummary(), fetchAdminRevenueByCreator()])
+    Promise.all([fetchAdminRevenueSummary(creatorFilter || undefined), fetchAdminRevenueByCreator(creatorFilter || undefined)])
       .then(([s, c]) => {
         setSummary(s);
         setByCreator(c);
@@ -109,7 +139,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
         setByCreator([]);
       })
       .finally(() => setSummaryLoading(false));
-  }, [tab]);
+  }, [tab, creatorFilter]);
 
   const loadInsights = (force = false) => {
     setInsightsLoading(true);
@@ -403,6 +433,21 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
       {tab === "performance" && (
         <div>
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Creator</label>
+            <select
+              value={creatorFilter}
+              onChange={(e) => setCreatorFilter(e.target.value)}
+              className="rounded-lg px-3 py-1.5 text-sm"
+              style={{ background: "rgba(245,235,221,0.05)", border: "1px solid rgba(245,235,221,0.15)", color: COLORS.cream }}
+            >
+              <option value="">All creators</option>
+              {creatorOptions.map((c) => (
+                <option key={c.creator_user_id} value={c.creator_user_id}>{c.creator_name} — {c.creator_email}</option>
+              ))}
+            </select>
+          </div>
+
           {summaryLoading ? (
             <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading summary…</p>
           ) : summary && (
@@ -487,16 +532,105 @@ export default function AdminRevenuePage({ currentAdmin }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {performance.map((row) => (
-                    <tr key={row.video_id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                      <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.title}</td>
-                      <td className="px-4 py-2.5" style={{ color: "rgba(245,235,221,0.6)" }}>{row.creator_name}</td>
-                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.unique_viewers}</td>
-                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.total_watch_minutes}</td>
-                      <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>₹{row.gross_revenue_rupees}</td>
-                      <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
-                    </tr>
-                  ))}
+                  {performance.map((row) => {
+                    const isExpanded = expandedVideoId === row.video_id;
+                    const viewers = breakdownByVideoId[row.video_id];
+                    const isLoadingThis = breakdownLoadingId === row.video_id;
+                    return (
+                      <React.Fragment key={row.video_id}>
+                        <tr
+                          style={{ borderTop: "1px solid rgba(255,255,255,0.06)", cursor: "pointer" }}
+                          onClick={() => toggleVideoBreakdown(row.video_id)}
+                        >
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>
+                            <span className="flex items-center gap-1.5">
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                              {row.title}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5" style={{ color: "rgba(245,235,221,0.6)" }}>{row.creator_name}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.unique_viewers}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.total_watch_minutes}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>₹{row.gross_revenue_rupees}</td>
+                          <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                        </tr>
+
+                        {isExpanded && (
+                          <tr style={{ background: "rgba(0,0,0,0.15)" }}>
+                            <td colSpan={6} className="px-4 py-3 sm:px-8">
+                              {isLoadingThis ? (
+                                <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading breakdown…</p>
+                              ) : !viewers || viewers.length === 0 ? (
+                                <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No viewer data yet.</p>
+                              ) : (
+                                <div className="overflow-hidden rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr>
+                                        <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>Viewer</th>
+                                        <th className="px-3 py-2 text-right font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>Watch Minutes</th>
+                                        <th className="px-3 py-2 text-right font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>Creator Earned</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {viewers.map((v) => {
+                                        const viewerKey = `${row.video_id}:${v.viewer_label}`;
+                                        const viewerExpanded = expandedViewerKey === viewerKey;
+                                        return (
+                                          <React.Fragment key={viewerKey}>
+                                            <tr
+                                              style={{ borderTop: "1px solid rgba(255,255,255,0.06)", cursor: "pointer" }}
+                                              onClick={() => setExpandedViewerKey(viewerExpanded ? null : viewerKey)}
+                                            >
+                                              <td className="px-3 py-2" style={{ color: COLORS.cream }}>
+                                                <span className="flex items-center gap-1.5">
+                                                  {viewerExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                                  {v.viewer_label}
+                                                </span>
+                                              </td>
+                                              <td className="px-3 py-2 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{v.watch_minutes}</td>
+                                              <td className="px-3 py-2 text-right font-medium" style={{ color: COLORS.gold }}>₹{v.creator_earned_rupees}</td>
+                                            </tr>
+                                            {viewerExpanded && (
+                                              <tr style={{ background: "rgba(0,0,0,0.2)" }}>
+                                                <td colSpan={3} className="px-3 py-2 sm:px-6">
+                                                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.4)" }}>
+                                                    Revenue-Share Tiers — {v.viewer_label}
+                                                  </p>
+                                                  <table className="w-full text-[11px]">
+                                                    <thead>
+                                                      <tr>
+                                                        <th className="py-1 text-left font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Tier (minutes)</th>
+                                                        <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Minutes in tier</th>
+                                                        <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Creator Earned</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {v.tier_breakdown.map((t, ti) => (
+                                                        <tr key={ti} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                                          <td className="py-1" style={{ color: "rgba(245,235,221,0.7)" }}>{t.range_label}</td>
+                                                          <td className="py-1 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{t.minutes_in_tier}</td>
+                                                          <td className="py-1 text-right" style={{ color: COLORS.gold }}>₹{t.creator_earned_rupees}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
