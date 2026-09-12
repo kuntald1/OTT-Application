@@ -61,7 +61,8 @@ export default function PageHero({ pageKey, theme }) {
       className={`relative w-full overflow-hidden ${HERO_HEIGHT_CLASS}`}
       style={{
         fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, sans-serif",
-        border: "1px solid rgba(212,175,55,0.3)",
+        border: "1px solid rgba(212,175,55,0.45)",
+        boxShadow: "0 0 0 1px rgba(212,175,55,0.12), inset 0 0 60px rgba(212,175,55,0.05)",
       }}
     >
       {isVideoSequence && (

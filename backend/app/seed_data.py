@@ -29,7 +29,7 @@ def seed_menus(db):
         {"label": "My List", "view": "mylist", "requires_auth": True, "display_order": 2},
         {"label": "Community", "view": "community", "display_order": 3},
         {"label": "Category", "view": None, "display_order": 4},
-        {"label": "Ticketing", "view": "theater", "display_order": 5},
+        {"label": "Shows", "view": "theater", "display_order": 5},
     ]
 
     created = {}

@@ -115,7 +115,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
   return (
     <>
       <nav
-        className="fixed left-0 right-0 top-0 z-50 flex items-center justify-between gap-3 px-5 py-4 sm:px-8 lg:px-12"
+        className="fixed left-0 right-0 top-0 z-50 flex h-[64px] items-center justify-between gap-3 px-5 py-4 sm:h-[76px] sm:px-8 lg:px-12"
         style={{
           background: NAV_GRADIENT,
           backdropFilter: "blur(14px)",
