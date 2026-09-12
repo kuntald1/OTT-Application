@@ -4,10 +4,21 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
 from app.models import AdminUser, AdminRole
-from app.schemas import AdminLoginRequest, AdminToken, AdminOut, AdminCreateRequest
+from app.schemas import AdminLoginRequest, AdminToken, AdminOut, AdminCreateRequest, AdminMenuPermissionsUpdate
 from app.security import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/admin/auth", tags=["admin-auth"])
+
+# Mirrors the non-superadmin-only entries in AdminLayout.jsx's sidebar
+# (superadmin-exclusive items like "admins", "ads", "categories",
+# "subscription-plans" are never assignable here — those stay
+# superadmin-only regardless of any admin's menu permissions).
+ASSIGNABLE_MENU_KEYS = {
+    "dashboard", "reports", "videos", "add-video", "cast-crew", "special-categories",
+    "blog", "community", "donation-registrations", "subscriptions", "help-center",
+    "page-heroes", "theater-hero-slides", "archive-hero-slides", "content-policy",
+    "ad-banners", "discovery-settings", "enquiries", "revenue", "live", "users",
+}
 
 
 @router.post("/login", response_model=AdminToken)
@@ -62,6 +73,35 @@ def create_admin(
         role=AdminRole(payload.role),
     )
     db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return admin
+
+
+@router.put("/admins/{admin_id}/menu-permissions", response_model=AdminOut)
+def update_admin_menu_permissions(
+    admin_id: str,
+    payload: AdminMenuPermissionsUpdate,
+    current_superadmin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Admin Accounts > Manage Permissions — restricts which sidebar
+    menus an admin (role=admin) account can see. Superadmin accounts
+    can't be restricted this way (they always see everything) — this
+    only ever applies to role=admin.
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin account not found.")
+    if admin.role == AdminRole.superadmin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Superadmin accounts always have full access and can't be restricted.")
+
+    if payload.allowed_menu_keys is not None:
+        invalid = set(payload.allowed_menu_keys) - ASSIGNABLE_MENU_KEYS
+        if invalid:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown menu key(s): {sorted(invalid)}")
+
+    admin.allowed_menu_keys = payload.allowed_menu_keys
     db.commit()
     db.refresh(admin)
     return admin

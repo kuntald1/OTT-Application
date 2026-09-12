@@ -1067,8 +1067,16 @@ class AdminOut(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    allowed_menu_keys: Optional[List[str]] = None
 
     model_config = {"from_attributes": True}
+
+
+class AdminMenuPermissionsUpdate(BaseModel):
+    # None clears the restriction (back to "unrestricted" — sees
+    # everything an ordinary admin can); an empty list locks the
+    # account out of every menu.
+    allowed_menu_keys: Optional[List[str]] = None
 
 
 class AdminToken(BaseModel):

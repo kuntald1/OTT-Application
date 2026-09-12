@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import Column, String, DateTime, Date, Enum, Boolean, ForeignKey, Integer, Numeric, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -934,6 +934,17 @@ class AdminUser(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(Enum(AdminRole), nullable=False, default=AdminRole.admin)
     is_active = Column(Boolean, nullable=False, default=True)
+    # Per-admin menu visibility, for role=admin accounts only — a
+    # superadmin ignores this entirely and always sees every menu.
+    # NULL (the default, including every admin created before this
+    # feature existed) means "unrestricted" — sees every menu an
+    # ordinary admin can, same as today — so rolling this out never
+    # silently locks an existing admin out of anything; a superadmin
+    # opts an admin INTO restriction by setting this to a specific
+    # list via Admin Accounts > Manage Permissions. An empty list
+    # (as opposed to NULL) means "no menus" — a deliberate, fully
+    # locked-down account.
+    allowed_menu_keys = Column(ARRAY(String), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

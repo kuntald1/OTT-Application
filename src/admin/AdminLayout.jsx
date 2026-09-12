@@ -41,33 +41,50 @@ const COLORS = {
 // own set of features without crowding everything else.
 export default function AdminLayout({ currentAdmin, onLogout }) {
   const isSuperadmin = currentAdmin.role === "superadmin";
-  const [activePage, setActivePage] = useState("dashboard");
+
+  // Superadmin always sees everything. An ordinary admin whose
+  // allowed_menu_keys is null/undefined is "unrestricted" (same as
+  // before this feature existed — nobody gets silently locked out by
+  // this rolling out); once a superadmin sets a specific list via
+  // Admin Accounts > Manage Permissions, only those keys show.
+  const canSeeMenu = (menuId) => {
+    if (isSuperadmin) return true;
+    if (currentAdmin.allowed_menu_keys == null) return true;
+    return currentAdmin.allowed_menu_keys.includes(menuId);
+  };
+
+  // Lands on "dashboard" only if this admin can actually see it —
+  // otherwise their first allowed menu, so a restricted admin never
+  // opens onto a blank/hidden page.
+  const [activePage, setActivePage] = useState(() =>
+    canSeeMenu("dashboard") ? "dashboard" : (currentAdmin.allowed_menu_keys?.[0] || "dashboard")
+  );
 
   const NAV_ITEMS = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, visible: true },
-    { id: "reports", label: "Reports & Analytics", icon: BarChart3, visible: true },
-    { id: "videos", label: "Video Review", icon: Clapperboard, visible: true },
-    { id: "add-video", label: "Add Video", icon: PlusCircle, visible: true },
-    { id: "cast-crew", label: "Cast/Crew Master", icon: Contact, visible: true },
-    { id: "special-categories", label: "Special Categories", icon: Sparkles, visible: true },
-    { id: "blog", label: "Blog", icon: Newspaper, visible: true },
-    { id: "community", label: "Community", icon: MessagesSquare, visible: true },
-    { id: "donation-registrations", label: "Donation Registrations", icon: HandCoins, visible: true },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, visible: canSeeMenu("dashboard") },
+    { id: "reports", label: "Reports & Analytics", icon: BarChart3, visible: canSeeMenu("reports") },
+    { id: "videos", label: "Video Review", icon: Clapperboard, visible: canSeeMenu("videos") },
+    { id: "add-video", label: "Add Video", icon: PlusCircle, visible: canSeeMenu("add-video") },
+    { id: "cast-crew", label: "Cast/Crew Master", icon: Contact, visible: canSeeMenu("cast-crew") },
+    { id: "special-categories", label: "Special Categories", icon: Sparkles, visible: canSeeMenu("special-categories") },
+    { id: "blog", label: "Blog", icon: Newspaper, visible: canSeeMenu("blog") },
+    { id: "community", label: "Community", icon: MessagesSquare, visible: canSeeMenu("community") },
+    { id: "donation-registrations", label: "Donation Registrations", icon: HandCoins, visible: canSeeMenu("donation-registrations") },
     { id: "subscription-plans", label: "Subscription Plans", icon: CreditCard, visible: isSuperadmin },
-    { id: "subscriptions", label: "Subscriptions", icon: Receipt, visible: true },
-    { id: "help-center", label: "Help Center", icon: LifeBuoy, visible: true },
-    { id: "page-heroes", label: "Page Heroes", icon: GalleryHorizontal, visible: true },
-    { id: "theater-hero-slides", label: "Ticketing Hero Slides", icon: Contact2, visible: true },
-    { id: "archive-hero-slides", label: "Archive Hero Slides", icon: Landmark, visible: true },
-    { id: "content-policy", label: "Content & Policy", icon: FileText, visible: true },
-    { id: "ad-banners", label: "Ad Banners", icon: Megaphone, visible: true },
-    { id: "discovery-settings", label: "Discovery Rows", icon: Compass, visible: true },
-    { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: true },
-    { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: true },
+    { id: "subscriptions", label: "Subscriptions", icon: Receipt, visible: canSeeMenu("subscriptions") },
+    { id: "help-center", label: "Help Center", icon: LifeBuoy, visible: canSeeMenu("help-center") },
+    { id: "page-heroes", label: "Page Heroes", icon: GalleryHorizontal, visible: canSeeMenu("page-heroes") },
+    { id: "theater-hero-slides", label: "Ticketing Hero Slides", icon: Contact2, visible: canSeeMenu("theater-hero-slides") },
+    { id: "archive-hero-slides", label: "Archive Hero Slides", icon: Landmark, visible: canSeeMenu("archive-hero-slides") },
+    { id: "content-policy", label: "Content & Policy", icon: FileText, visible: canSeeMenu("content-policy") },
+    { id: "ad-banners", label: "Ad Banners", icon: Megaphone, visible: canSeeMenu("ad-banners") },
+    { id: "discovery-settings", label: "Discovery Rows", icon: Compass, visible: canSeeMenu("discovery-settings") },
+    { id: "enquiries", label: "Event Enquiries", icon: CalendarCheck, visible: canSeeMenu("enquiries") },
+    { id: "revenue", label: "Revenue Sharing", icon: Wallet, visible: canSeeMenu("revenue") },
     { id: "categories", label: "Categories", icon: Tag, visible: isSuperadmin },
     { id: "ads", label: "Ad Library", icon: Megaphone, visible: isSuperadmin },
-    { id: "live", label: "Live Streaming", icon: Radio, visible: true },
-    { id: "users", label: "User Management", icon: UserCog, visible: true },
+    { id: "live", label: "Live Streaming", icon: Radio, visible: canSeeMenu("live") },
+    { id: "users", label: "User Management", icon: UserCog, visible: canSeeMenu("users") },
     { id: "admins", label: "Admin Accounts", icon: Users, visible: isSuperadmin },
   ];
 

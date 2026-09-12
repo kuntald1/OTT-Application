@@ -67,6 +67,14 @@ export function deactivateAdminAccount(adminId) {
   });
 }
 
+export function updateAdminMenuPermissions(adminId, allowedMenuKeys) {
+  return request(`/admin/auth/admins/${adminId}/menu-permissions`, {
+    method: "PUT",
+    auth: true,
+    body: { allowed_menu_keys: allowedMenuKeys },
+  });
+}
+
 export function fetchAdminVideos(statusFilter = "pending") {
   return request(`/admin/videos?status_filter=${statusFilter}`, { auth: true });
 }
