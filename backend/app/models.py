@@ -960,6 +960,7 @@ class VideoSection(str, enum.Enum):
 
 class VideoStatus(str, enum.Enum):
     pending = "pending"
+    scheduled = "scheduled"  # approved, waiting for scheduled_publish_at to arrive
     published = "published"
     disabled = "disabled"  # approved once, hidden from public without deleting anything
     rejected = "rejected"
@@ -1062,6 +1063,13 @@ class Video(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     published_at = Column(DateTime(timezone=True), nullable=True)
+    # An absolute UTC instant (not a "local time" — the admin's local
+    # date/time picker value is converted to UTC by the browser before
+    # it's ever sent here) — when status is "scheduled", the
+    # background scheduler (see app/scheduler.py) auto-publishes this
+    # video once datetime.now(timezone.utc) reaches this value,
+    # regardless of what timezone the server itself happens to run in.
+    scheduled_publish_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class VideoPricing(Base):

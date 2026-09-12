@@ -441,9 +441,9 @@ export default function AdminRevenuePage({ currentAdmin }) {
               className="rounded-lg px-3 py-1.5 text-sm"
               style={{ background: "rgba(245,235,221,0.05)", border: "1px solid rgba(245,235,221,0.15)", color: COLORS.cream }}
             >
-              <option value="">All creators</option>
+              <option value="" style={{ background: COLORS.panel, color: COLORS.cream }}>All creators</option>
               {creatorOptions.map((c) => (
-                <option key={c.creator_user_id} value={c.creator_user_id}>{c.creator_name} — {c.creator_email}</option>
+                <option key={c.creator_user_id} value={c.creator_user_id} style={{ background: COLORS.panel, color: COLORS.cream }}>{c.creator_name} — {c.creator_email}</option>
               ))}
             </select>
           </div>

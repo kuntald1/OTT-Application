@@ -1274,6 +1274,7 @@ class VideoOut(BaseModel):
     monetization_type: str
     status: str
     admin_note: Optional[str] = None
+    scheduled_publish_at: Optional[datetime] = None
     pricing: Optional[VideoPricingOut] = None
     revenue_tiers: List[VideoRevenueTierOut]
     cast: List[VideoCastOut]
@@ -1376,6 +1377,14 @@ class VerifyVideoPaymentRequest(BaseModel):
 
 class AdminVideoRejectRequest(BaseModel):
     admin_note: str = Field(min_length=1, max_length=500)
+
+
+class AdminVideoScheduleRequest(BaseModel):
+    # An absolute UTC instant — the frontend's datetime-local picker
+    # value is converted to a UTC ISO string (via JS Date, which reads
+    # the browser's own local timezone) before being sent here, so
+    # this is never ambiguous regardless of where the server runs.
+    scheduled_publish_at: datetime
 
 
 class CreatorAccountOut(BaseModel):

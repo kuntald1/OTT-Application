@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo, uploadAdminPersonPhoto } from "./adminApi";
+import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo, uploadAdminPersonPhoto, scheduleVideo, cancelVideoSchedule } from "./adminApi";
 import AdminVideoEditForm from "./AdminVideoEditForm";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
@@ -9,10 +9,11 @@ const COLORS = {
   gold: "#D4AF37",
 };
 
-const VIDEO_STATUS_TABS = ["pending", "published", "disabled", "rejected", "all"];
+const VIDEO_STATUS_TABS = ["pending", "scheduled", "published", "disabled", "rejected", "all"];
 
 const VIDEO_STATUS_STYLES = {
   pending: { bg: "rgba(212,175,55,0.15)", color: COLORS.gold },
+  scheduled: { bg: "rgba(91,155,213,0.15)", color: "#5B9BD5" },
   published: { bg: "rgba(111,207,151,0.15)", color: "#6FCF97" },
   disabled: { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" },
   rejected: { bg: "rgba(248,113,113,0.15)", color: "#f87171" },
@@ -28,6 +29,9 @@ export default function AdminVideoReviewPage() {
   const [expandedPreviewId, setExpandedPreviewId] = useState(null);
   const [editingVideoId, setEditingVideoId] = useState(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
+  const [schedulingVideoId, setSchedulingVideoId] = useState(null);
+  const [scheduleDateTime, setScheduleDateTime] = useState("");
+  const [schedulingBusy, setSchedulingBusy] = useState(false);
 
   const loadVideos = (statusFilter) => {
     setVideosLoading(true);
@@ -62,6 +66,40 @@ export default function AdminVideoReviewPage() {
       loadVideos(videoStatusFilter);
     } catch (err) {
       setVideoActionError(err.message || "Couldn't reject this video.");
+    }
+  };
+
+  const handleSchedule = async (videoId) => {
+    if (!scheduleDateTime) return;
+    // The <input type="datetime-local"> value has no timezone info of
+    // its own — `new Date(...)` on it is interpreted in the ADMIN'S
+    // OWN BROWSER's local timezone (exactly what we want: the admin
+    // picks "13 Sept, 11pm" meaning their own local 11pm). scheduleVideo()
+    // then converts that to an absolute UTC instant via .toISOString()
+    // before sending it, so the server's own timezone never matters.
+    const localDate = new Date(scheduleDateTime);
+    if (Number.isNaN(localDate.getTime())) return;
+    setSchedulingBusy(true);
+    setVideoActionError("");
+    try {
+      await scheduleVideo(videoId, localDate);
+      setSchedulingVideoId(null);
+      setScheduleDateTime("");
+      loadVideos(videoStatusFilter);
+    } catch (err) {
+      setVideoActionError(err.message || "Couldn't schedule this video.");
+    } finally {
+      setSchedulingBusy(false);
+    }
+  };
+
+  const handleCancelSchedule = async (videoId) => {
+    setVideoActionError("");
+    try {
+      await cancelVideoSchedule(videoId);
+      loadVideos(videoStatusFilter);
+    } catch (err) {
+      setVideoActionError(err.message || "Couldn't cancel the schedule.");
     }
   };
 
@@ -279,6 +317,41 @@ export default function AdminVideoReviewPage() {
                       >
                         Approve
                       </button>
+                      {schedulingVideoId === v.id ? (
+                        <>
+                          <input
+                            type="datetime-local"
+                            autoFocus
+                            value={scheduleDateTime}
+                            onChange={(e) => setScheduleDateTime(e.target.value)}
+                            className="rounded-full border px-3 py-1.5 text-xs outline-none"
+                            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream, colorScheme: "dark" }}
+                          />
+                          <button
+                            onClick={() => handleSchedule(v.id)}
+                            disabled={!scheduleDateTime || schedulingBusy}
+                            className="rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-40"
+                            style={{ background: "#5B9BD5", color: "#0a0104" }}
+                          >
+                            {schedulingBusy ? "Scheduling…" : "Confirm"}
+                          </button>
+                          <button
+                            onClick={() => { setSchedulingVideoId(null); setScheduleDateTime(""); }}
+                            className="text-xs hover:opacity-80"
+                            style={{ color: "rgba(245,235,221,0.5)" }}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setSchedulingVideoId(v.id)}
+                          className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5"
+                          style={{ borderColor: "#5B9BD5", color: "#5B9BD5" }}
+                        >
+                          Schedule
+                        </button>
+                      )}
                       {rejectingVideoId === v.id ? (
                         <>
                           <input
@@ -316,6 +389,28 @@ export default function AdminVideoReviewPage() {
                           Reject
                         </button>
                       )}
+                    </>
+                  )}
+
+                  {v.status === "scheduled" && (
+                    <>
+                      <span className="rounded-full px-3 py-1.5 text-xs font-medium" style={{ background: "rgba(91,155,213,0.12)", color: "#5B9BD5" }}>
+                        Scheduled for {v.scheduled_publish_at ? new Date(v.scheduled_publish_at).toLocaleString() : "—"}
+                      </span>
+                      <button
+                        onClick={() => handleApprove(v.id)}
+                        className="rounded-full px-4 py-1.5 text-xs font-semibold text-black hover:opacity-90"
+                        style={{ background: "#6FCF97" }}
+                      >
+                        Publish Now
+                      </button>
+                      <button
+                        onClick={() => handleCancelSchedule(v.id)}
+                        className="rounded-full border px-4 py-1.5 text-xs font-semibold hover:bg-white/5"
+                        style={{ borderColor: "#f87171", color: "#f87171" }}
+                      >
+                        Cancel Schedule
+                      </button>
                     </>
                   )}
 

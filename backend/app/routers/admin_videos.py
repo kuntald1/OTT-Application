@@ -7,7 +7,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person, VideoSubtitle
-from app.schemas import VideoOut, AdminVideoRejectRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
+from app.schemas import VideoOut, AdminVideoRejectRequest, AdminVideoScheduleRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
 from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file, _srt_to_vtt, _sync_caption_to_bunny
 from app.routers.recommendations import compute_and_store_embedding
 from app.routers.people import _save_person_photo
@@ -51,7 +51,7 @@ def list_videos_for_review(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    if status_filter not in ("pending", "published", "disabled", "rejected", "all"):
+    if status_filter not in ("pending", "scheduled", "published", "disabled", "rejected", "all"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status filter")
 
     query = db.query(Video)
@@ -94,11 +94,66 @@ def approve_video(
 
     video.status = VideoStatus.published
     video.published_at = datetime.now(timezone.utc)
+    video.scheduled_publish_at = None
     video.admin_note = None
     db.commit()
     db.refresh(video)
     compute_and_store_embedding(video, db)  # best-effort — see its docstring
     _notify_video_uploader(video, db, "approved")
+    return _to_out(video, db, force_access=True)
+
+
+@router.post("/{video_id}/schedule", response_model=VideoOut)
+def schedule_video(
+    video_id: str,
+    payload: AdminVideoScheduleRequest,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Approve a pending video for a FUTURE publish time instead of
+    right now — the video sits as "scheduled" until
+    app/scheduler.py's background job notices scheduled_publish_at has
+    arrived and flips it to published automatically. payload's
+    timestamp must already be an absolute UTC instant (see
+    AdminVideoScheduleRequest's docstring) — this endpoint doesn't do
+    any further timezone conversion, just stores what it's given.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    scheduled_at = payload.scheduled_publish_at
+    if scheduled_at.tzinfo is None:
+        scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+    if scheduled_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Scheduled time must be in the future.")
+
+    video.status = VideoStatus.scheduled
+    video.scheduled_publish_at = scheduled_at
+    video.admin_note = None
+    db.commit()
+    db.refresh(video)
+    return _to_out(video, db, force_access=True)
+
+
+@router.post("/{video_id}/cancel-schedule", response_model=VideoOut)
+def cancel_scheduled_video(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Reverts a "scheduled" video back to "pending" — the admin
+    changed their mind about the timing (or wants to publish/reject
+    it via the normal review flow instead).
+    """
+    video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.scheduled).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scheduled video not found")
+
+    video.status = VideoStatus.pending
+    video.scheduled_publish_at = None
+    db.commit()
+    db.refresh(video)
     return _to_out(video, db, force_access=True)
 
 

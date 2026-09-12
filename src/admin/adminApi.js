@@ -86,6 +86,23 @@ export function rejectVideo(videoId, adminNote) {
   });
 }
 
+export function scheduleVideo(videoId, scheduledPublishAtLocalDate) {
+  // scheduledPublishAtLocalDate is a JS Date built from the admin's
+  // local date/time picker — .toISOString() converts it to an
+  // absolute UTC instant before it ever leaves the browser, so the
+  // server-side timezone never matters (see AdminVideoScheduleRequest's
+  // docstring on the backend).
+  return request(`/admin/videos/${videoId}/schedule`, {
+    method: "POST",
+    auth: true,
+    body: { scheduled_publish_at: scheduledPublishAtLocalDate.toISOString() },
+  });
+}
+
+export function cancelVideoSchedule(videoId) {
+  return request(`/admin/videos/${videoId}/cancel-schedule`, { method: "POST", auth: true });
+}
+
 export function disableVideo(videoId) {
   return request(`/admin/videos/${videoId}/disable`, { method: "POST", auth: true });
 }

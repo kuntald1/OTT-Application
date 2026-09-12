@@ -317,6 +317,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None, force_access:
         monetization_type=video.monetization_type.value,
         status=video.status.value,
         admin_note=video.admin_note,
+        scheduled_publish_at=video.scheduled_publish_at,
         pricing=(
             VideoPricingOut(price_inr=pricing_row.price_inr, price_usd=pricing_row.price_usd)
             if pricing_row else None
