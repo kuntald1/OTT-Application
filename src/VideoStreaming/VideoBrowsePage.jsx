@@ -1113,7 +1113,12 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
         // should NOT include the resume offset. Progress-saving is
         // different: it needs the video's ABSOLUTE position, so the
         // resume offset (where this session started from) is added.
-        sendWatchHeartbeat(card.videoId, elapsedSeconds, sessionToken).catch(() => {});
+        sendWatchHeartbeat(card.videoId, elapsedSeconds, sessionToken).catch((err) => {
+          // Previously swallowed silently — a failed heartbeat means
+          // lost creator revenue with zero trace, so at minimum this
+          // needs to show up in the console for debugging.
+          console.error("Watch heartbeat failed:", err?.message || err);
+        });
         saveWatchProgress(card.videoId, resumeOffsetSeconds + elapsedSeconds).catch(() => {});
       }
     };
