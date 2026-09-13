@@ -1027,7 +1027,7 @@ def get_video_vmap(
 ALLOWED_VIDEO_CONTENT_TYPES = {
     "video/mp4", "video/quicktime", "video/x-matroska", "video/webm", "video/x-msvideo",
 }
-MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB — matches Nginx's client_max_body_size
+MAX_VIDEO_BYTES = 12 * 1024 * 1024 * 1024  # 12 GB — matches Nginx's client_max_body_size
 
 
 async def _upload_to_bunny(video: Video, file: UploadFile, db: Session) -> Video:
@@ -1048,7 +1048,7 @@ async def _upload_to_bunny(video: Video, file: UploadFile, db: Session) -> Video
     total_bytes = file.file.tell()
     file.file.seek(0)
     if total_bytes > MAX_VIDEO_BYTES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 2GB size limit.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 12GB size limit.")
     if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1065,7 +1065,7 @@ async def _upload_to_bunny(video: Video, file: UploadFile, db: Session) -> Video
                 break
             yield chunk
 
-    async with httpx.AsyncClient(timeout=900.0) as client:  # 15 min — generous for 2GB files on modest upload speeds
+    async with httpx.AsyncClient(timeout=10800.0) as client:  # 3 hours — generous for 12GB files on modest upload speeds
         create_resp = await client.post(
             f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos",
             headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
@@ -1123,7 +1123,7 @@ async def _upload_trailer_to_bunny(video: Video, file: UploadFile, db: Session) 
 
     contents = await file.read()
     if len(contents) > MAX_VIDEO_BYTES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 2GB size limit.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds the 12GB size limit.")
     if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
