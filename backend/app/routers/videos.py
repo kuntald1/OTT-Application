@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 import uuid as uuid_module
 from datetime import datetime, timezone
@@ -23,7 +24,7 @@ from app.models import (
 from app.schemas import (
     VideoCreate, VideoOut, VideoPricingOut, VideoRevenueTierOut,
     VideoCastOut, VideoCrewOut, PersonOut, VideoLikeToggleResponse, PlayerAdCuePointOut,
-    VideoSubtitleOut, VideoLanguageOut, VideoStudioOut,
+    VideoSubtitleOut, VideoLanguageOut, VideoStudioOut, TusUploadCredentialsOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -344,15 +345,15 @@ def _to_out(video: Video, db: Session, viewer: User | None = None, force_access:
             )
             for c in crew
         ],
-        has_file=bool(video.bunny_video_id),
+        has_file=bool(video.upload_confirmed_at),
         playback_url=(
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/playlist.m3u8"
-            if video.bunny_video_id and has_access else None
+            if video.bunny_video_id and video.upload_confirmed_at and has_access else None
         ),
         embed_url=(
             f"https://player.mediadelivery.net/embed/{settings.BUNNY_LIBRARY_ID}/{video.bunny_video_id}"
             + (f"?t={resume_seconds}" if resume_seconds else "")
-            if video.bunny_video_id and has_access else None
+            if video.bunny_video_id and video.upload_confirmed_at and has_access else None
         ),
         thumbnail_url=(
             f"https://{settings.BUNNY_CDN_HOSTNAME}/{video.bunny_video_id}/thumbnail.jpg"
@@ -1318,6 +1319,99 @@ async def upload_video_file(
 
     video = await _upload_to_bunny(video, file, db)
     return _to_out(video, db)
+
+
+def _get_or_create_tus_credentials(video: Video, db: Session) -> TusUploadCredentialsOut:
+    """Option A — direct browser-to-Bunny resumable upload via the TUS
+    protocol, instead of relaying bytes through this server (see
+    _upload_to_bunny above, still used for trailers). This server's
+    only job is to mint short-lived, presigned credentials; the actual
+    multi-GB transfer never touches our VPS's bandwidth or memory.
+
+    Reuses video.bunny_video_id if one already exists (e.g. a previous
+    call from this same not-yet-finished upload, or a resume attempt
+    after the page was closed) — per Bunny's docs, re-signing an
+    existing video GUID is how you resume, not creating a new one.
+    """
+    if video.upload_confirmed_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This video already has a file uploaded.")
+    if not (settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY and settings.BUNNY_CDN_HOSTNAME):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Video hosting isn't configured yet. Bunny Stream credentials are missing.",
+        )
+
+    bunny_video_id = video.bunny_video_id
+    if not bunny_video_id:
+        create_resp = httpx.post(
+            f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos",
+            headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
+            json={"title": video.title},
+            timeout=30.0,
+        )
+        if create_resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't create video on Bunny Stream: {create_resp.text}",
+            )
+        bunny_video_id = create_resp.json()["guid"]
+        video.bunny_video_id = bunny_video_id
+        db.commit()
+
+    # 24 hours — comfortably covers even a very slow 12GB upload, per
+    # Bunny's own guidance to keep this at an hour or more.
+    expiration_time = int(datetime.now(timezone.utc).timestamp()) + 86400
+    signature_string = f"{settings.BUNNY_LIBRARY_ID}{settings.BUNNY_API_KEY}{expiration_time}{bunny_video_id}"
+    signature = hashlib.sha256(signature_string.encode()).hexdigest()
+
+    return TusUploadCredentialsOut(
+        video_id=bunny_video_id,
+        library_id=settings.BUNNY_LIBRARY_ID,
+        expiration_time=expiration_time,
+        signature=signature,
+    )
+
+
+def _confirm_upload(video: Video, db: Session) -> Video:
+    if not video.bunny_video_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No upload was started for this video.")
+    video.upload_confirmed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(video)
+    return video
+
+
+@router.post("/{video_id}/tus-upload-credentials", response_model=TusUploadCredentialsOut)
+def get_tus_upload_credentials(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_creator_or_organiser(current_user)
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _get_or_create_tus_credentials(video, db)
+
+
+@router.post("/{video_id}/confirm-upload", response_model=VideoOut)
+def confirm_video_upload(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Called by the frontend once tus-js-client's onSuccess fires —
+    this is what actually flips has_file to true (see _to_out). Bunny
+    itself still needs a little time after this to finish encoding
+    before the video is truly playable, same as the old relay flow.
+    """
+    _require_creator_or_organiser(current_user)
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = _confirm_upload(video, db)
+    return _to_out(video, db)
+
 
 
 @router.post("/{video_id}/like/toggle", response_model=VideoLikeToggleResponse)

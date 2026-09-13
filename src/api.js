@@ -352,6 +352,19 @@ export function uploadVideoFile(videoId, file, onProgress) {
   });
 }
 
+// "Option A" — direct browser-to-Bunny resumable upload (see
+// shared/tusUpload.js). fetchTusUploadCredentials mints short-lived,
+// presigned credentials; confirmVideoUpload tells us the transfer
+// actually finished (this is what flips has_file, not merely having
+// requested credentials).
+export async function fetchTusUploadCredentials(videoId) {
+  return request(`/videos/${videoId}/tus-upload-credentials`, { method: "POST", auth: true });
+}
+
+export async function confirmVideoUpload(videoId) {
+  return request(`/videos/${videoId}/confirm-upload`, { method: "POST", auth: true });
+}
+
 export function uploadVideoTrailer(videoId, file, onProgress) {
   return new Promise((resolve, reject) => {
     const token = getToken();

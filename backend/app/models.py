@@ -1050,6 +1050,14 @@ class Video(Base):
 
     # Filled in during Phase 2, once real Bunny Stream upload exists
     bunny_video_id = Column(String(255), nullable=True)
+    # Set only once the TUS resumable upload actually finishes (client
+    # called POST /confirm-upload) — NOT merely once bunny_video_id
+    # exists. bunny_video_id is now assigned as soon as we reserve a
+    # Bunny video object to hand out TUS credentials, well before any
+    # bytes arrive (this is what lets an interrupted upload resume
+    # against the same Bunny video). has_file must key off THIS field,
+    # or a video with zero uploaded bytes would show as "uploaded".
+    upload_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     # A SEPARATE Bunny video upload (its own bunny_video_id), used only
     # for the silent hover-preview on video cards — never the same
     # asset as the real feature (bunny_video_id above). Never

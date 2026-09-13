@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle, Sparkles } from "lucide-react";
-import { createAdminVideo, uploadAdminVideoFile, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata } from "./adminApi";
+import { createAdminVideo, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin } from "./adminApi";
+import { startResumableVideoUpload } from "../shared/tusUpload";
 import SubtitleManager from "../shared/SubtitleManager";
 import FilePreview from "../shared/FilePreview";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
@@ -247,21 +248,28 @@ export default function AdminAddVideoPage() {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-  const handleFileSelect = async (videoId, e) => {
+  const handleFileSelect = (videoId, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileUploadError("");
     setUploadProgress(0);
     setUploadingFileFor(videoId);
-    try {
-      const updated = await uploadAdminVideoFile(videoId, file, (pct) => setUploadProgress(pct));
-      setAddedVideos((prev) => prev.map((v) => (v.id === videoId ? updated : v)));
-    } catch (err) {
-      setFileUploadError(err.message || "Couldn't upload video file. Please try again.");
-    } finally {
-      setUploadingFileFor(null);
-      setUploadProgress(0);
-    }
+    startResumableVideoUpload({
+      file,
+      getCredentials: () => fetchTusUploadCredentialsAdmin(videoId),
+      confirmUpload: () => confirmVideoUploadAdmin(videoId),
+      onProgress: (pct) => setUploadProgress(pct),
+      onSuccess: (updated) => {
+        setAddedVideos((prev) => prev.map((v) => (v.id === videoId ? updated : v)));
+        setUploadingFileFor(null);
+        setUploadProgress(0);
+      },
+      onError: (message) => {
+        setFileUploadError(message || "Couldn't upload video file. Please try again.");
+        setUploadingFileFor(null);
+        setUploadProgress(0);
+      },
+    });
   };
 
   const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
@@ -797,11 +805,14 @@ export default function AdminAddVideoPage() {
                       ) : uploadingFileFor === v.id ? (
                         <div>
                           <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                            <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                            <span>{uploadProgress >= 100 ? "Confirming…" : "Uploading directly to video server…"}</span>
                             <span>{uploadProgress}%</span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: COLORS.gold }} />
+                            <div
+                              className={`h-full rounded-full transition-all ${uploadProgress >= 100 ? "animate-pulse" : ""}`}
+                              style={{ width: `${uploadProgress}%`, background: COLORS.gold }}
+                            />
                           </div>
                         </div>
                       ) : (
@@ -847,11 +858,14 @@ export default function AdminAddVideoPage() {
                       {uploadingTrailerFor === v.id ? (
                         <div>
                           <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                            <span>{trailerUploadProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
-                            <span>{trailerUploadProgress}%</span>
+                            <span>{trailerUploadProgress >= 100 ? "Uploading to video server — this can take a few minutes for large files" : "Uploading trailer…"}</span>
+                            {trailerUploadProgress < 100 && <span>{trailerUploadProgress}%</span>}
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${trailerUploadProgress}%`, background: COLORS.gold }} />
+                            <div
+                              className={`h-full rounded-full transition-all ${trailerUploadProgress >= 100 ? "animate-pulse" : ""}`}
+                              style={{ width: `${trailerUploadProgress}%`, background: COLORS.gold }}
+                            />
                           </div>
                         </div>
                       ) : (

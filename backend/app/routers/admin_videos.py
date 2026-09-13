@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person, VideoSubtitle
-from app.schemas import VideoOut, AdminVideoRejectRequest, AdminVideoScheduleRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut
-from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file, _srt_to_vtt, _sync_caption_to_bunny
+from app.models import AdminUser, Video, VideoPricing, VideoRevenueTier, VideoStatus, User, UserRole, Person, VideoSubtitle, VideoCategory
+from app.schemas import VideoOut, AdminVideoRejectRequest, AdminVideoScheduleRequest, VideoCreate, AdminVideoCreate, CreatorAccountOut, PersonOut, TusUploadCredentialsOut
+from app.routers.videos import _to_out, _create_video_core, _update_video_core, _upload_to_bunny, _upload_trailer_to_bunny, _save_poster_file, _srt_to_vtt, _sync_caption_to_bunny, _get_or_create_tus_credentials, _confirm_upload
 from app.routers.recommendations import compute_and_store_embedding
 from app.routers.people import _save_person_photo
 from app.notifications import (
@@ -43,6 +43,21 @@ def _notify_video_uploader(video: Video, db: Session, decision: str, reason: str
     elif decision == "rejected":
         send_video_rejected_email(uploader.email, uploader.name, video.title, reason or "")
         send_video_rejected_whatsapp(uploader.phone, uploader.name, video.title, reason or "")
+
+
+def _require_categories_before_publish(video: Video, db: Session) -> None:
+    """A Creator/Organiser no longer picks categories at upload time
+    (see MyVideoListPage.jsx) — Admin assigns them during review
+    instead, via the Edit form. Approve/Schedule must not let a video
+    go live with none set, since categories drive Category page
+    listings and the recommendation embedding text.
+    """
+    has_category = db.query(VideoCategory).filter(VideoCategory.video_id == video.id).first() is not None
+    if not has_category:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This video has no category set. Add at least one category (Edit) before approving or scheduling it.",
+        )
 
 
 @router.get("", response_model=list[VideoOut])
@@ -91,6 +106,7 @@ def approve_video(
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    _require_categories_before_publish(video, db)
 
     video.status = VideoStatus.published
     video.published_at = datetime.now(timezone.utc)
@@ -121,6 +137,7 @@ def schedule_video(
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    _require_categories_before_publish(video, db)
 
     scheduled_at = payload.scheduled_publish_at
     if scheduled_at.tzinfo is None:
@@ -348,6 +365,31 @@ async def upload_video_file_as_admin(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     video = await _upload_to_bunny(video, file, db)
+    return _to_out(video, db, force_access=True)
+
+
+@router.post("/{video_id}/tus-upload-credentials", response_model=TusUploadCredentialsOut)
+def get_tus_upload_credentials_as_admin(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _get_or_create_tus_credentials(video, db)
+
+
+@router.post("/{video_id}/confirm-upload", response_model=VideoOut)
+def confirm_video_upload_as_admin(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = _confirm_upload(video, db)
     return _to_out(video, db, force_access=True)
 
 

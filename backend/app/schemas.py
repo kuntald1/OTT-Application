@@ -1241,7 +1241,11 @@ class VideoCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: Optional[str] = None
     section: str = Field(pattern="^(play|archive)$")
-    categories: List[str] = Field(min_length=1, max_length=3)
+    # No min_length — a Creator/Organiser no longer picks categories at
+    # upload time (see MyVideoListPage.jsx); Admin assigns them during
+    # review instead, and approve/schedule are blocked until at least
+    # one is set (see admin_videos.py's _require_categories_before_publish).
+    categories: List[str] = Field(default=[], max_length=3)
     release_year: int = Field(ge=1900, le=2100)
     age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+|A)$")
     languages: Optional[List[str]] = None
@@ -1252,6 +1256,13 @@ class VideoCreate(BaseModel):
     revenue_tiers: List[VideoRevenueTierIn] = Field(min_length=1, max_length=5)
     cast: List[VideoCastIn] = Field(default=[], max_length=10)
     crew: List[VideoCrewIn] = Field(default=[], max_length=5)
+
+
+class TusUploadCredentialsOut(BaseModel):
+    video_id: str
+    library_id: str
+    expiration_time: int
+    signature: str
 
 
 class VideoPricingOut(BaseModel):

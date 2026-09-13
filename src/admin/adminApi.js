@@ -237,6 +237,18 @@ export function uploadAdminVideoFile(videoId, file, onProgress) {
   });
 }
 
+// "Option A" — direct browser-to-Bunny resumable upload, admin side.
+// See fetchTusUploadCredentials/confirmVideoUpload in ../api.js for
+// the creator-facing equivalent and shared/tusUpload.js for the
+// actual tus-js-client wiring both sides use.
+export async function fetchTusUploadCredentialsAdmin(videoId) {
+  return request(`/admin/videos/${videoId}/tus-upload-credentials`, { method: "POST", auth: true });
+}
+
+export async function confirmVideoUploadAdmin(videoId) {
+  return request(`/admin/videos/${videoId}/confirm-upload`, { method: "POST", auth: true });
+}
+
 export function uploadAdminVideoTrailer(videoId, file, onProgress) {
   return new Promise((resolve, reject) => {
     const token = getAdminToken();

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoFile, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, createPerson, fetchMyVideos, fetchCategoryOptions } from "../api";
+import { uploadVideo, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, createPerson, fetchMyVideos, fetchTusUploadCredentials, confirmVideoUpload } from "../api";
+import { startResumableVideoUpload } from "../shared/tusUpload";
 import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
 import PersonFormFields, { EMPTY_PERSON_FORM } from "../shared/PersonFormFields";
-import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
@@ -91,13 +91,6 @@ function Dropdown({ label, value, options, onChange, placeholder, capitalizeOpti
 }
 
 export default function MyVideoListPage({ onBack }) {
-  const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
-
-  useEffect(() => {
-    fetchCategoryOptions().then((cats) => {
-      if (cats.length > 0) setCategories(cats);
-    }).catch(() => {});
-  }, []);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
@@ -149,13 +142,6 @@ export default function MyVideoListPage({ onBack }) {
     if (wordCount > maxWords) return;
     setForm((f) => ({ ...f, [field]: value }));
   };
-  const toggleCategory = (cat) => setForm((f) => {
-    const has = f.categories.includes(cat);
-    if (has) return { ...f, categories: f.categories.filter((c) => c !== cat) };
-    if (f.categories.length >= 3) return f;
-    return { ...f, categories: [...f.categories, cat] };
-  });
-
   const updateTier = (key, field, value) => setTiers((list) => list.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
   const addTier = () => tiers.length < 5 && setTiers((list) => [...list, makeEmptyTier()]);
   const removeTier = (key) => setTiers((list) => (list.length > 1 ? list.filter((t) => t.key !== key) : list));
@@ -205,7 +191,7 @@ export default function MyVideoListPage({ onBack }) {
   const isPayPerVideo = form.monetization_type === "pay_per_video";
   const tiersValid = tiers.every((t) => t.min_minutes !== "" && Number(t.rate_per_minute_inr) > 0);
   const pricingValid = !isPayPerVideo || (Number(form.price_inr) > 0 && Number(form.price_usd) > 0);
-  const canSubmit = form.title.trim() && form.categories.length > 0 && form.release_year && form.age_rating && tiersValid && pricingValid;
+  const canSubmit = form.title.trim() && form.release_year && form.age_rating && tiersValid && pricingValid;
 
   const resetForm = () => {
     setForm({ title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
@@ -260,21 +246,28 @@ export default function MyVideoListPage({ onBack }) {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-  const handleFileSelect = async (videoId, e) => {
+  const handleFileSelect = (videoId, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileUploadError("");
     setUploadProgress(0);
     setUploadingFileFor(videoId);
-    try {
-      await uploadVideoFile(videoId, file, (pct) => setUploadProgress(pct));
-      loadVideos();
-    } catch (err) {
-      setFileUploadError(err.message || "Couldn't upload video file. Please try again.");
-    } finally {
-      setUploadingFileFor(null);
-      setUploadProgress(0);
-    }
+    startResumableVideoUpload({
+      file,
+      getCredentials: () => fetchTusUploadCredentials(videoId),
+      confirmUpload: () => confirmVideoUpload(videoId),
+      onProgress: (pct) => setUploadProgress(pct),
+      onSuccess: () => {
+        setUploadingFileFor(null);
+        setUploadProgress(0);
+        loadVideos();
+      },
+      onError: (message) => {
+        setFileUploadError(message || "Couldn't upload video file. Please try again.");
+        setUploadingFileFor(null);
+        setUploadProgress(0);
+      },
+    });
   };
 
   const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
@@ -377,31 +370,6 @@ export default function MyVideoListPage({ onBack }) {
                 <input type="number" min="1900" max="2100" placeholder="2026" value={form.release_year} onChange={update("release_year")} style={inputStyle} />
               </div>
               <Dropdown label="Age Rating *" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} placeholder="Select rating" />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Categories * (up to 3)</label>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORIES.map((cat) => {
-                  const selected = form.categories.includes(cat);
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleCategory(cat)}
-                      disabled={!selected && form.categories.length >= 3}
-                      className="rounded-full border px-3 py-1.5 text-xs font-medium disabled:opacity-30"
-                      style={{
-                        borderColor: selected ? COLORS.gold : "rgba(245,235,221,0.15)",
-                        background: selected ? "rgba(212,175,55,0.14)" : "transparent",
-                        color: selected ? COLORS.gold : "rgba(245,235,221,0.7)",
-                      }}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
             <div>
@@ -708,11 +676,14 @@ export default function MyVideoListPage({ onBack }) {
                       ) : uploadingFileFor === v.id ? (
                         <div>
                           <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                            <span>{uploadProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                            <span>{uploadProgress >= 100 ? "Confirming…" : "Uploading directly to video server…"}</span>
                             <span>{uploadProgress}%</span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }} />
+                            <div
+                              className={`h-full rounded-full transition-all ${uploadProgress >= 100 ? "animate-pulse" : ""}`}
+                              style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }}
+                            />
                           </div>
                         </div>
                       ) : (
@@ -730,6 +701,9 @@ export default function MyVideoListPage({ onBack }) {
                               onChange={(e) => handleFileSelect(v.id, e)}
                             />
                           </label>
+                          <p className="mt-1 text-[11px]" style={{ color: "rgba(245,235,221,0.35)" }}>
+                            Large files upload safely in the background — if it's interrupted, re-select the same file to resume from where it left off.
+                          </p>
                           {fileUploadError && uploadingFileFor === null && (
                             <p className="mt-1.5 text-xs font-medium" style={{ color: "#f87171" }}>{fileUploadError}</p>
                           )}
@@ -758,11 +732,14 @@ export default function MyVideoListPage({ onBack }) {
                       {uploadingTrailerFor === v.id ? (
                         <div>
                           <div className="mb-1 flex items-center justify-between text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                            <span>{trailerUploadProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
-                            <span>{trailerUploadProgress}%</span>
+                            <span>{trailerUploadProgress >= 100 ? "Uploading to video server — this can take a few minutes for large files" : "Uploading trailer…"}</span>
+                            {trailerUploadProgress < 100 && <span>{trailerUploadProgress}%</span>}
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${trailerUploadProgress}%`, background: CTA_GRADIENT }} />
+                            <div
+                              className={`h-full rounded-full transition-all ${trailerUploadProgress >= 100 ? "animate-pulse" : ""}`}
+                              style={{ width: `${trailerUploadProgress}%`, background: CTA_GRADIENT }}
+                            />
                           </div>
                         </div>
                       ) : (

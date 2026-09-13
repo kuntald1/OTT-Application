@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
-import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoFile, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle } from "./adminApi";
+import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin } from "./adminApi";
+import { startResumableVideoUpload } from "../shared/tusUpload";
 import { fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
@@ -114,21 +115,28 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
   const [trailerProgress, setTrailerProgress] = useState(0);
   const [fileError, setFileError] = useState("");
 
-  const handleVideoFileSelect = async (e) => {
+  const handleVideoFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileError("");
     setVideoFileProgress(0);
     setUploadingVideoFile(true);
-    try {
-      const updated = await uploadAdminVideoFile(video.id, file, (pct) => setVideoFileProgress(pct));
-      onFileUpdated?.(updated);
-    } catch (err) {
-      setFileError(err.message || "Couldn't upload video file. Please try again.");
-    } finally {
-      setUploadingVideoFile(false);
-      setVideoFileProgress(0);
-    }
+    startResumableVideoUpload({
+      file,
+      getCredentials: () => fetchTusUploadCredentialsAdmin(video.id),
+      confirmUpload: () => confirmVideoUploadAdmin(video.id),
+      onProgress: (pct) => setVideoFileProgress(pct),
+      onSuccess: (updated) => {
+        setUploadingVideoFile(false);
+        setVideoFileProgress(0);
+        onFileUpdated?.(updated);
+      },
+      onError: (message) => {
+        setFileError(message || "Couldn't upload video file. Please try again.");
+        setUploadingVideoFile(false);
+        setVideoFileProgress(0);
+      },
+    });
   };
 
   const handlePosterSelect = async (e) => {
@@ -248,11 +256,14 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
             {uploadingVideoFile ? (
               <div className="w-48">
                 <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
-                  <span>{videoFileProgress >= 100 ? "Finalizing…" : "Uploading…"}</span>
+                  <span>{videoFileProgress >= 100 ? "Confirming…" : "Uploading…"}</span>
                   <span>{videoFileProgress}%</span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${videoFileProgress}%`, background: COLORS.gold }} />
+                  <div
+                    className={`h-full rounded-full transition-all ${videoFileProgress >= 100 ? "animate-pulse" : ""}`}
+                    style={{ width: `${videoFileProgress}%`, background: COLORS.gold }}
+                  />
                 </div>
               </div>
             ) : (
@@ -284,12 +295,18 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
             {uploadingTrailer ? (
               <div className="w-48">
                 <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(245,235,221,0.6)" }}>
-                  <span>{trailerProgress >= 100 ? "Finalizing…" : "Uploading trailer…"}</span>
-                  <span>{trailerProgress}%</span>
+                  <span>{trailerProgress >= 100 ? "Uploading to server…" : "Uploading trailer…"}</span>
+                  {trailerProgress < 100 && <span>{trailerProgress}%</span>}
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${trailerProgress}%`, background: COLORS.gold }} />
+                  <div
+                    className={`h-full rounded-full transition-all ${trailerProgress >= 100 ? "animate-pulse" : ""}`}
+                    style={{ width: `${trailerProgress}%`, background: COLORS.gold }}
+                  />
                 </div>
+                {trailerProgress >= 100 && (
+                  <p className="mt-1 text-[10px]" style={{ color: "rgba(245,235,221,0.4)" }}>Can take a few minutes for large files</p>
+                )}
               </div>
             ) : (
               <label
