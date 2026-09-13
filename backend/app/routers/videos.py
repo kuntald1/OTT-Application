@@ -34,6 +34,10 @@ ALLOWED_POSTER_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_POSTER_BYTES = 5 * 1024 * 1024  # 5 MB
 
 ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+"}
+# Matches shared/languages.js's LANGUAGE_OPTIONS on the frontend — a
+# fixed toggle list rather than free text, so values stay consistent
+# everywhere they're stored, filtered, or displayed.
+ALLOWED_LANGUAGES = {"English", "Hindi", "Bengali"}
 
 
 def _get_allowed_categories(db: Session) -> set[str]:
@@ -401,6 +405,13 @@ def _validate_video_payload(payload: VideoCreate, db: Session) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"age_rating must be one of: {', '.join(sorted(ALLOWED_AGE_RATINGS))}",
         )
+    if payload.languages:
+        invalid_languages = [l for l in payload.languages if l not in ALLOWED_LANGUAGES]
+        if invalid_languages:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid languages: {', '.join(invalid_languages)}. Must be one of: {', '.join(sorted(ALLOWED_LANGUAGES))}",
+            )
     if payload.monetization_type == "pay_per_video":
         if payload.price_inr is None or payload.price_usd is None:
             raise HTTPException(
@@ -526,7 +537,7 @@ def _apply_video_fields(video: Video, payload: VideoCreate) -> None:
     video.title = payload.title
     video.description = payload.description
     video.section = VideoSection(payload.section)
-    video.category = payload.categories[0]  # backward-compat column, see model docstring
+    video.category = payload.categories[0] if payload.categories else None  # backward-compat column, see model docstring
     video.release_year = payload.release_year
     video.age_rating = AgeRating(payload.age_rating)
     video.languages = ", ".join(payload.languages) if payload.languages else None

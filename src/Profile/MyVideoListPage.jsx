@@ -3,6 +3,7 @@ import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clap
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { uploadVideo, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, createPerson, fetchMyVideos, fetchTusUploadCredentials, confirmVideoUpload } from "../api";
 import { startResumableVideoUpload } from "../shared/tusUpload";
+import { LANGUAGE_OPTIONS } from "../shared/languages";
 import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
@@ -96,7 +97,7 @@ export default function MyVideoListPage({ onBack }) {
   const [showUpload, setShowUpload] = useState(false);
 
   const [form, setForm] = useState({
-    title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: "",
+    title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: [],
     has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "",
   });
   const [tiers, setTiers] = useState([makeEmptyTier()]);
@@ -142,6 +143,11 @@ export default function MyVideoListPage({ onBack }) {
     if (wordCount > maxWords) return;
     setForm((f) => ({ ...f, [field]: value }));
   };
+  const toggleLanguage = (lang) => setForm((f) => {
+    const has = f.languages.includes(lang);
+    return has ? { ...f, languages: f.languages.filter((l) => l !== lang) } : { ...f, languages: [...f.languages, lang] };
+  });
+
   const updateTier = (key, field, value) => setTiers((list) => list.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
   const addTier = () => tiers.length < 5 && setTiers((list) => [...list, makeEmptyTier()]);
   const removeTier = (key) => setTiers((list) => (list.length > 1 ? list.filter((t) => t.key !== key) : list));
@@ -194,7 +200,7 @@ export default function MyVideoListPage({ onBack }) {
   const canSubmit = form.title.trim() && form.release_year && form.age_rating && tiersValid && pricingValid;
 
   const resetForm = () => {
-    setForm({ title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: "", has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
+    setForm({ title: "", description: "", section: "play", categories: [], release_year: String(new Date().getFullYear()), age_rating: "", languages: [], has_ads: true, monetization_type: "subscription_only", price_inr: "", price_usd: "" });
     setTiers([makeEmptyTier()]);
     setCast([]);
     setCrew([]);
@@ -215,7 +221,7 @@ export default function MyVideoListPage({ onBack }) {
         categories: form.categories,
         release_year: Number(form.release_year),
         age_rating: form.age_rating,
-        languages: form.languages.trim() ? form.languages.split(",").map((l) => l.trim()).filter(Boolean) : null,
+        languages: form.languages.length > 0 ? form.languages : null,
         has_ads: form.has_ads,
         monetization_type: form.monetization_type,
         price_inr: isPayPerVideo ? Number(form.price_inr) : null,
@@ -374,7 +380,26 @@ export default function MyVideoListPage({ onBack }) {
 
             <div>
               <label style={labelStyle}>Languages</label>
-              <input type="text" placeholder="e.g. Bengali, English" value={form.languages} onChange={update("languages")} style={inputStyle} />
+              <div className="flex flex-wrap gap-2">
+                {LANGUAGE_OPTIONS.map((lang) => {
+                  const selected = form.languages.includes(lang.value);
+                  return (
+                    <button
+                      key={lang.value}
+                      type="button"
+                      onClick={() => toggleLanguage(lang.value)}
+                      className="rounded-full border px-3 py-1.5 text-xs font-medium"
+                      style={{
+                        borderColor: selected ? COLORS.gold : "rgba(245,235,221,0.15)",
+                        background: selected ? "rgba(212,175,55,0.14)" : "transparent",
+                        color: selected ? COLORS.gold : "rgba(245,235,221,0.7)",
+                      }}
+                    >
+                      {lang.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />

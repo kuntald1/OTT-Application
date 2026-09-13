@@ -1018,10 +1018,12 @@ class Video(Base):
     # rather than a DB enum so the category list can be extended later
     # without a migration; validated against the shared list server-side.
     # DEPRECATED as of multi-category support — kept only so this column
-    # (already NOT NULL on existing rows) doesn't need a destructive
-    # migration. Always auto-populated with categories[0] for backward
-    # compatibility. VideoCategory below is the real source of truth now.
-    category = Column(String(100), nullable=False)
+    # (already populated on existing rows) doesn't need a destructive
+    # migration. Auto-populated with categories[0] when at least one is
+    # set, NULL when a Creator/Organiser submits with none (Admin adds
+    # categories later — see MyVideoListPage.jsx). VideoCategory below
+    # is the real source of truth now.
+    category = Column(String(100), nullable=True)
 
     release_year = Column(Integer, nullable=False)
     # values_callable makes this store the actual human-readable value

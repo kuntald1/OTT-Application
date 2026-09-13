@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
 import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin } from "./adminApi";
 import { startResumableVideoUpload } from "../shared/tusUpload";
+import { LANGUAGE_OPTIONS } from "../shared/languages";
 import { fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
@@ -174,7 +175,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
   const [form, setForm] = useState({
     title: video.title, description: video.description || "", section: video.section,
     categories: video.categories, release_year: String(video.release_year), age_rating: video.age_rating,
-    languages: video.languages.join(", "), has_ads: video.has_ads, monetization_type: video.monetization_type,
+    languages: video.languages, has_ads: video.has_ads, monetization_type: video.monetization_type,
     price_inr: video.pricing ? String(video.pricing.price_inr) : "", price_usd: video.pricing ? String(video.pricing.price_usd) : "",
   });
   const [tiers, setTiers] = useState(tierRowsFromVideo(video));
@@ -189,6 +190,10 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
     if (has) return { ...f, categories: f.categories.filter((c) => c !== cat) };
     if (f.categories.length >= 3) return f;
     return { ...f, categories: [...f.categories, cat] };
+  });
+  const toggleLanguage = (lang) => setForm((f) => {
+    const has = f.languages.includes(lang);
+    return has ? { ...f, languages: f.languages.filter((l) => l !== lang) } : { ...f, languages: [...f.languages, lang] };
   });
 
   const updateTier = (key, field, value) => setTiers((list) => list.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
@@ -216,7 +221,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
       const payload = {
         title: form.title.trim(), description: form.description.trim() || null, section: form.section,
         categories: form.categories, release_year: Number(form.release_year), age_rating: form.age_rating,
-        languages: form.languages.trim() ? form.languages.split(",").map((l) => l.trim()).filter(Boolean) : null,
+        languages: form.languages.length > 0 ? form.languages : null,
         has_ads: form.has_ads, monetization_type: form.monetization_type,
         price_inr: isPayPerVideo ? Number(form.price_inr) : null, price_usd: isPayPerVideo ? Number(form.price_usd) : null,
         revenue_tiers: tiers.map((t) => ({ min_minutes: Number(t.min_minutes), max_minutes: t.max_minutes === "" ? null : Number(t.max_minutes), rate_per_minute_inr: Number(t.rate_per_minute_inr) })),
@@ -362,7 +367,26 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
           <label style={labelStyle}>Languages</label>
-          <input type="text" placeholder="e.g. Bengali, English" value={form.languages} onChange={update("languages")} style={inputStyle} />
+          <div className="flex flex-wrap gap-2">
+            {LANGUAGE_OPTIONS.map((lang) => {
+              const selected = form.languages.includes(lang.value);
+              return (
+                <button
+                  key={lang.value}
+                  type="button"
+                  onClick={() => toggleLanguage(lang.value)}
+                  className="rounded-full border px-3 py-1.5 text-xs font-medium"
+                  style={{
+                    borderColor: selected ? COLORS.gold : "rgba(245,235,221,0.15)",
+                    background: selected ? "rgba(212,175,55,0.14)" : "transparent",
+                    color: selected ? COLORS.gold : "rgba(245,235,221,0.7)",
+                  }}
+                >
+                  {lang.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div>
           <label style={labelStyle}>Ads</label>
