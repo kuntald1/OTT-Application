@@ -96,6 +96,7 @@ def _compute_tier_breakdown_paisa(session_seconds: int, tiers: list[VideoRevenue
 
 
 
+@router.post("/{video_id}/watch-heartbeat", response_model=WatchHeartbeatResponse)
 def watch_heartbeat(
     video_id: str,
     payload: WatchHeartbeatRequest,
