@@ -239,7 +239,7 @@ def watch_heartbeat(
                     delta_creator_paisa=delta_creator_paisa,
                 ))
 
-        record.gross_revenue_paisa = new_gross_paisa
+        record.gross_revenue_paisa = max(record.gross_revenue_paisa, new_gross_paisa)
 
     record.watched_ranges = merged_ranges
     record.max_session_seconds = int(new_total_seconds)  # legacy display column, see model docstring
