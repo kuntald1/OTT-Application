@@ -28,7 +28,7 @@ import AdminAdBannersPage from "./AdminAdBannersPage";
 import AdminDiscoverySettingsPage from "./AdminDiscoverySettingsPage";
 
 const COLORS = {
-  bg: "radial-gradient(ellipse at top right, rgba(212,175,55,0.16) 0%, transparent 45%), radial-gradient(ellipse at bottom left, rgba(94,22,22,0.55) 0%, transparent 55%) #0a0104",
+  bg: "radial-gradient(ellipse at top right, rgba(173,10,10,0.16) 0%, transparent 45%), radial-gradient(ellipse at bottom left, rgba(255,0,0,0.55) 0%, transparent 55%) rgb(48,3,18)",
   panel: "#150307",
   cream: "#f5ebdd",
   gold: "#D4AF37",

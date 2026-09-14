@@ -247,7 +247,7 @@ export default function AdminVideoReviewPage() {
                     )}
                     {v.revenue_tiers.length > 0 && (
                       <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-                        {v.revenue_tiers.map((t) => `${t.min_minutes}-${t.max_minutes ?? "unlimited"}min: ₹${t.rate_per_minute_inr}/min`).join(" · ")}
+                        {v.revenue_tiers.map((t) => `${t.min_minutes}–${t.max_minutes ?? "unlimited"} min: ₹${t.rate_per_minute_inr}/min`).join(" · ")}
                       </p>
                     )}
                     {v.admin_note && (
