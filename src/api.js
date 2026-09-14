@@ -511,11 +511,15 @@ export function fetchMyVideoPurchases() {
 // separate sessions — see VideoWatchRecord's docstring for why.
 // playbackSessionToken (optional) also keeps this device's screens-
 // limit slot alive — see fetchPlaybackSessionStart below.
-export function sendWatchHeartbeat(videoId, sessionSeconds, playbackSessionToken) {
+export function sendWatchHeartbeat(videoId, segmentStartSeconds, segmentEndSeconds, playbackSessionToken) {
   return request(`/videos/${videoId}/watch-heartbeat`, {
     method: "POST",
     auth: true,
-    body: { session_seconds: sessionSeconds, playback_session_token: playbackSessionToken || null },
+    body: {
+      segment_start_seconds: segmentStartSeconds,
+      segment_end_seconds: segmentEndSeconds,
+      playback_session_token: playbackSessionToken || null,
+    },
   });
 }
 

@@ -494,23 +494,30 @@ class RevenueRateConfig(Base):
 
 
 class VideoWatchRecord(Base):
-    """Phase 3 — one row per (user, video) pair, tracking that viewer's
-    LONGEST single continuous watch session ever, in seconds. This is
-    the "max single-session view" rule confirmed earlier: revenue is
-    calculated from the longest session a viewer has ever watched, not
-    the sum of every session — re-watching the same video 10 times
-    doesn't 10x the creator's earnings, since that would reward
-    refresh-farming rather than genuine engagement.
+    """Phase 3, revised — one row per (user, video) pair, tracking the
+    UNION of timeline ranges a viewer has genuinely, continuously
+    watched (e.g. [[0,120],[270,400]]), not a single "longest session"
+    number. Re-watching an already-covered stretch credits nothing;
+    only the portion of a newly-reported [start,end] segment that
+    wasn't already in the union is new. This is what actually makes
+    "watch from 4:30 to 8:30 today, then 0:00 to 8:30 tomorrow" credit
+    exactly the [0:00,4:30) portion on day two, not the full replay —
+    confirmed against a client walkthrough with worked examples.
 
-    gross_revenue_paisa is the tier-calculated amount (VideoRevenueTier,
-    or the RevenueRateConfig fallback) for max_session_seconds, computed
-    fresh every time max_session_seconds grows. creator_credited_paisa
-    is what's actually been added to CreatorEarnings so far — always
-    <= gross_revenue_paisa, since it's gross minus the platform's
-    commission (see RevenueRateConfig.platform_commission_percent).
-    Kept as two separate running totals (rather than recomputing from
-    scratch) so a heartbeat only ever credits the INCREMENTAL amount
-    when a session beats the previous best, never double-credits.
+    watched_ranges is the source of truth (JSONB list of [start, end]
+    second pairs, always kept merged/sorted/non-overlapping — see
+    _merge_watched_range in watch.py). max_session_seconds is kept
+    only as a legacy display figure (total covered seconds) for any
+    old code/reports still reading it; it no longer drives crediting.
+
+    gross_revenue_paisa is the tier-calculated amount for the TOTAL
+    covered seconds across all ranges, recomputed fresh each merge.
+    creator_credited_paisa is what's actually been added to
+    CreatorEarnings so far — always <= gross_revenue_paisa (gross
+    minus RevenueRateConfig.platform_commission_percent). Kept as two
+    running totals (rather than recomputed from scratch each read) so
+    a heartbeat only ever credits the INCREMENTAL amount when total
+    coverage grows, never double-credits.
     """
     __tablename__ = "video_watch_records"
     __table_args__ = (UniqueConstraint("user_id", "video_id", name="uq_user_video_watch_record"),)
@@ -519,6 +526,12 @@ class VideoWatchRecord(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False, index=True)
 
+    # List of [start_seconds, end_seconds] pairs (floats), always kept
+    # merged into the fewest possible non-overlapping, sorted ranges.
+    watched_ranges = Column(JSONB, nullable=False, default=list)
+    # DEPRECATED as the crediting driver — now just sum(end-start) over
+    # watched_ranges, kept in sync as a convenience column for any
+    # legacy display code. See class docstring.
     max_session_seconds = Column(Integer, nullable=False, default=0)
     gross_revenue_paisa = Column(Integer, nullable=False, default=0)
     creator_credited_paisa = Column(Integer, nullable=False, default=0)

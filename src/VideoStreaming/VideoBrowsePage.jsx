@@ -6,6 +6,7 @@ import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
 import Footer from "../shared/Footer";
 import DiscoveryRows from "../shared/DiscoveryRows";
+import { createWatchSegmentTracker } from "../shared/watchSegmentTracker";
 import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
@@ -753,7 +754,7 @@ if (typeof document !== "undefined" && !document.querySelector('link[href*="Beba
   document.head.appendChild(link);
 }
 
-function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSeconds }) {
+function AdEnabledVideoPlayer({ video, poster, onPositionUpdate, onSeek, resumeSeconds }) {
   const videoRef = useRef(null);
   const adContainerRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -761,31 +762,29 @@ function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSec
   const [loadError, setLoadError] = useState("");
   const state = useRef({ playedOffsets: new Set() }).current;
 
-  // Tell the parent whenever "is real content actively advancing right
-  // now" changes — combines ad-state with the video element's own
-  // playing/paused/buffering state, so the revenue heartbeat timer
-  // excludes ALL non-content time: IMA SDK loading, the VAST ad
-  // request roundtrip, the ad itself, and any buffering pause — not
-  // just ad playback alone (see RealDetailModal's heartbeat effect).
+  // Feeds the shared watch-segment tracker (see watchSegmentTracker.js)
+  // real playback position — but only while content is ACTUALLY
+  // advancing: not during an ad break, not paused, not buffering. This
+  // is what makes seek-aware, ad-excluded revenue crediting possible
+  // for ad-enabled videos, matching what player.js's timeupdate/seeked
+  // events give the Bunny-iframe path for ad-free ones.
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    const report = () => {
-      const isActive = !adPlaying && !videoEl.paused && !videoEl.ended && videoEl.readyState >= 3;
-      onContentPlayingChange?.(isActive);
+    const isContentActive = () => !adPlaying && !videoEl.paused && !videoEl.ended && videoEl.readyState >= 3;
+    const reportPosition = () => {
+      if (isContentActive()) onPositionUpdate?.(videoEl.currentTime);
     };
-    videoEl.addEventListener("playing", report);
-    videoEl.addEventListener("pause", report);
-    videoEl.addEventListener("waiting", report);
-    videoEl.addEventListener("ended", report);
-    report();
+    const handleSeeking = () => onSeek?.();
+    videoEl.addEventListener("timeupdate", reportPosition);
+    videoEl.addEventListener("playing", reportPosition);
+    videoEl.addEventListener("seeking", handleSeeking);
     return () => {
-      videoEl.removeEventListener("playing", report);
-      videoEl.removeEventListener("pause", report);
-      videoEl.removeEventListener("waiting", report);
-      videoEl.removeEventListener("ended", report);
+      videoEl.removeEventListener("timeupdate", reportPosition);
+      videoEl.removeEventListener("playing", reportPosition);
+      videoEl.removeEventListener("seeking", handleSeeking);
     };
-  }, [adPlaying, onContentPlayingChange]);
+  }, [adPlaying, onPositionUpdate, onSeek]);
 
   useEffect(() => {
     let cancelled = false;
@@ -939,6 +938,56 @@ function AdEnabledVideoPlayer({ video, poster, onContentPlayingChange, resumeSec
 }
 
 
+// player.js-driven wrapper around Bunny's iframe embed (used for
+// ad-free videos) — gives the SAME real timeupdate/seeked signal the
+// native AdEnabledVideoPlayer gets natively, via Bunny's own
+// Player.js support (https://docs.bunny.net/stream/playback-api), so
+// seek-aware watched-range crediting works for every video, not just
+// ad-enabled ones. Falls back to plain playback with no position
+// tracking if the script fails to load — never blocks the viewer.
+function BunnyIframePlayer({ embedUrl, onPositionUpdate, onSeek }) {
+  const iframeRef = useRef(null);
+  const playerRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadScriptOnce("https://assets.mediadelivery.net/playerjs/playerjs-latest.min.js", () => !!window.playerjs)
+      .then(() => {
+        if (cancelled || !iframeRef.current || !window.playerjs) return;
+        const player = new window.playerjs.Player(iframeRef.current);
+        playerRef.current = player;
+        player.on("ready", () => {
+          if (cancelled) return;
+          player.on("timeupdate", (data) => {
+            if (data && typeof data.seconds === "number") onPositionUpdate?.(data.seconds);
+          });
+          player.on("seeked", () => onSeek?.());
+        });
+      })
+      .catch(() => {}); // losing player.js only loses precise revenue tracking — playback itself is unaffected
+    return () => {
+      cancelled = true;
+      try {
+        playerRef.current?.off("timeupdate");
+        playerRef.current?.off("seeked");
+      } catch (e) {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedUrl]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      src={embedUrl}
+      loading="lazy"
+      style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
+      allowFullScreen
+    />
+  );
+}
+
+
 export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRelated }) {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1052,76 +1101,58 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
   // all, regardless of what the browser's login state says.
   const canPlay = video?.has_file && video?.has_access;
 
-  // Phase 3 — real watch-time tracking. The Bunny embed is a
-  // cross-origin iframe with no postMessage wiring here, so for
-  // ad-free videos this approximates "watching" as wall-clock time
-  // elapsed since Play was pressed — reasonable given the embed
-  // doesn't expose real play/pause events to us, and heartbeats are
-  // cheap/idempotent (the backend only ever credits the INCREMENTAL
-  // amount when a session beats the viewer's previous best, so an
-  // inflated estimate from, say, a backgrounded tab doesn't
-  // runaway-credit anything real).
-  //
-  // For ad-enabled videos (AdEnabledVideoPlayer), this clock is far
-  // more precise — it only accumulates while onContentPlayingChange
-  // reports content is ACTUALLY playing, so it excludes IMA SDK
-  // loading time, the VAST ad-request roundtrip, ad playback itself,
-  // AND any buffering pause. It starts FROZEN (not counting) the
-  // instant Play is pressed, and only unfreezes once that first
-  // "actually playing" report arrives — not immediately at mount like
-  // the old version did, which wrongly counted ad-setup time as watched.
-  const contentSecondsRef = useRef(0);
-  const segmentStartRef = useRef(null);
+  // Phase 3, revised — real watch-time tracking via actual playback
+  // POSITION (not wall-clock elapsed time), feeding the range-based
+  // "watched ranges" revenue model (see backend/app/routers/watch.py's
+  // _merge_watched_range and VideoWatchRecord's docstring). Both
+  // playback paths now report real position/seek events: the Bunny
+  // iframe path via player.js (see BunnyIframePlayer above), and
+  // AdEnabledVideoPlayer via the native <video> element's own
+  // timeupdate/seeking, gated so ad time and buffering are excluded.
+  const trackerRef = useRef(createWatchSegmentTracker());
+  // Bridges handleSeekDetected (created below, before the effect that
+  // defines the actual sender exists) to that sender, which needs
+  // sessionToken/videoId from inside the effect's own scope.
+  const flushSegmentRef = useRef(null);
 
-  const handleContentPlayingChange = React.useCallback((isActive) => {
-    if (isActive) {
-      if (segmentStartRef.current === null) segmentStartRef.current = Date.now();
-    } else if (segmentStartRef.current !== null) {
-      contentSecondsRef.current += (Date.now() - segmentStartRef.current) / 1000;
-      segmentStartRef.current = null;
-    }
+  const handlePositionUpdate = React.useCallback((pos) => {
+    trackerRef.current.reportPosition(pos);
+  }, []);
+
+  const handleSeekDetected = React.useCallback(() => {
+    // A seek means whatever was being tracked is a finished, genuine
+    // segment — flush it immediately (don't wait for the next 20s
+    // tick) via the same heartbeat sender the interval below uses,
+    // then start fresh from wherever the seek lands.
+    flushSegmentRef.current?.();
+    trackerRef.current.reset();
   }, []);
 
   useEffect(() => {
     if (!playing || !canPlay) return;
     const sessionToken = getPlaybackSessionToken();
-    const resumeOffsetSeconds = video?.resume_position_seconds || 0;
-    contentSecondsRef.current = 0;
-
-    // Deterministic, not a guess: this matches the exact same condition
-    // the render logic below uses to choose AdEnabledVideoPlayer over
-    // the plain iframe. If it's true, AdEnabledVideoPlayer WILL be
-    // mounted and WILL eventually call handleContentPlayingChange —
-    // however long the ad takes to load, wait for that real signal
-    // rather than guessing with a fixed timeout (a fixed timeout raced
-    // against real ad-request network latency, which is often slower
-    // than any timeout short enough to still exclude loading time —
-    // that mismatch was the ~3s of extra "watched" time in testing).
-    const usesContentSignal = !!(video?.ad_cue_points && video.ad_cue_points.length > 0);
-    segmentStartRef.current = usesContentSignal ? null : Date.now();
-
-    const currentContentSeconds = () => {
-      const liveSegment = segmentStartRef.current !== null ? (Date.now() - segmentStartRef.current) / 1000 : 0;
-      return contentSecondsRef.current + liveSegment;
-    };
+    trackerRef.current.reset();
 
     const sendHeartbeat = () => {
-      const elapsedSeconds = Math.round(currentContentSeconds());
-      if (elapsedSeconds > 0) {
-        // Revenue heartbeat stays session-relative by design (see
-        // VideoWatchRecord's "max single-session view" rule) — it
-        // should NOT include the resume offset. Progress-saving is
-        // different: it needs the video's ABSOLUTE position, so the
-        // resume offset (where this session started from) is added.
-        sendWatchHeartbeat(card.videoId, elapsedSeconds, sessionToken).catch((err) => {
-          // Previously swallowed silently — a failed heartbeat means
-          // lost creator revenue with zero trace, so at minimum this
-          // needs to show up in the console for debugging.
-          console.error("Watch heartbeat failed:", err?.message || err);
-        });
-        saveWatchProgress(card.videoId, resumeOffsetSeconds + elapsedSeconds).catch(() => {});
-      }
+      const segment = trackerRef.current.getSegment();
+      if (!segment) return;
+      const roundedStart = Math.round(segment.start);
+      const roundedEnd = Math.round(segment.end);
+      if (roundedEnd <= roundedStart) return;
+      sendWatchHeartbeat(card.videoId, roundedStart, roundedEnd, sessionToken).catch((err) => {
+        // Previously swallowed silently — a failed heartbeat means
+        // lost creator revenue with zero trace, so at minimum this
+        // needs to show up in the console for debugging.
+        console.error("Watch heartbeat failed:", err?.message || err);
+      });
+      // "Continue Watching" resume needs the video's ABSOLUTE position
+      // — real player position (from player.js/native <video> events)
+      // already IS absolute, unlike the old wall-clock estimate, so no
+      // separate resume-offset addition is needed here anymore.
+      saveWatchProgress(card.videoId, roundedEnd).catch(() => {});
     };
+    flushSegmentRef.current = sendHeartbeat;
+
     const interval = setInterval(sendHeartbeat, 20000);
 
     // Separate, much faster probe just for single-session detection
@@ -1139,6 +1170,7 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
       clearInterval(interval);
       clearInterval(sessionCheckInterval);
       sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
+      flushSegmentRef.current = null;
       endPlaybackSession(sessionToken).catch(() => {}); // frees this device's screens-limit slot immediately
     };
   }, [playing, canPlay, card.videoId]);
@@ -1249,15 +1281,9 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
         <div ref={playerContainerRef} className="relative aspect-video w-full" style={{ background: "#000" }}>
           {playing && canPlay ? (
             video.ad_cue_points && video.ad_cue_points.length > 0 ? (
-              <AdEnabledVideoPlayer video={video} poster={card.poster} onContentPlayingChange={handleContentPlayingChange} resumeSeconds={video?.resume_position_seconds || 0} />
+              <AdEnabledVideoPlayer video={video} poster={card.poster} onPositionUpdate={handlePositionUpdate} onSeek={handleSeekDetected} resumeSeconds={video?.resume_position_seconds || 0} />
             ) : (
-              <iframe
-                src={video.embed_url}
-                loading="lazy"
-                style={{ border: "none", position: "absolute", inset: 0, width: "100%", height: "100%" }}
-                allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
-                allowFullScreen
-              />
+              <BunnyIframePlayer embedUrl={video.embed_url} onPositionUpdate={handlePositionUpdate} onSeek={handleSeekDetected} />
             )
           ) : (
             <>

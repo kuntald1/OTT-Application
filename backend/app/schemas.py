@@ -926,12 +926,19 @@ class WatchHistoryOut(BaseModel):
 
 
 class WatchHeartbeatRequest(BaseModel):
-    # Cumulative seconds watched in THIS single continuous play session —
-    # resets to 0 whenever the player restarts (new page load / re-open),
-    # never carried over between separate sessions. The backend only
-    # ever credits revenue when this beats the viewer's previous best
-    # for this video (see VideoWatchRecord).
-    session_seconds: int = Field(ge=0)
+    # The current continuously-watched stretch of the video's own
+    # timeline (in seconds from video start) — NOT cumulative session
+    # time. segment_start is where this uninterrupted stretch began
+    # (resets on every seek/drag the player detects); segment_end is
+    # the player's current position. The backend merges [segment_start,
+    # segment_end] into the viewer's running union of watched ranges
+    # for this video (see VideoWatchRecord.watched_ranges) and credits
+    # only whatever portion of that stretch wasn't already covered —
+    # so re-watching an already-seen range, or a seek/drag jump, never
+    # inflates revenue, but resuming a video across days/sessions
+    # correctly picks up from real coverage rather than resetting.
+    segment_start_seconds: Decimal = Field(ge=0)
+    segment_end_seconds: Decimal = Field(ge=0)
     # Optional — when present, also refreshes this device's
     # PlaybackSession.last_heartbeat_at so the screens-limit check keeps
     # counting this device as active for as long as it keeps watching.
@@ -954,7 +961,7 @@ class PlaybackSessionEndRequest(BaseModel):
 
 
 class WatchHeartbeatResponse(BaseModel):
-    max_session_minutes: Decimal
+    total_watched_minutes: Decimal
     credited_this_call_rupees: Decimal
     total_creator_credited_rupees: Decimal
 

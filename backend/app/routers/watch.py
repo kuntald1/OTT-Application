@@ -21,7 +21,7 @@ from app.schemas import (
 router = APIRouter(prefix="/videos", tags=["watch"])
 
 
-def _compute_gross_revenue_paisa(session_seconds: int, tiers: list[VideoRevenueTier], fallback_rate_paisa_per_minute: int) -> int:
+def _compute_gross_revenue_paisa(session_seconds, tiers: list[VideoRevenueTier], fallback_rate_paisa_per_minute: int) -> int:
     """Graduated/tiered calculation — same logic as a progressive tax
     bracket, not a flat "whichever tier the total minutes lands in"
     lookup. Each tier only pays its own rate for the portion of the
@@ -56,7 +56,7 @@ def _compute_gross_revenue_paisa(session_seconds: int, tiers: list[VideoRevenueT
     return int(total_paisa.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def _compute_tier_breakdown_paisa(session_seconds: int, tiers: list[VideoRevenueTier], fallback_rate_paisa_per_minute: int) -> list[dict]:
+def _compute_tier_breakdown_paisa(session_seconds, tiers: list[VideoRevenueTier], fallback_rate_paisa_per_minute: int) -> list[dict]:
     """Same graduated-band logic as _compute_gross_revenue_paisa above,
     but returns the per-tier split instead of a single total — powers
     the "how did this add up" breakdown a creator can drill into on
@@ -96,6 +96,50 @@ def _compute_tier_breakdown_paisa(session_seconds: int, tiers: list[VideoRevenue
 
 
 
+def _merge_watched_range(existing_ranges: list, new_start: Decimal, new_end: Decimal) -> tuple[list, Decimal, Decimal]:
+    """Merges [new_start, new_end] into existing_ranges (a list of
+    [start, end] pairs, as loaded from VideoWatchRecord.watched_ranges
+    JSONB — plain floats, not yet Decimal). Returns
+    (merged_ranges, old_total_covered, new_total_covered) so the
+    caller can credit exactly the delta, the same "only the growth
+    counts" pattern the old max_session_seconds logic used, just
+    driven by total union coverage instead of a single running max.
+
+    Handles every case a client walkthrough raised: watching a fresh
+    stretch adds its own length; re-watching an already-covered
+    stretch (or anything a seek jumped over without playing) adds
+    nothing; resuming from a previously-reached point and continuing
+    further only credits the new tail; and watching from the start
+    over ground already covered by an earlier out-of-order session
+    (e.g. seeked to the middle first, later watched the beginning)
+    only credits the still-uncovered portion.
+    """
+    old_total = sum(Decimal(str(r[1])) - Decimal(str(r[0])) for r in existing_ranges)
+
+    if new_end <= new_start:
+        return existing_ranges, old_total, old_total
+
+    # Standard "merge a new interval into a sorted, disjoint interval
+    # list" — collect every existing range that overlaps or touches
+    # the new one, absorb them into it, keep the rest untouched.
+    merged_start, merged_end = new_start, new_end
+    result = []
+    for r in existing_ranges:
+        r_start, r_end = Decimal(str(r[0])), Decimal(str(r[1]))
+        if r_end < merged_start or r_start > merged_end:
+            result.append([r_start, r_end])
+        else:
+            merged_start = min(merged_start, r_start)
+            merged_end = max(merged_end, r_end)
+    result.append([merged_start, merged_end])
+    result.sort(key=lambda r: r[0])
+
+    new_total = sum(r[1] - r[0] for r in result)
+    # JSON-safe (float) for storage back into the JSONB column.
+    serializable = [[float(r[0]), float(r[1])] for r in result]
+    return serializable, old_total, new_total
+
+
 @router.post("/{video_id}/watch-heartbeat", response_model=WatchHeartbeatResponse)
 def watch_heartbeat(
     video_id: str,
@@ -104,11 +148,14 @@ def watch_heartbeat(
     db: Session = Depends(get_db),
 ):
     """Called periodically by the player while a video is actually
-    playing (see VideoBrowsePage.jsx's RealDetailModal). This is the
-    real implementation of the previously-missing Phase 3 piece —
-    watch-time session tracking feeding actual creator revenue,
-    replacing the old state where CreatorEarnings rows only ever moved
-    via manual SQL/seeding.
+    playing (see VideoBrowsePage.jsx's RealDetailModal, and player.js
+    wiring for the Bunny iframe path). Credits revenue for whatever
+    portion of the reported [segment_start, segment_end] stretch is
+    NEW to this viewer's watched-ranges union for this video — see
+    _merge_watched_range and VideoWatchRecord's docstring for the
+    full reasoning (this replaced the older "longest single session"
+    rule after a client walkthrough showed that rule couldn't credit
+    resuming a video across separate sessions correctly).
     """
     video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
     if not video:
@@ -129,28 +176,28 @@ def watch_heartbeat(
         .first()
     )
     if not record:
-        record = VideoWatchRecord(user_id=current_user.id, video_id=video.id)
+        record = VideoWatchRecord(user_id=current_user.id, video_id=video.id, watched_ranges=[])
         db.add(record)
         db.flush()
 
     credited_this_call_paisa = 0
 
-    # Never trust session_seconds beyond the video's own length — a
-    # legitimate continuous session can't physically exceed how long
-    # the video actually is. Without this cap, a looping video (whose
-    # player timer doesn't reset between loop iterations) or a
-    # malicious client sending an inflated number would get credited
-    # for a session far longer than anyone could have really watched —
-    # exactly what happened here: a 51-second video showing a genuine
-    # viewer's max_session_seconds at 5922 (~98.7 minutes).
-    effective_session_seconds = payload.session_seconds
+    # Never trust a reported position beyond the video's own length —
+    # same reasoning as the old cap: a looping video's player timer
+    # not resetting between loops, or a malicious client, shouldn't be
+    # able to report a position far past how long the video actually
+    # is (this is exactly what surfaced a 51-second video showing
+    # ~98.7 minutes "watched" before this cap existed).
+    segment_start = payload.segment_start_seconds
+    segment_end = payload.segment_end_seconds
     if video.duration_seconds:
-        effective_session_seconds = min(effective_session_seconds, video.duration_seconds)
+        segment_start = min(segment_start, Decimal(video.duration_seconds))
+        segment_end = min(segment_end, Decimal(video.duration_seconds))
 
-    # Only the "max single-session view" ever grows revenue — a
-    # heartbeat reporting fewer seconds than the existing best (e.g. a
-    # short re-watch) is recorded but credits nothing further.
-    if effective_session_seconds > record.max_session_seconds:
+    existing_ranges = record.watched_ranges or []
+    merged_ranges, old_total_seconds, new_total_seconds = _merge_watched_range(existing_ranges, segment_start, segment_end)
+
+    if new_total_seconds > old_total_seconds:
         tiers = (
             db.query(VideoRevenueTier)
             .filter(VideoRevenueTier.video_id == video.id)
@@ -160,7 +207,7 @@ def watch_heartbeat(
         fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
         commission_percent = rate_config.platform_commission_percent if rate_config else Decimal("20")
 
-        new_gross_paisa = _compute_gross_revenue_paisa(effective_session_seconds, tiers, fallback_rate)
+        new_gross_paisa = _compute_gross_revenue_paisa(new_total_seconds, tiers, fallback_rate)
         delta_gross_paisa = max(0, new_gross_paisa - record.gross_revenue_paisa)
 
         if delta_gross_paisa > 0:
@@ -193,7 +240,9 @@ def watch_heartbeat(
                 ))
 
         record.gross_revenue_paisa = new_gross_paisa
-        record.max_session_seconds = effective_session_seconds
+
+    record.watched_ranges = merged_ranges
+    record.max_session_seconds = int(new_total_seconds)  # legacy display column, see model docstring
 
     # Keeps this device's screens-limit slot alive for as long as it
     # keeps sending heartbeats — a stopped/closed player naturally stops
@@ -215,7 +264,7 @@ def watch_heartbeat(
     db.refresh(record)
 
     return WatchHeartbeatResponse(
-        max_session_minutes=(Decimal(record.max_session_seconds) / 60).quantize(Decimal("0.01")),
+        total_watched_minutes=(Decimal(record.max_session_seconds) / 60).quantize(Decimal("0.01")),
         credited_this_call_rupees=Decimal(credited_this_call_paisa) / 100,
         total_creator_credited_rupees=Decimal(record.creator_credited_paisa) / 100,
     )
