@@ -346,9 +346,20 @@ export default function MovixGenreAccordion({ onSelectGenre = () => {} }) {
       style={{
         background: ARCHIVE_BG,
         fontFamily: "'Geist', -apple-system, sans-serif",
-        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18), inset 50px 0 40px -35px rgba(0,0,0,0.9), inset -50px 0 40px -35px rgba(0,0,0,0.9)",
+        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18)",
       }}
     >
+      {/* Left/right edge darkening, Hotstar-hero style — a smooth
+          gradient fading to transparent, sits above the panels but
+          never blocks hover/click. */}
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 sm:w-40"
+        style={{ background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 sm:w-40"
+        style={{ background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }}
+      />
       {/* The accordion itself */}
       <div className="flex h-full w-full">
         {genres.map((genre) => {

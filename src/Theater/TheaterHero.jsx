@@ -43,9 +43,19 @@ export default function TheaterHero() {
     <section
       className={`relative w-full overflow-hidden font-[Geist,system-ui,sans-serif] ${HERO_HEIGHT_CLASS}`}
       style={{
-        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18), inset 50px 0 40px -35px rgba(0,0,0,0.9), inset -50px 0 40px -35px rgba(0,0,0,0.9)",
+        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18)",
       }}
     >
+      {/* Left/right edge darkening, Hotstar-hero style — a smooth
+          gradient fading to transparent. */}
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 sm:w-40"
+        style={{ background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 sm:w-40"
+        style={{ background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }}
+      />
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(4px); }

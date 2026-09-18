@@ -61,7 +61,7 @@ export default function PageHero({ pageKey, theme }) {
       className={`relative w-full overflow-hidden ${HERO_HEIGHT_CLASS}`}
       style={{
         fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, sans-serif",
-        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18), inset 50px 0 40px -35px rgba(0,0,0,0.9), inset -50px 0 40px -35px rgba(0,0,0,0.9)",
+        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18)",
       }}
     >
       {isVideoSequence && (
@@ -95,6 +95,18 @@ export default function PageHero({ pageKey, theme }) {
       <div className="absolute inset-0" style={{ background: theme.scrim }} />
       <div className="pointer-events-none absolute inset-0" style={{ background: theme.glow }} />
       <div className="pointer-events-none absolute inset-0" style={{ background: theme.vignette }} />
+      {/* Left/right edge darkening, Hotstar-hero style — a smooth
+          gradient fading to transparent, not a hard line or a
+          content-dependent shadow, so it reads the same regardless of
+          what's playing underneath. */}
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 w-24 sm:w-40"
+        style={{ background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 w-24 sm:w-40"
+        style={{ background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }}
+      />
 
       <div className="relative z-10 flex h-full w-full flex-col">
         <main className="mt-auto flex flex-col gap-6 px-5 pb-8 sm:gap-8 sm:px-8 sm:pb-12 lg:px-12 lg:pb-16">
