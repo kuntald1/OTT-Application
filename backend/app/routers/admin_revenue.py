@@ -421,6 +421,11 @@ def get_all_content_performance(
     uploaded video, with the creator's name attached so an admin can
     see who's generating what. All-time. creator_id, when given,
     narrows this to just that one creator's videos.
+
+    Scoped to published/disabled videos only — pending/scheduled/
+    rejected ones can never have accrued real watch time (the
+    heartbeat endpoint only credits VideoStatus.published videos), so
+    including them here would just be permanent zero-row noise.
     """
     query = (
         db.query(
@@ -432,6 +437,7 @@ def get_all_content_performance(
             func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
             func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("credited_paisa"),
         )
+        .filter(Video.status.in_([VideoStatus.published, VideoStatus.disabled]))
         .outerjoin(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
         .outerjoin(User, User.id == Video.uploaded_by_user_id)
     )

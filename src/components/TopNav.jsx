@@ -458,16 +458,6 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               >
                 Watch History
               </button>
-              {showOrganiserRequestLink && (
-                <button
-                  type="button"
-                  onClick={() => { setShowOrganiserModal(true); setMenuOpen(false); }}
-                  className="rounded-full px-4 py-2.5 text-sm font-medium"
-                  style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
-                >
-                  Request as Organiser
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => { onNavigate?.("subscription"); setMenuOpen(false); }}
@@ -1033,16 +1023,6 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, sh
         >
           Watch History
         </button>
-        {showOrganiserRequestLink && (
-          <button
-            type="button"
-            onClick={onRequestOrganiser}
-            className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
-            style={{ color: COLORS.gold }}
-          >
-            Request as Organiser
-          </button>
-        )}
         <button
           type="button"
           onClick={() => { onNavigate?.("subscription"); onClose(); }}
