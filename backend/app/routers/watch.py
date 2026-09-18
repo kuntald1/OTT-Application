@@ -170,9 +170,22 @@ def watch_heartbeat(
     if not has_access:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this video.")
 
+    # SELECT ... FOR UPDATE — serializes concurrent heartbeats for the
+    # SAME (user, video) pair (e.g. a burst from a flaky connection
+    # retrying, or genuinely overlapping requests). Without this lock,
+    # two requests can each read the row before either commits, then
+    # each write back their own (possibly stale/degenerate) merge —
+    # whichever commits last wins and can silently stomp a correct
+    # watched_ranges with an empty or smaller one, even while
+    # gross_revenue_paisa/creator_credited_paisa (protected by max()/
+    # += against the DB's last-committed value at flush time) mostly
+    # survive. Confirmed happening in practice: a record was found with
+    # watched_ranges=[] but creator_credited_paisa=135 — impossible
+    # under normal single-writer execution, only explainable by a race.
     record = (
         db.query(VideoWatchRecord)
         .filter(VideoWatchRecord.user_id == current_user.id, VideoWatchRecord.video_id == video.id)
+        .with_for_update()
         .first()
     )
     if not record:
@@ -279,6 +292,12 @@ def get_my_content_performance(
     unique viewers, total watch minutes, gross revenue generated, and
     what's actually been credited to them after commission. Scoped to
     videos the current user uploaded.
+
+    Scoped to published/disabled videos only — pending/scheduled/
+    rejected ones can never have accrued real watch time (the
+    heartbeat endpoint only credits VideoStatus.published videos), so
+    including them here would just be permanent zero-row noise (and
+    duplicate-looking rows for a title resubmitted after rejection).
     """
     rows = (
         db.query(
@@ -290,7 +309,10 @@ def get_my_content_performance(
             func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("credited_paisa"),
         )
         .outerjoin(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
-        .filter(Video.uploaded_by_user_id == current_user.id)
+        .filter(
+            Video.uploaded_by_user_id == current_user.id,
+            Video.status.in_([VideoStatus.published, VideoStatus.disabled]),
+        )
         .group_by(Video.id, Video.title)
         .order_by(func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).desc())
         .all()
