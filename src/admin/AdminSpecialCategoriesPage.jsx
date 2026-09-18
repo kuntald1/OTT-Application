@@ -35,15 +35,21 @@ export default function AdminSpecialCategoriesPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    setLoading(true);
+  // silent=true skips the loading flicker — used for every refresh
+  // AFTER the first load (e.g. after toggling a video in the picker),
+  // since flipping `loading` back to true unmounts the whole category
+  // list (including any open VideoPicker), wiping its search box and
+  // results. Only the very first mount should show "Loading…".
+  const load = (silent = false) => {
+    if (!silent) setLoading(true);
     fetchAdminSpecialCategories()
       .then(setCategories)
       .catch(() => setCategories([]))
       .finally(() => setLoading(false));
   };
+  const refresh = () => load(true);
 
-  useEffect(load, []);
+  useEffect(() => load(false), []);
 
   const datedCategories = categories.filter((c) => c.visible_from);
   const permanentCategories = categories.filter((c) => !c.visible_from);
@@ -76,9 +82,9 @@ export default function AdminSpecialCategoriesPage() {
       </div>
 
       {tab === "special" ? (
-        <SpecialCategoriesTab categories={datedCategories} loading={loading} onChanged={load} />
+        <SpecialCategoriesTab categories={datedCategories} loading={loading} onChanged={refresh} />
       ) : (
-        <SectionWiseTab categories={permanentCategories} loading={loading} onChanged={load} />
+        <SectionWiseTab categories={permanentCategories} loading={loading} onChanged={refresh} />
       )}
     </div>
   );
