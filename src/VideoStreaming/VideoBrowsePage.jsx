@@ -7,7 +7,7 @@ import { useAnimatedModal } from "../shared/useAnimatedModal";
 import Footer from "../shared/Footer";
 import DiscoveryRows from "../shared/DiscoveryRows";
 import { createWatchSegmentTracker } from "../shared/watchSegmentTracker";
-import { fetchPublishedVideos, fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
+import { fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -102,44 +102,23 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
   // Real, published videos — grouped by their ACTUAL category (from
   // the backend, video.categories), not a hardcoded string. This is
   // what makes each row's heading dynamic — it's exactly whatever the
-  // video is tagged with right now, matching Admin > Categories. A
-  // video with multiple categories appears in each of its rows.
-  const [realVideosByCategory, setRealVideosByCategory] = useState({});
-  useEffect(() => {
-    fetchPublishedVideos("play")
-      .then((videos) => {
-        const grouped = {};
-        videos.forEach((v) => {
-          const card = {
-            id: v.id,
-            title: v.title,
-            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
-            isReal: true,
-            videoId: v.id,
-            trailerUrl: v.trailer_playback_url || null,
-          };
-          (v.categories || []).forEach((cat) => {
-            if (!grouped[cat]) grouped[cat] = [];
-            grouped[cat].push(card);
-          });
-        });
-        setRealVideosByCategory(grouped);
-      })
-      .catch(() => setRealVideosByCategory({}));
-  }, []);
-
-  // Admin-curated "Special Categories" (e.g. "Sunday Special") — shown
-  // above every other row, including Continue Watching. Public, no
-  // login required (unlike Continue Watching below). The backend
-  // already filters to only currently-active (date-window, not
-  // disabled) rows for this section, so anything returned here is
-  // meant to be shown as-is.
+  // Admin-curated "Special Categories" now serve TWO purposes (same
+  // table, same endpoint — see backend/app/models.py's SpecialCategory
+  // docstring): a date-windowed banner (e.g. "Sunday Special", always
+  // shown first, above everything including Continue Watching) OR a
+  // PERMANENT hand-curated row with no end date, ordered by
+  // display_order — this is what replaced the old auto-generated
+  // per-category rows (Drama/Popular Shows/etc., grouped from every
+  // published video's categories) a client asked to remove in favor
+  // of fully admin-picked, admin-ordered rows instead.
   const [specialCategories, setSpecialCategories] = useState([]);
   useEffect(() => {
     fetchSpecialCategories("play")
       .then(setSpecialCategories)
       .catch(() => setSpecialCategories([]));
   }, []);
+  const datedSpecials = specialCategories.filter((sc) => sc.visible_from);
+  const permanentSpecials = specialCategories.filter((sc) => !sc.visible_from);
 
   // "Continue Watching" — real, from WatchProgress, not a demo. Only
   // fetched when logged in (the endpoint requires auth anyway).
@@ -210,7 +189,7 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
   return (
     <div style={{ background: T.pageBg, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
-        {specialCategories.map((sc) => (
+        {datedSpecials.map((sc) => (
           <GenreRow
             key={sc.id}
             category={sc.title}
@@ -228,8 +207,20 @@ export default function VideoBrowsePage({ onOpenPerson, onNavigate, openVideoId 
         {recommended.length > 0 && (
           <GenreRow category="Recommended for You" cards={recommended} onSelect={handleSelectCard} />
         )}
-        {Object.entries(realVideosByCategory).map(([category, cards]) => (
-          <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} />
+        {permanentSpecials.map((sc) => (
+          <GenreRow
+            key={sc.id}
+            category={sc.title}
+            cards={sc.videos.map((v) => ({
+              id: v.id,
+              title: v.title,
+              poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+              isReal: true,
+              videoId: v.id,
+              trailerUrl: v.trailer_playback_url || null,
+            }))}
+            onSelect={handleSelectCard}
+          />
         ))}
         {continueWatching.length > 0 && (
           <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />

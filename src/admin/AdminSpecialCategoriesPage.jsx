@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Sparkles, Plus, Check, EyeOff, Eye, Trash2, X, Pencil } from "lucide-react";
+import { Sparkles, Plus, Check, EyeOff, Eye, Trash2, X, Pencil, Search } from "lucide-react";
 import {
   createAdminSpecialCategory, fetchAdminSpecialCategories, updateAdminSpecialCategory,
   toggleAdminSpecialCategoryDisabled, deleteAdminSpecialCategory,
   addVideoToAdminSpecialCategory, removeVideoFromAdminSpecialCategory,
-  fetchAdminVideos, fetchAdminUsers,
+  fetchAdminVideos, fetchAdminUsers, searchAdminVideosForSpecialCategory,
 } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
@@ -28,8 +28,10 @@ export default function AdminSpecialCategoriesPage() {
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
+  const [alwaysVisible, setAlwaysVisible] = useState(true);
   const [visibleFrom, setVisibleFrom] = useState("");
   const [visibleTo, setVisibleTo] = useState("");
+  const [displayOrder, setDisplayOrder] = useState(0);
   const [section, setSection] = useState("play");
   const [creating, setCreating] = useState(false);
 
@@ -38,8 +40,10 @@ export default function AdminSpecialCategoriesPage() {
 
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editAlwaysVisible, setEditAlwaysVisible] = useState(true);
   const [editVisibleFrom, setEditVisibleFrom] = useState("");
   const [editVisibleTo, setEditVisibleTo] = useState("");
+  const [editDisplayOrder, setEditDisplayOrder] = useState(0);
   const [editSection, setEditSection] = useState("play");
   const [saving, setSaving] = useState(false);
 
@@ -54,12 +58,19 @@ export default function AdminSpecialCategoriesPage() {
   useEffect(load, []);
 
   const handleCreate = async () => {
-    if (!title.trim() || !visibleFrom || !visibleTo) return;
+    if (!title.trim()) return;
+    if (!alwaysVisible && (!visibleFrom || !visibleTo)) return;
     setError("");
     setCreating(true);
     try {
-      await createAdminSpecialCategory(title.trim(), visibleFrom, visibleTo, section);
-      setTitle(""); setVisibleFrom(""); setVisibleTo(""); setSection("play");
+      await createAdminSpecialCategory({
+        title: title.trim(),
+        visibleFrom: alwaysVisible ? null : visibleFrom,
+        visibleTo: alwaysVisible ? null : visibleTo,
+        displayOrder: Number(displayOrder) || 0,
+        section,
+      });
+      setTitle(""); setVisibleFrom(""); setVisibleTo(""); setDisplayOrder(0); setSection("play"); setAlwaysVisible(true);
       setShowCreateForm(false);
       load();
     } catch (err) {
@@ -99,18 +110,27 @@ export default function AdminSpecialCategoriesPage() {
   const startEdit = (c) => {
     setEditingId(c.id);
     setEditTitle(c.title);
-    setEditVisibleFrom(c.visible_from);
-    setEditVisibleTo(c.visible_to);
+    setEditAlwaysVisible(!c.visible_from);
+    setEditVisibleFrom(c.visible_from || "");
+    setEditVisibleTo(c.visible_to || "");
+    setEditDisplayOrder(c.display_order || 0);
     setEditSection(c.section);
   };
 
   const handleSaveEdit = async () => {
-    if (!editTitle.trim() || !editVisibleFrom || !editVisibleTo) return;
+    if (!editTitle.trim()) return;
+    if (!editAlwaysVisible && (!editVisibleFrom || !editVisibleTo)) return;
     setError("");
     setSaving(true);
     try {
       await updateAdminSpecialCategory(editingId, {
-        title: editTitle.trim(), visible_from: editVisibleFrom, visible_to: editVisibleTo, section: editSection,
+        title: editTitle.trim(),
+        visible_from: editAlwaysVisible ? null : editVisibleFrom,
+        visible_to: editAlwaysVisible ? null : editVisibleTo,
+        clear_visible_from: editAlwaysVisible,
+        clear_visible_to: editAlwaysVisible,
+        display_order: Number(editDisplayOrder) || 0,
+        section: editSection,
       });
       setEditingId(null);
       load();
@@ -129,8 +149,9 @@ export default function AdminSpecialCategoriesPage() {
             <Sparkles className="h-5 w-5" style={{ color: COLORS.gold }} /> Special Categories
           </h1>
           <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-            A curated row (e.g. "Sunday Special") that shows above every other row on Play/Archive, only
-            between the dates you set — it disappears on its own after the end date, no cleanup needed.
+            A curated row on Play/Archive, hand-picked and ordered by you. Leave it "Always visible" for a
+            permanent row (e.g. replacing an auto-generated genre row) — or set dates for a temporary
+            banner (e.g. "Sunday Special") that disappears on its own after the end date.
           </p>
         </div>
         <button
@@ -154,7 +175,7 @@ export default function AdminSpecialCategoriesPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label style={labelStyle}>Title</label>
-              <input type="text" placeholder="e.g. Sunday Special" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
+              <input type="text" placeholder="e.g. Drama or Sunday Special" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Visible In</label>
@@ -165,18 +186,32 @@ export default function AdminSpecialCategoriesPage() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Visible From</label>
-              <input type="date" value={visibleFrom} onChange={(e) => setVisibleFrom(e.target.value)} style={inputStyle} />
+              <label style={labelStyle}>Order (lower shows first)</label>
+              <input type="number" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} style={inputStyle} />
             </div>
-            <div>
-              <label style={labelStyle}>Visible To</label>
-              <input type="date" value={visibleTo} onChange={(e) => setVisibleTo(e.target.value)} style={inputStyle} />
+            <div className="flex items-end pb-1.5">
+              <label className="flex cursor-pointer items-center gap-2 text-xs" style={{ color: "rgba(245,235,221,0.7)" }}>
+                <input type="checkbox" checked={alwaysVisible} onChange={(e) => setAlwaysVisible(e.target.checked)} className="h-4 w-4" />
+                Always visible (no end date)
+              </label>
             </div>
+            {!alwaysVisible && (
+              <>
+                <div>
+                  <label style={labelStyle}>Visible From</label>
+                  <input type="date" value={visibleFrom} onChange={(e) => setVisibleFrom(e.target.value)} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Visible To</label>
+                  <input type="date" value={visibleTo} onChange={(e) => setVisibleTo(e.target.value)} style={inputStyle} />
+                </div>
+              </>
+            )}
           </div>
           <button
             type="button"
             onClick={handleCreate}
-            disabled={creating || !title.trim() || !visibleFrom || !visibleTo}
+            disabled={creating || !title.trim() || (!alwaysVisible && (!visibleFrom || !visibleTo))}
             className="mt-3 rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: COLORS.gold, color: "#0a0104" }}
           >
@@ -209,19 +244,33 @@ export default function AdminSpecialCategoriesPage() {
                       </select>
                     </div>
                     <div>
-                      <label style={labelStyle}>Visible From</label>
-                      <input type="date" value={editVisibleFrom} onChange={(e) => setEditVisibleFrom(e.target.value)} style={inputStyle} />
+                      <label style={labelStyle}>Order (lower shows first)</label>
+                      <input type="number" value={editDisplayOrder} onChange={(e) => setEditDisplayOrder(e.target.value)} style={inputStyle} />
                     </div>
-                    <div>
-                      <label style={labelStyle}>Visible To</label>
-                      <input type="date" value={editVisibleTo} onChange={(e) => setEditVisibleTo(e.target.value)} style={inputStyle} />
+                    <div className="flex items-end pb-1.5">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs" style={{ color: "rgba(245,235,221,0.7)" }}>
+                        <input type="checkbox" checked={editAlwaysVisible} onChange={(e) => setEditAlwaysVisible(e.target.checked)} className="h-4 w-4" />
+                        Always visible (no end date)
+                      </label>
                     </div>
+                    {!editAlwaysVisible && (
+                      <>
+                        <div>
+                          <label style={labelStyle}>Visible From</label>
+                          <input type="date" value={editVisibleFrom} onChange={(e) => setEditVisibleFrom(e.target.value)} style={inputStyle} />
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Visible To</label>
+                          <input type="date" value={editVisibleTo} onChange={(e) => setEditVisibleTo(e.target.value)} style={inputStyle} />
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
                       onClick={handleSaveEdit}
-                      disabled={saving || !editTitle.trim() || !editVisibleFrom || !editVisibleTo}
+                      disabled={saving || !editTitle.trim() || (!editAlwaysVisible && (!editVisibleFrom || !editVisibleTo))}
                       className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                       style={{ background: COLORS.gold, color: "#0a0104" }}
                     >
@@ -242,7 +291,7 @@ export default function AdminSpecialCategoriesPage() {
                 <div>
                   <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{c.title}</p>
                   <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                    {c.visible_from} → {c.visible_to} · {c.section} · {c.video_count} video{c.video_count === 1 ? "" : "s"}
+                    {c.visible_from ? `${c.visible_from} → ${c.visible_to}` : `Always visible · Order ${c.display_order}`} · {c.section} · {c.video_count} video{c.video_count === 1 ? "" : "s"}
                     {c.is_disabled && <span style={{ color: "#f87171" }}> · Disabled</span>}
                   </p>
                 </div>
@@ -308,12 +357,23 @@ export default function AdminSpecialCategoriesPage() {
   );
 }
 
+const MATCH_LABELS = { title: "title", cast: "cast", crew: "crew", organiser: "organiser" };
+
 function VideoPicker({ category, onChanged }) {
   const [allVideos, setAllVideos] = useState([]);
   const [creators, setCreators] = useState([]);
   const [creatorFilter, setCreatorFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(null);
+
+  // Free-text search across title/cast/crew/organiser name (see
+  // search-videos on the backend) — a curator thinking "that
+  // Bohurupee play with the piano" shouldn't need to know in advance
+  // whether that's a title, cast, or organiser match. Debounced so it
+  // doesn't fire on every keystroke.
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null); // null = not searching, [] = no matches
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -326,19 +386,35 @@ function VideoPicker({ category, onChanged }) {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setSearchResults(null);
+      return;
+    }
+    setSearching(true);
+    const handle = setTimeout(() => {
+      searchAdminVideosForSpecialCategory(q)
+        .then(setSearchResults)
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [query]);
+
   const selectedIds = new Set(category.videos.map((v) => v.id));
 
   const visibleVideos = creatorFilter
     ? allVideos.filter((v) => v.uploaded_by_name === creatorFilter)
     : allVideos;
 
-  const handleToggle = async (video) => {
-    setToggling(video.id);
+  const handleToggle = async (videoId) => {
+    setToggling(videoId);
     try {
-      if (selectedIds.has(video.id)) {
-        await removeVideoFromAdminSpecialCategory(category.id, video.id);
+      if (selectedIds.has(videoId)) {
+        await removeVideoFromAdminSpecialCategory(category.id, videoId);
       } else {
-        await addVideoToAdminSpecialCategory(category.id, video.id);
+        await addVideoToAdminSpecialCategory(category.id, videoId);
       }
       onChanged();
     } catch (err) {
@@ -348,38 +424,85 @@ function VideoPicker({ category, onChanged }) {
     }
   };
 
+  const isSearchActive = query.trim().length >= 2;
+
   return (
     <div className="mt-3 rounded-lg p-3" style={{ background: "rgba(245,235,221,0.03)", border: "1px solid rgba(245,235,221,0.08)" }}>
-      <div className="mb-2 flex items-center gap-2">
-        <label className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Filter by creator:</label>
-        <select value={creatorFilter} onChange={(e) => setCreatorFilter(e.target.value)} className="rounded-lg border bg-transparent px-2 py-1 text-xs" style={{ borderColor: "rgba(245,235,221,0.15)", color: COLORS.cream }}>
-          <option value="" style={{ background: COLORS.panel }}>All creators</option>
-          {creators.map((c) => (
-            <option key={c.id} value={c.name} style={{ background: COLORS.panel }}>{c.name}</option>
-          ))}
-        </select>
+      <div className="mb-2 flex items-center gap-2 rounded-lg border px-2.5 py-1.5" style={{ borderColor: "rgba(245,235,221,0.15)" }}>
+        <Search className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "rgba(245,235,221,0.4)" }} />
+        <input
+          type="text"
+          placeholder="Search by title, cast, crew, or organiser name…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full bg-transparent text-xs outline-none"
+          style={{ color: COLORS.cream }}
+        />
+        {query && (
+          <button type="button" onClick={() => setQuery("")} className="flex-shrink-0">
+            <X className="h-3.5 w-3.5" style={{ color: "rgba(245,235,221,0.4)" }} />
+          </button>
+        )}
       </div>
 
-      {loading ? (
-        <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading videos…</p>
-      ) : visibleVideos.length === 0 ? (
-        <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No published videos found.</p>
+      {isSearchActive ? (
+        searching ? (
+          <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Searching…</p>
+        ) : searchResults && searchResults.length === 0 ? (
+          <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No matches.</p>
+        ) : (
+          <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+            {(searchResults || []).map((v) => (
+              <label key={v.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(v.id)}
+                  disabled={toggling === v.id}
+                  onChange={() => handleToggle(v.id)}
+                  className="h-4 w-4"
+                />
+                <span className="text-xs" style={{ color: COLORS.cream }}>{v.title}</span>
+                <span className="text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+                  — {v.organiser_name || "Unknown"} · matched: {MATCH_LABELS[v.matched_on] || v.matched_on}
+                </span>
+              </label>
+            ))}
+          </div>
+        )
       ) : (
-        <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-          {visibleVideos.map((v) => (
-            <label key={v.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
-              <input
-                type="checkbox"
-                checked={selectedIds.has(v.id)}
-                disabled={toggling === v.id}
-                onChange={() => handleToggle(v)}
-                className="h-4 w-4"
-              />
-              <span className="text-xs" style={{ color: COLORS.cream }}>{v.title}</span>
-              <span className="text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>— {v.uploaded_by_name}</span>
-            </label>
-          ))}
-        </div>
+        <>
+          <div className="mb-2 flex items-center gap-2">
+            <label className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Filter by creator:</label>
+            <select value={creatorFilter} onChange={(e) => setCreatorFilter(e.target.value)} className="rounded-lg border bg-transparent px-2 py-1 text-xs" style={{ borderColor: "rgba(245,235,221,0.15)", color: COLORS.cream }}>
+              <option value="" style={{ background: COLORS.panel }}>All creators</option>
+              {creators.map((c) => (
+                <option key={c.id} value={c.name} style={{ background: COLORS.panel }}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {loading ? (
+            <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading videos…</p>
+          ) : visibleVideos.length === 0 ? (
+            <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No published videos found.</p>
+          ) : (
+            <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+              {visibleVideos.map((v) => (
+                <label key={v.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(v.id)}
+                    disabled={toggling === v.id}
+                    onChange={() => handleToggle(v.id)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-xs" style={{ color: COLORS.cream }}>{v.title}</span>
+                  <span className="text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>— {v.uploaded_by_name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

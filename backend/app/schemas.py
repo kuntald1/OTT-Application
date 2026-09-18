@@ -261,15 +261,28 @@ class AdminUserToggleRequest(BaseModel):
 
 class SpecialCategoryCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
-    visible_from: date
-    visible_to: date
+    # Both optional — leave both unset for a PERMANENT curated row
+    # (no date window at all); set both for a "Sunday Special"-style
+    # temporary one that disappears on its own after visible_to.
+    visible_from: Optional[date] = None
+    visible_to: Optional[date] = None
+    display_order: int = 0
     section: str = Field(default="play")  # "play" | "archive" | "both"
+    # Optional — lets the create form seed the row with videos in one
+    # call instead of a create-then-N-add-video round trips.
+    video_ids: List[uuid.UUID] = []
 
 
 class SpecialCategoryUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     visible_from: Optional[date] = None
     visible_to: Optional[date] = None
+    # Explicit clear flags — Optional[date]=None on its own can't tell
+    # "leave unchanged" apart from "clear this date back to permanent",
+    # since both look identical (absent) in a partial-update payload.
+    clear_visible_from: bool = False
+    clear_visible_to: bool = False
+    display_order: Optional[int] = None
     section: Optional[str] = None
 
 
@@ -288,12 +301,29 @@ class SpecialCategoryVideoCardOut(BaseModel):
 class SpecialCategoryOut(BaseModel):
     id: uuid.UUID
     title: str
-    visible_from: date
-    visible_to: date
+    visible_from: Optional[date] = None
+    visible_to: Optional[date] = None
+    display_order: int = 0
     section: str
     is_disabled: bool
     video_count: int
     videos: List[SpecialCategoryVideoCardOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class AdminVideoSearchResultOut(BaseModel):
+    """Powers the "search by title, cast, crew, or organiser name"
+    video picker in Special Categories' Manage Videos screen — a
+    single free-text box instead of separate filters, since a curator
+    thinking "that Bohurupee play with the piano" shouldn't need to
+    know in advance whether that's a title, cast, or organiser match.
+    """
+    id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    organiser_name: Optional[str] = None
+    matched_on: str  # "title" | "cast" | "crew" | "organiser" — which field matched, for the picker to show as a hint
 
     model_config = {"from_attributes": True}
 

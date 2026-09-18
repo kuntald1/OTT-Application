@@ -590,12 +590,23 @@ export function deleteAdminLiveStream(liveStreamId) {
 
 // --- Special Categories (admin-curated featured rows) ---
 
-export function createAdminSpecialCategory(title, visibleFrom, visibleTo, section) {
+export function createAdminSpecialCategory({ title, visibleFrom, visibleTo, displayOrder = 0, section, videoIds = [] }) {
   return request(`/admin/special-categories`, {
     method: "POST",
     auth: true,
-    body: { title, visible_from: visibleFrom, visible_to: visibleTo, section },
+    body: {
+      title,
+      visible_from: visibleFrom || null,
+      visible_to: visibleTo || null,
+      display_order: displayOrder,
+      section,
+      video_ids: videoIds,
+    },
   });
+}
+
+export function searchAdminVideosForSpecialCategory(q) {
+  return request(`/admin/special-categories/search-videos?q=${encodeURIComponent(q)}`, { auth: true });
 }
 
 export function fetchAdminSpecialCategories() {

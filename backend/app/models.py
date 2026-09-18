@@ -1347,20 +1347,34 @@ class LiveStreamStatus(str, enum.Enum):
 class SpecialCategory(Base):
     """An admin-curated featured row (e.g. "Sunday Special") that shows
     at the very top of the Play and/or Archive page — above every
-    other row — only while today falls within [visible_from,
-    visible_to]. Outside that window (or while is_disabled), it's
-    simply not returned by the public listing endpoint, so no
-    separate cron/cleanup job is needed — visibility is computed at
-    read time from the current date. Delete removes it and its video
-    links entirely; is_disabled is the softer "hide without deleting"
-    toggle, same End-vs-Delete distinction used for live streams.
+    other row (except Recommended for You / Continue Watching, which
+    always come first — see VideoBrowsePage.jsx). visible_from/
+    visible_to are now OPTIONAL: set both for a date-windowed special
+    that disappears on its own after the end date; leave both null for
+    a PERMANENT curated section (the "no Visible From/To" case a
+    client specifically asked for, so plain category rows like
+    "Drama"/"Popular Shows" could be replaced by hand-curated,
+    manually-ordered ones instead of auto-generated-by-category rows).
+    Either way, no separate cron/cleanup job is needed — visibility is
+    computed at read time from the current date.
+
+    display_order controls where among the OTHER permanent/curated
+    rows (not counting Recommended for You / Continue Watching /
+    Popular Languages / Studios, which are fixed) this one sits —
+    ascending, so 1 shows before 2. Date-windowed specials ignore this
+    and always render first, same as before.
+
+    Delete removes it and its video links entirely; is_disabled is the
+    softer "hide without deleting" toggle, same End-vs-Delete
+    distinction used for live streams.
     """
     __tablename__ = "special_categories"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(200), nullable=False)
-    visible_from = Column(Date, nullable=False)
-    visible_to = Column(Date, nullable=False)
+    visible_from = Column(Date, nullable=True)
+    visible_to = Column(Date, nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
     section = Column(Enum(VideoSection), nullable=False, default=VideoSection.play)
     is_disabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
