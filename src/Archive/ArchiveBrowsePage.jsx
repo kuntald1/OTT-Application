@@ -1,59 +1,34 @@
-import React, { useState } from "react";
-import { ChevronRight, Play, Plus, Check, X, Volume2, VolumeX, Star } from "lucide-react";
-import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
+import React, { useEffect, useState } from "react";
+import { NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
-import { pickCast, pickCrew } from "../shared/peopleData";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
-
-import archive1 from "./assets/posters/archive-1.jpg";
-import archive2 from "./assets/posters/archive-2.jpg";
-import archive3 from "./assets/posters/archive-3.jpg";
-import archive4 from "./assets/posters/archive-4.jpg";
-import archive5 from "./assets/posters/archive-5.jpg";
-import archive6 from "./assets/posters/archive-6.jpg";
+import DiscoveryRows from "../shared/DiscoveryRows";
+import { fetchContinueWatching, fetchRecommendedForMe, fetchSpecialCategories } from "../api";
+import { GenreRow, RealDetailModal } from "../VideoStreaming/VideoBrowsePage";
 
 // ---------------------------------------------------------------------------
-// Archive's own Browse feed — same genre-row layout as the other three
-// sections, but with its OWN poster pool (src/Archive/assets/posters/,
-// separate from src/assets/posters/ used by Video Streaming) and its own
-// content pool, framed as old/vintage theatre recordings rather than new
-// uploads.
+// Archive's own Browse feed — now REAL data (previously fake/demo cards
+// with invented titles/years, never wired to the actual catalog). Mirrors
+// Play's exact pattern (see VideoStreaming/VideoBrowsePage.jsx): dated
+// Special Categories banner first, then Recommended for You, then
+// permanent hand-curated "Section Wise Video" rows (replacing what would
+// otherwise have been auto-generated genre rows — a client explicitly
+// asked for hand-picked/ordered rows instead, same as Play), then
+// Continue Watching, then Popular Languages/Studios via DiscoveryRows.
+// If nothing has been curated for Archive yet, only Recommended for You /
+// Continue Watching / Popular Languages / Studios show — never an
+// auto-generated category row.
+//
+// Real playback/detail modal is the SAME shared component Play and
+// Category pages use (RealDetailModal — ads, revenue tracking, resume,
+// subtitles all included), not a separate demo modal.
 // ---------------------------------------------------------------------------
 
-// Archive-only palette — deliberately NOT the shared burgundy COLORS.black
-// used everywhere else on the site. This section is "old, vintage footage",
-// so it gets a warm, aged sepia-bronze tone instead, like old film stock or
-// an antique photograph, rather than the theatre-curtain red used elsewhere.
+// Archive-only palette — kept exactly as before: a warm, aged sepia-bronze
+// tone (old film stock) instead of the burgundy used elsewhere, since this
+// section is framed as archival/vintage footage.
 const ARCHIVE_BG = "#4A2A0A";
-const ARCHIVE_SURFACE = "#6B4419";
-// A repeating diagonal sheen — the exact amber/bronze tones from the
-// reference photo, running through the page like light catching brushed
-// metal, tiled so it reads consistently no matter how tall the page gets.
 const ARCHIVE_TEXTURE = `linear-gradient(180deg, ${ARCHIVE_BG} 0%, ${ARCHIVE_BG} 10%, #6B4419 22%, #B8792E 38%, #D4A244 46%, #B8792E 54%, #6B4419 68%, ${ARCHIVE_BG} 82%, ${ARCHIVE_BG} 100%)`;
-
-const T = {
-  pageBg: ARCHIVE_BG,
-  border: "rgba(255,255,255,0.08)",
-  text: "#FFFFFF",
-  textMuted: "rgba(255,255,255,0.7)",
-  textFaint: "rgba(255,255,255,0.5)",
-  textFainter: "rgba(255,255,255,0.4)",
-  modalSurface: ARCHIVE_SURFACE,
-  modalOverlay: "rgba(0,0,0,0.7)",
-};
-
-const POSTER_POOL = [archive1, archive2, archive3, archive4, archive5, archive6];
-
-const TITLE_POOL = [
-  "The Tram Conductor's Daughter — 1998 Recording", "An Evening at the Academy, 1985",
-  "Letters from Chowringhee — Original Cast, 1992", "The Last Rehearsal — Archival Print",
-  "Songs of the Hooghly — Restored, 2001", "A House on College Street — 1979",
-  "Monsoon Diaries — Founders' Run, 1988", "Voices of the Old City — Rare Broadcast",
-  "The Red Courtyard — Silver Jubilee Show", "Midnight at Rabindra Sadan, 1994",
-  "The Understudy's Night — Archive Cut", "Faces of the Footlights — 1970s Reel",
-];
-
-const CATEGORIES = ["Classic Performances", "Vintage Recordings", "Restored Footage", "Historical Highlights", "Rare Footage"];
 
 function hashStr(s) {
   let h = 0;
@@ -61,38 +36,75 @@ function hashStr(s) {
   return h;
 }
 
-function formatDuration(min) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${h}h ${m.toString().padStart(2, "0")}m`;
-}
+const FALLBACK_GRADIENTS = [
+  "linear-gradient(135deg, #3a1a1a, #1a0a0a)",
+  "linear-gradient(135deg, #1a2a3a, #0a141a)",
+  "linear-gradient(135deg, #2a1a3a, #140a1a)",
+];
 
-const CERTS = ["UA13+", "UA16+"];
-
-function buildArchiveCard(category, i) {
-  const title = TITLE_POOL[hashStr(category + i) % TITLE_POOL.length];
-  const h = hashStr(category + "::" + title + i);
-  const durationMin = 70 + (h % 80); // ~1h10m to ~2h30m
-  const seed = `archive-${category}-${i}`;
+function toCard(v) {
   return {
-    id: seed,
-    title,
-    category,
-    poster: POSTER_POOL[h % POSTER_POOL.length],
-    duration: formatDuration(durationMin),
-    year: 1975 + (h % 40), // 1975–2014 — genuinely old footage
-    rating: (7 + ((h % 28) / 10)).toFixed(1),
-    cert: CERTS[h % CERTS.length],
-    genres: [category, CATEGORIES[(h >>> 3) % CATEGORIES.length]].filter((g, idx, arr) => arr.indexOf(g) === idx),
-    description: "Digitized from theomy's archive. Original footage restored for streaming — no new production behind this demo card.",
-    cast: pickCast(seed, 3),
-    crew: pickCrew(seed),
+    id: v.id,
+    title: v.title,
+    poster: v.poster_image_url || v.thumbnail_url || FALLBACK_GRADIENTS[hashStr(v.id) % FALLBACK_GRADIENTS.length],
+    isReal: true,
+    videoId: v.id,
+    trailerUrl: v.trailer_playback_url || null,
   };
 }
 
 export default function ArchiveBrowsePage({ onNavigate, onOpenPerson }) {
-  const modal = useAnimatedModal();
   const { isLoggedIn, requestLogin } = useApp();
+  const modal = useAnimatedModal();
+
+  // Admin-curated "Special Categories" — dated ones (e.g. a temporary
+  // banner) always render first, above everything; permanent ones
+  // (no end date — "Section Wise Video" in Admin) sit where an
+  // auto-generated category row would have gone. See
+  // backend/app/models.py's SpecialCategory docstring.
+  const [specialCategories, setSpecialCategories] = useState([]);
+  useEffect(() => {
+    fetchSpecialCategories("archive")
+      .then(setSpecialCategories)
+      .catch(() => setSpecialCategories([]));
+  }, []);
+  const datedSpecials = specialCategories.filter((sc) => sc.visible_from);
+  const permanentSpecials = specialCategories.filter((sc) => !sc.visible_from);
+
+  const [recommended, setRecommended] = useState([]);
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setRecommended([]);
+      return;
+    }
+    fetchRecommendedForMe()
+      .then((videos) => setRecommended(videos.map(toCard)))
+      .catch(() => setRecommended([]));
+  }, [isLoggedIn]);
+
+  const [continueWatching, setContinueWatching] = useState([]);
+  const loadContinueWatching = () => {
+    if (!isLoggedIn) {
+      setContinueWatching([]);
+      return;
+    }
+    fetchContinueWatching("archive")
+      .then((rows) =>
+        setContinueWatching(
+          rows.map((v) => ({
+            id: v.video_id,
+            title: v.title,
+            poster: v.poster_image_url || v.thumbnail_url || FALLBACK_GRADIENTS[hashStr(v.video_id) % FALLBACK_GRADIENTS.length],
+            isReal: true,
+            videoId: v.video_id,
+            progressPercent: v.progress_percent,
+            trailerUrl: v.trailer_playback_url || null,
+          }))
+        )
+      )
+      .catch(() => setContinueWatching([]));
+  };
+  useEffect(loadContinueWatching, [isLoggedIn]);
 
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
@@ -114,328 +126,31 @@ export default function ArchiveBrowsePage({ onNavigate, onOpenPerson }) {
       }}
     >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
-        {CATEGORIES.map((category) => {
-          const cards = Array.from({ length: 6 }, (_, i) => buildArchiveCard(category, i));
-          return <GenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} />;
-        })}
+        {datedSpecials.map((sc) => (
+          <GenreRow key={sc.id} category={sc.title} cards={sc.videos.map(toCard)} onSelect={handleSelectCard} />
+        ))}
+        {recommended.length > 0 && (
+          <GenreRow category="Recommended for You" cards={recommended} onSelect={handleSelectCard} />
+        )}
+        {permanentSpecials.map((sc) => (
+          <GenreRow key={sc.id} category={sc.title} cards={sc.videos.map(toCard)} onSelect={handleSelectCard} />
+        ))}
+        {continueWatching.length > 0 && (
+          <GenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} />
+        )}
       </main>
 
-      <footer className="px-6 py-12 sm:px-10" style={{ borderTop: `1px solid ${T.border}` }}>
-        <p className="text-sm font-semibold" style={{ color: T.text }}>theomy Archive</p>
-        <p className="mt-1 text-xs" style={{ color: T.textFaint }}>Old stages, kept alive.</p>
-        <p className="mt-4 text-xs" style={{ color: T.textFainter }}>
-          Archive is a demo concept within theomy. Titles and years are fictional; poster art is originally generated, not licensed photography or real archival footage.
-        </p>
-      </footer>
+      <DiscoveryRows section="archive" onNavigate={onNavigate} />
 
-      {modal.item && <DetailModal card={modal.item} closing={modal.closing} onClose={modal.close} onOpenPerson={onOpenPerson} onNavigate={onNavigate} />}
-    </div>
-  );
-}
-
-function useReveal() {
-  const ref = React.useRef(null);
-  const [visible, setVisible] = useState(false);
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.unobserve(el);
-        }
-      },
-      { threshold: 0.15 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, visible];
-}
-
-function GenreRow({ category, cards, onSelect }) {
-  const [ref, visible] = useReveal();
-  const scrollerRef = React.useRef(null);
-  const drag = React.useRef({ active: false, startX: 0, startScroll: 0, moved: false });
-
-  const onMouseDown = (e) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    drag.current = { active: true, startX: e.pageX, startScroll: el.scrollLeft, moved: false };
-    el.style.cursor = "grabbing";
-    el.style.scrollSnapType = "none"; // disable snap while dragging — it was fighting each mousemove tick, causing jerk
-  };
-  const onMouseMove = (e) => {
-    const el = scrollerRef.current;
-    if (!el || !drag.current.active) return;
-    e.preventDefault();
-    const dx = e.pageX - drag.current.startX;
-    if (Math.abs(dx) > 4) drag.current.moved = true;
-    el.scrollLeft = drag.current.startScroll - dx;
-  };
-  const endDrag = () => {
-    const el = scrollerRef.current;
-    if (el) {
-      el.style.cursor = "grab";
-      el.style.scrollSnapType = "x mandatory"; // re-enable snap once released, so the row still settles cleanly
-    }
-    drag.current.active = false;
-  };
-  const onCardClick = (card) => {
-    if (drag.current.moved) {
-      drag.current.moved = false;
-      return;
-    }
-    onSelect(card);
-  };
-
-  return (
-    <section
-      ref={ref}
-      className="mb-12 transition-all duration-700 ease-out"
-      style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(28px)" }}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="group flex cursor-default items-center gap-1.5 text-2xl font-semibold" style={{ color: T.text }}>
-          <span className="h-4 w-1 rounded-full" style={{ background: `linear-gradient(180deg, ${COLORS.gold}, #B8792E, #6B4419)` }} />
-          {category}
-          <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" style={{ color: T.textFaint }} />
-        </h2>
-        <span className="text-xs" style={{ color: T.textFainter }}>{cards.length} titles</span>
-      </div>
-
-      <div className="relative">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 sm:w-12"
-          style={{ background: `linear-gradient(90deg, ${T.pageBg} 0%, transparent 100%)` }}
+      {modal.item && (
+        <RealDetailModal
+          card={modal.item}
+          closing={modal.closing}
+          onClose={modal.close}
+          onNavigate={onNavigate}
+          onSelectRelated={(relatedCard) => modal.open(relatedCard)}
         />
-        <div
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 sm:w-32"
-          style={{ background: `linear-gradient(270deg, ${T.pageBg} 15%, transparent 100%)` }}
-        />
-
-        <div
-          ref={scrollerRef}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={endDrag}
-          onMouseLeave={endDrag}
-          className="flex select-none gap-4 overflow-x-auto pb-3 pr-20 sm:pr-32 [scroll-snap-type:x_mandatory] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          style={{ cursor: "grab" }}
-        >
-          {cards.map((card, i) => (
-            <button
-              type="button"
-              key={i}
-              onClick={() => onCardClick(card)}
-              className="group relative w-64 flex-shrink-0 text-left transition-all duration-300 hover:-translate-y-1.5 sm:w-72"
-              style={{ transitionDelay: visible ? `${i * 60}ms` : "0ms", scrollSnapAlign: "start" }}
-            >
-              <div
-                className="relative aspect-video overflow-hidden rounded-xl transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl"
-                style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.06)" }}
-              >
-                <img
-                  src={card.poster}
-                  alt=""
-                  draggable={false}
-                  className="absolute inset-0 h-full w-full object-cover grayscale-[15%] transition-transform duration-500 group-hover:scale-110"
-                />
-                <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-              </div>
-              <p className="mt-2.5 truncate text-sm font-medium transition-colors duration-200" style={{ color: T.text }}>{card.title}</p>
-              <p className="text-xs" style={{ color: T.textFaint }}>
-                {card.year} · {card.duration}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
-  const [muted, setMuted] = useState(true);
-  const [entered, setEntered] = useState(false);
-  const { isLoggedIn, isSubscribed, requestLogin, isInList, toggleListItem } = useApp();
-  const saved = isInList(card.id);
-
-  React.useEffect(() => {
-    const raf = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  const shown = entered && !closing;
-
-  const requireSubscription = (fn) => (...args) => {
-    if (!isLoggedIn) {
-      requestLogin();
-      return;
-    }
-    if (!isSubscribed) {
-      onClose();
-      onNavigate?.("subscription");
-      return;
-    }
-    fn(...args);
-  };
-
-  const handleAddToList = requireSubscription(() => {
-    toggleListItem({
-      id: card.id,
-      title: card.title,
-      image: card.poster,
-      meta: `${card.year} · ${card.duration}`,
-      section: "Archive",
-    });
-  });
-
-  const handlePlay = requireSubscription(() => {});
-
-  const handlePersonClick = requireSubscription((personId) => {
-    onClose();
-    onOpenPerson?.(personId);
-  });
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: T.modalOverlay, opacity: shown ? 1 : 0, backdropFilter: shown ? "blur(6px)" : "blur(0px)", WebkitBackdropFilter: shown ? "blur(6px)" : "blur(0px)", transition: "opacity 320ms ease, backdrop-filter 320ms ease" }}
-      onClick={onClose}
-    >
-      <style>{`
-        .archive-modal-scroll::-webkit-scrollbar { display: none; }
-        .archive-modal-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
-      <div
-        className="archive-modal-scroll w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{
-          background: T.modalSurface, maxHeight: "90vh", overflowY: "auto",
-          transform: shown ? "perspective(1200px) scale(1) translateY(0) rotateX(0deg)" : "perspective(1200px) scale(0.82) translateY(32px) rotateX(8deg)",
-          opacity: shown ? 1 : 0,
-          transition: "transform 480ms cubic-bezier(0.22, 1.28, 0.36, 1), opacity 340ms ease",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative aspect-video w-full">
-          <img src={card.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${T.modalSurface}FF 100%)` }} />
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setMuted((m) => !m)}
-            className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-black/40 text-white hover:bg-black/60"
-          >
-            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </button>
-          <h2 className="absolute bottom-4 left-6 right-16 text-2xl font-semibold sm:text-3xl" style={{ color: T.text }}>
-            {card.title}
-          </h2>
-        </div>
-
-        <div className="px-6 py-6">
-          <div className="mb-4 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handlePlay}
-              className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
-              style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-            >
-              <Play className="h-4 w-4" style={{ fill: CTA_TEXT_COLOR }} /> Play
-            </button>
-            <button
-              type="button"
-              onClick={handleAddToList}
-              aria-label={saved ? "Remove from My List" : "Add to My List"}
-              className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
-              style={{
-                borderColor: saved ? COLORS.gold : "rgba(255,255,255,0.3)",
-                color: saved ? COLORS.gold : "#fff",
-                background: saved ? "rgba(212,175,55,0.12)" : "transparent",
-              }}
-            >
-              {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            </button>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: T.textMuted }}>
-            <span className="flex items-center gap-1" style={{ color: COLORS.gold }}>
-              <Star className="h-4 w-4" style={{ fill: COLORS.gold }} /> {card.rating}
-            </span>
-            <span>{card.year}</span>
-            <span>{card.duration}</span>
-            <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: COLORS.gold, color: COLORS.gold }}>
-              {card.cert}
-            </span>
-            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: COLORS.gold }}>
-              {card.category}
-            </span>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-3">
-            <p className="text-sm leading-relaxed sm:col-span-2" style={{ color: T.textMuted }}>{card.description}</p>
-            <div className="flex flex-col gap-3 text-xs">
-              <div>
-                <p className="mb-1" style={{ color: T.textFainter }}>GENRES</p>
-                <p style={{ color: T.textMuted }}>{card.genres.join(", ")}</p>
-              </div>
-              <div>
-                <p className="mb-1" style={{ color: T.textFainter }}>RATING</p>
-                <p style={{ color: T.textMuted }}>{card.rating} / 10</p>
-              </div>
-              <div>
-                <p className="mb-1" style={{ color: T.textFainter }}>AVAILABLE IN</p>
-                <p style={{ color: T.textMuted }}>HD · Multi-language</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-6 border-t pt-6 sm:grid-cols-2" style={{ borderColor: T.border }}>
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>Cast</p>
-              <div className="flex flex-col gap-2.5">
-                {card.cast.map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    onClick={() => handlePersonClick(person.id)}
-                    className="flex w-fit items-center gap-2 text-left"
-                  >
-                    <img src={person.photo} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
-                    <span className="text-sm font-medium hover:underline" style={{ color: COLORS.gold }}>{person.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: T.textFainter }}>Crew</p>
-              <div className="flex flex-col gap-2.5">
-                {card.crew.map((person) => (
-                  <button
-                    key={person.id + person.role}
-                    type="button"
-                    onClick={() => handlePersonClick(person.id)}
-                    className="flex w-fit items-center gap-2 text-left"
-                  >
-                    <img src={person.photo} alt="" className="h-7 w-7 flex-shrink-0 rounded-full object-cover object-top" />
-                    <span className="text-sm">
-                      <span style={{ color: T.textFainter }}>{person.role}: </span>
-                      <span className="font-medium hover:underline" style={{ color: COLORS.gold }}>{person.name}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
