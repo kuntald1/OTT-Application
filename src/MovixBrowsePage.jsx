@@ -6,7 +6,7 @@ import { pickCast, pickCrew } from "./shared/peopleData";
 import { useAnimatedModal } from "./shared/useAnimatedModal";
 import Footer from "./shared/Footer";
 import DiscoveryRows from "./shared/DiscoveryRows";
-import { fetchPublishedVideos, fetchVideoById, fetchSpecialCategories, fetchContinueWatching } from "./api";
+import { fetchVideoById, fetchSpecialCategories, fetchContinueWatching } from "./api";
 import { GenreRow as RealGenreRow, RealDetailModal, formatDuration } from "./VideoStreaming/VideoBrowsePage";
 
 import filmsPoster from "./assets/posters/films.jpg";
@@ -164,48 +164,22 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openVideoId]);
 
-  // Real, published videos with section "archive" — fetched from the
-  // actual backend, shown as their own row at the top using the same
-  // poster-card GenreRow visual as the demo rows below.
   // Admin-curated "Special Categories" — see VideoStreaming/VideoBrowsePage.jsx's
   // identical block for the full reasoning. Requested with section="archive".
+  // Dated ones (a temporary banner) render first, above everything;
+  // permanent ones (no end date — "Section Wise Video" in Admin) sit
+  // where auto-generated category rows used to go. Those auto rows
+  // (Drama, Musical Theatre, etc., grouped from every published video's
+  // categories) were removed at a client's request in favour of
+  // fully hand-picked, hand-ordered rows.
   const [specialCategories, setSpecialCategories] = useState([]);
   useEffect(() => {
     fetchSpecialCategories("archive")
       .then(setSpecialCategories)
       .catch(() => setSpecialCategories([]));
   }, []);
-
-  // Real, published videos with section "archive" — grouped by category,
-  // the exact same pattern VideoStreaming/VideoBrowsePage.jsx (Play) uses,
-  // so Archive's rows behave identically (hover trailer, 4-per-row sizing,
-  // real playback/ads/revenue tracking via the imported RealGenreRow +
-  // RealDetailModal below) rather than a separate re-implementation.
-  const [realVideosByCategory, setRealVideosByCategory] = useState({});
-  useEffect(() => {
-    fetchPublishedVideos("archive")
-      .then((videos) => {
-        const grouped = {};
-        videos.forEach((v) => {
-          const card = {
-            id: v.id,
-            title: v.title,
-            poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
-            isReal: true,
-            videoId: v.id,
-            trailerUrl: v.trailer_playback_url || null,
-            releaseYear: v.release_year,
-            durationLabel: v.duration_seconds ? formatDuration(Math.round(v.duration_seconds / 60)) : null,
-          };
-          (v.categories || []).forEach((cat) => {
-            if (!grouped[cat]) grouped[cat] = [];
-            grouped[cat].push(card);
-          });
-        });
-        setRealVideosByCategory(grouped);
-      })
-      .catch(() => setRealVideosByCategory({}));
-  }, []);
+  const datedSpecials = specialCategories.filter((sc) => sc.visible_from);
+  const permanentSpecials = specialCategories.filter((sc) => !sc.visible_from);
 
   const handleSelectCard = (card) => {
     if (!isLoggedIn) {
@@ -234,7 +208,7 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
       }}
     >
       <main className={`px-6 py-8 sm:px-10 ${NAV_CLEARANCE_CLASS}`}>
-        {specialCategories.map((sc) => (
+        {datedSpecials.map((sc) => (
           <RealGenreRow
             key={sc.id}
             category={sc.title}
@@ -250,15 +224,22 @@ export default function MovixBrowsePage({ theme = "dark", onOpenPerson, onNaviga
             showCaption
           />
         ))}
-        {Object.keys(realVideosByCategory).length === 0 ? (
-          <div className="rounded-2xl p-10 text-center" style={{ background: t.modalSurface, border: `1px solid ${t.border}` }}>
-            <p className="text-sm" style={{ color: t.textMuted }}>No videos in Archive yet — check back soon.</p>
-          </div>
-        ) : (
-          Object.entries(realVideosByCategory).map(([category, cards]) => (
-            <RealGenreRow key={category} category={category} cards={cards} onSelect={handleSelectCard} showCaption />
-          ))
-        )}
+        {permanentSpecials.map((sc) => (
+          <RealGenreRow
+            key={sc.id}
+            category={sc.title}
+            cards={sc.videos.map((v) => ({
+              id: v.id,
+              title: v.title,
+              poster: v.poster_image_url || v.thumbnail_url || POSTER_POOL[hashStr(v.id) % POSTER_POOL.length],
+              isReal: true,
+              videoId: v.id,
+              trailerUrl: v.trailer_playback_url || null,
+            }))}
+            onSelect={handleSelectCard}
+            showCaption
+          />
+        ))}
         {continueWatching.length > 0 && (
           <RealGenreRow category="Continue Watching" cards={continueWatching} onSelect={handleSelectCard} showCaption />
         )}
