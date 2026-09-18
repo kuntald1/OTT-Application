@@ -7,7 +7,7 @@ import { useAnimatedModal } from "../shared/useAnimatedModal";
 import Footer from "../shared/Footer";
 import DiscoveryRows from "../shared/DiscoveryRows";
 import { createWatchSegmentTracker } from "../shared/watchSegmentTracker";
-import { fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories, fetchCurrentUser } from "../api";
+import { fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -1000,12 +1000,11 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
   }, []);
   const shown = entered && !closing;
 
-  // Single-session enforcement (see AppContext's "auth:sessionEnded"
-  // listener) clears login state, but that alone doesn't stop an
+  // A genuinely expired/invalid token (api.js fires "auth:sessionEnded"
+  // on any 401) clears login state, but that alone doesn't stop an
   // ALREADY-PLAYING video — the player has no reason to notice on its
-  // own. Force it to stop the instant this account gets signed out
-  // elsewhere, rather than letting playback silently continue until
-  // the next unrelated action.
+  // own. Force it to stop rather than letting playback silently
+  // continue until the next unrelated action.
   useEffect(() => {
     const handleSessionEnded = () => {
       setPlaying(false);
@@ -1146,20 +1145,17 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
 
     const interval = setInterval(sendHeartbeat, 20000);
 
-    // Separate, much faster probe just for single-session detection
-    // (see User.active_session_token) — kept independent of the
-    // revenue heartbeat above so that stays on its own 20s cadence.
-    // GET /auth/me is already a lightweight existing endpoint; a 401
-    // here is caught by api.js's global interceptor, which fires
-    // "auth:sessionEnded" — this component's listener for that event
-    // is what actually stops playback.
-    const sessionCheckInterval = setInterval(() => {
-      fetchCurrentUser().catch(() => {});
-    }, 5000);
+    // NOTE: a second, 5-second interval used to run here purely to
+    // detect single-session logout (polling /auth/me so a 401 would
+    // fire "auth:sessionEnded"). That enforcement is gone — an account
+    // may now be signed in on any number of devices, and only
+    // concurrent playback is capped (see playback_sessions.py) — so
+    // the poll was removed rather than left burning a request every
+    // 5s per playing video. The "auth:sessionEnded" listener above
+    // stays: it still fires on a genuinely expired/invalid token.
 
     return () => {
       clearInterval(interval);
-      clearInterval(sessionCheckInterval);
       sendHeartbeat(); // final heartbeat on close/unmount so the last stretch isn't lost
       flushSegmentRef.current = null;
       endPlaybackSession(sessionToken).catch(() => {}); // frees this device's screens-limit slot immediately

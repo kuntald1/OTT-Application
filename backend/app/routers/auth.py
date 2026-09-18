@@ -30,9 +30,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _new_login_token(user: User, db: Session) -> str:
-    """Issues a token for this login AND pins it as this account's one
-    valid session (see User.active_session_token) — any token from a
-    previous login stops working the instant this commits.
+    """Issues a token for this login. The session token is still
+    generated and stored on User.active_session_token, but it is NO
+    LONGER enforced as "the one valid session" — see deps.py's
+    get_current_user. An account can now be signed in on any number of
+    devices; only concurrent PLAYBACK is capped, by the subscription's
+    screens count (see routers/playback_sessions.py). The column is
+    kept populated so previously-issued tokens and any future
+    per-device auditing still have something meaningful to read.
     """
     session_token = secrets.token_urlsafe(32)
     user.active_session_token = session_token

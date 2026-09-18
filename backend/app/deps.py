@@ -31,15 +31,19 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
-    # Single-session enforcement (see User.active_session_token) — a
-    # missing "sid" or missing active_session_token means this predates
-    # the feature, so it's let through rather than treated as a mismatch.
-    session_token = payload.get("sid")
-    if session_token and user.active_session_token and session_token != user.active_session_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You've been logged out because this account was signed in on another device.",
-        )
+    # NOTE: single-session enforcement (one active device per account)
+    # was REMOVED here deliberately. The product rule is now the
+    # Netflix/Hotstar one: an account may be signed in on as many
+    # devices as it likes, and only CONCURRENT PLAYBACK is capped — by
+    # the subscription's "screens" count, shared across the billing
+    # owner and every sub-account under them (see
+    # routers/playback_sessions.py's _get_max_screens). Login count is
+    # no longer restricted at all.
+    #
+    # User.active_session_token is still written on login (see
+    # routers/auth.py) but is no longer checked — kept so the column
+    # and any old issued tokens stay harmless rather than needing a
+    # coordinated migration + forced logout of everyone.
     return user
 
 
@@ -61,9 +65,7 @@ def get_current_user_optional(
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
         return None
-    session_token = payload.get("sid")
-    if session_token and user.active_session_token and session_token != user.active_session_token:
-        return None
+    # No single-session check here either — see get_current_user above.
     return user
 
 
