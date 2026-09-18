@@ -43,9 +43,7 @@ export default function TheaterHero() {
     <section
       className={`relative w-full overflow-hidden font-[Geist,system-ui,sans-serif] ${HERO_HEIGHT_CLASS}`}
       style={{
-        borderLeft: "1px solid rgba(212,175,55,0.35)",
-        borderRight: "1px solid rgba(212,175,55,0.35)",
-        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18), inset 30px 0 30px -30px rgba(0,0,0,0.75), inset -30px 0 30px -30px rgba(0,0,0,0.75)",
+        boxShadow: "0 24px 60px -16px rgba(0,0,0,0.75), 0 0 40px -6px rgba(212,175,55,0.18), inset 50px 0 40px -35px rgba(0,0,0,0.9), inset -50px 0 40px -35px rgba(0,0,0,0.9)",
       }}
     >
       <style>{`
