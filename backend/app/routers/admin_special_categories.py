@@ -41,6 +41,7 @@ def _to_out(sc: SpecialCategory, db: Session) -> SpecialCategoryOut:
 @router.get("/search-videos", response_model=list[AdminVideoSearchResultOut])
 def search_videos_for_special_category(
     q: str,
+    section: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -51,11 +52,27 @@ def search_videos_for_special_category(
     each tagged with which field actually matched (matched_on) so the
     picker can show a small hint like "matched: cast — Ksenia
     Romanova" instead of just a bare title.
+
+    section, when given ("play" or "archive"), restricts results to
+    videos whose OWN section matches — added after a real mix-up: a
+    row set to show on the Archive page could previously be curated
+    with a Play-section video, so a Play-only subscriber who found
+    that video through the Archive page's row could legitimately open
+    it (access is always decided by the VIDEO's own section, never by
+    which row/page displayed it), which looked exactly like a broken
+    subscription check even though it wasn't. Restricting the picker
+    to matching-section videos removes that mix-up at the source. A
+    row set to "both" doesn't restrict by section — that's an
+    intentional mixed-section row.
     """
     q = q.strip()
     if len(q) < 2:
         return []
     like = f"%{q}%"
+
+    section_filter = ()
+    if section in ("play", "archive"):
+        section_filter = (Video.section == VideoSection(section),)
 
     results: dict = {}  # video_id -> AdminVideoSearchResultOut, de-duplicated (first match wins)
 
@@ -73,7 +90,7 @@ def search_videos_for_special_category(
 
     for v in (
         db.query(Video)
-        .filter(Video.status == VideoStatus.published, Video.title.ilike(like))
+        .filter(Video.status == VideoStatus.published, Video.title.ilike(like), *section_filter)
         .limit(25)
         .all()
     ):
@@ -88,7 +105,7 @@ def search_videos_for_special_category(
         )
         for v in (
             db.query(Video)
-            .filter(Video.status == VideoStatus.published, Video.id.in_(cast_video_ids))
+            .filter(Video.status == VideoStatus.published, Video.id.in_(cast_video_ids), *section_filter)
             .limit(25 - len(results))
             .all()
         ):
@@ -103,7 +120,7 @@ def search_videos_for_special_category(
         )
         for v in (
             db.query(Video)
-            .filter(Video.status == VideoStatus.published, Video.id.in_(crew_video_ids))
+            .filter(Video.status == VideoStatus.published, Video.id.in_(crew_video_ids), *section_filter)
             .limit(25 - len(results))
             .all()
         ):
@@ -113,7 +130,7 @@ def search_videos_for_special_category(
         organiser_ids = db.query(User.id).filter(User.name.ilike(like)).subquery()
         for v in (
             db.query(Video)
-            .filter(Video.status == VideoStatus.published, Video.uploaded_by_user_id.in_(organiser_ids))
+            .filter(Video.status == VideoStatus.published, Video.uploaded_by_user_id.in_(organiser_ids), *section_filter)
             .limit(25 - len(results))
             .all()
         ):

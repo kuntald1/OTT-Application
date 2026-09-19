@@ -681,19 +681,30 @@ function VideoPicker({ category, onChanged }) {
     }
     setSearching(true);
     const handle = setTimeout(() => {
-      searchAdminVideosForSpecialCategory(q)
+      searchAdminVideosForSpecialCategory(q, category.section)
         .then(setSearchResults)
         .catch(() => setSearchResults([]))
         .finally(() => setSearching(false));
     }, 300);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [query, category.section]);
 
   const selectedIds = new Set(category.videos.map((v) => v.id));
 
+  // Restricted to the row's own "Visible In" section (unless it's a
+  // "both" row) — a video's access is always decided by ITS OWN
+  // section (see backend's _check_video_access), never by which
+  // row/page it's curated into. Mixing sections here used to let an
+  // Archive-page row surface a Play-section video (or vice versa),
+  // which was legitimately playable for the wrong-plan subscriber who
+  // found it that way — correct per the access rule, but looked
+  // exactly like a broken subscription check. Keeping the picker
+  // same-section removes that mix-up at the source.
+  const sectionFilteredVideos =
+    category.section === "both" ? allVideos : allVideos.filter((v) => v.section === category.section);
   const visibleVideos = creatorFilter
-    ? allVideos.filter((v) => v.uploaded_by_name === creatorFilter)
-    : allVideos;
+    ? sectionFilteredVideos.filter((v) => v.uploaded_by_name === creatorFilter)
+    : sectionFilteredVideos;
 
   const handleToggle = async (videoId) => {
     setToggling(videoId);
@@ -731,6 +742,12 @@ function VideoPicker({ category, onChanged }) {
           </button>
         )}
       </div>
+
+      {category.section !== "both" && (
+        <p className="mb-2 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+          Showing {category.section} videos only — this row is set to "{category.section}" under Visible In.
+        </p>
+      )}
 
       {isSearchActive ? (
         searching ? (

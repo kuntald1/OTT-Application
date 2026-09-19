@@ -605,8 +605,10 @@ export function createAdminSpecialCategory({ title, visibleFrom, visibleTo, disp
   });
 }
 
-export function searchAdminVideosForSpecialCategory(q) {
-  return request(`/admin/special-categories/search-videos?q=${encodeURIComponent(q)}`, { auth: true });
+export function searchAdminVideosForSpecialCategory(q, section) {
+  const params = new URLSearchParams({ q });
+  if (section && section !== "both") params.set("section", section);
+  return request(`/admin/special-categories/search-videos?${params.toString()}`, { auth: true });
 }
 
 export function fetchAdminSpecialCategories() {
