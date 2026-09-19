@@ -1332,13 +1332,25 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                     // pay_per_video one where the prerequisite plan itself
                     // is missing/expired (see Video model docstring: no
                     // subscription means no ability to buy either).
+                    //
+                    // Names the specific plan THIS video needs, from its own
+                    // section — not a generic "Subscribe to Watch". Access is
+                    // always decided by the video's own section (see
+                    // _check_video_access), never by which row or page it was
+                    // found in, so a Play-only subscriber can legitimately
+                    // reach an Archive video through an Archive-page curated
+                    // row and needs to be told exactly which plan to add.
                     <button
                       type="button"
                       onClick={() => { onClose(); onNavigate?.("subscription"); }}
                       className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
                       style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
                     >
-                      Subscribe to Watch
+                      {video.section === "archive"
+                        ? "Subscribe to Archive"
+                        : video.section === "play"
+                        ? "Subscribe to Play"
+                        : "Subscribe to Watch"}
                     </button>
                   )}
 
