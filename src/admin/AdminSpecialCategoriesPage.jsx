@@ -700,8 +700,17 @@ function VideoPicker({ category, onChanged }) {
   // found it that way — correct per the access rule, but looked
   // exactly like a broken subscription check. Keeping the picker
   // same-section removes that mix-up at the source.
+  //
+  // Already-selected videos are ALWAYS shown regardless of this
+  // filter, even a mismatched one added before this restriction
+  // existed — otherwise a legacy mismatched pick becomes invisible
+  // here (filtered out of the list) while the row header still
+  // correctly counts it, making it look like nothing is selected when
+  // something genuinely is. The admin needs to see it to uncheck it.
   const sectionFilteredVideos =
-    category.section === "both" ? allVideos : allVideos.filter((v) => v.section === category.section);
+    category.section === "both"
+      ? allVideos
+      : allVideos.filter((v) => v.section === category.section || selectedIds.has(v.id));
   const visibleVideos = creatorFilter
     ? sectionFilteredVideos.filter((v) => v.uploaded_by_name === creatorFilter)
     : sectionFilteredVideos;
@@ -802,6 +811,11 @@ function VideoPicker({ category, onChanged }) {
                   />
                   <span className="text-xs" style={{ color: COLORS.cream }}>{v.title}</span>
                   <span className="text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>— {v.uploaded_by_name}</span>
+                  {category.section !== "both" && v.section !== category.section && (
+                    <span className="text-[11px]" style={{ color: "#f87171" }}>
+                      · {v.section} video, added before this row was scoped to {category.section}
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
