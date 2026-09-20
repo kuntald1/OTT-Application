@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Users, Search, Key, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil, ImagePlus } from "lucide-react";
-import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
+import { Users, Search, Key, KeyRound, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil, ImagePlus } from "lucide-react";
+import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, resetUserFamilyPin, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
@@ -25,6 +25,7 @@ export default function AdminUsersPage({ currentAdmin }) {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [confirmResetPinUser, setConfirmResetPinUser] = useState(null);
 
   const [passwordDialogUser, setPasswordDialogUser] = useState(null);
   const [newPassword, setNewPassword] = useState("");
@@ -91,6 +92,20 @@ export default function AdminUsersPage({ currentAdmin }) {
     } finally {
       setBusyId(null);
       setConfirmToggleUser(null);
+    }
+  };
+
+  const handleResetPinConfirmed = async () => {
+    setBusyId(confirmResetPinUser.id);
+    setError("");
+    try {
+      await resetUserFamilyPin(confirmResetPinUser.id);
+      load(search);
+    } catch (err) {
+      setError(err.message || "Couldn't reset the Family PIN.");
+    } finally {
+      setBusyId(null);
+      setConfirmResetPinUser(null);
     }
   };
 
@@ -176,6 +191,17 @@ export default function AdminUsersPage({ currentAdmin }) {
             style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
           >
             <Key className="h-3.5 w-3.5" /> Password
+          </button>
+        )}
+        {isSuperadmin && u.has_family_pin && (
+          <button
+            type="button"
+            onClick={() => setConfirmResetPinUser(u)}
+            disabled={busyId === u.id}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+          >
+            <KeyRound className="h-3.5 w-3.5" /> Reset PIN
           </button>
         )}
         {u.role === "plays_organiser" && (
@@ -384,6 +410,17 @@ export default function AdminUsersPage({ currentAdmin }) {
         busy={busyId === confirmToggleUser?.id}
         onCancel={() => setConfirmToggleUser(null)}
         onConfirm={handleToggleActiveConfirmed}
+      />
+
+      <ConfirmDialog
+        open={!!confirmResetPinUser}
+        title="Reset Family PIN"
+        message={`Remove ${confirmResetPinUser?.name}'s Family PIN? Their family accounts can't switch back into ${confirmResetPinUser?.name}'s account until ${confirmResetPinUser?.name} sets a new PIN in Manage Profile.`}
+        confirmLabel="Reset PIN"
+        danger
+        busy={busyId === confirmResetPinUser?.id}
+        onCancel={() => setConfirmResetPinUser(null)}
+        onConfirm={handleResetPinConfirmed}
       />
 
       {viewingUser && (

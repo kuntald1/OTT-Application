@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection, uploadMyStudioCoverImage, fetchStudioCoverImage } from "../api";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
+import FamilyPinSection from "../shared/FamilyPinSection";
 
 // ---------------------------------------------------------------------------
 // Manage Profile — reached from the profile menu. Edits photo, name, email,
@@ -14,7 +15,7 @@ import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEd
 // ---------------------------------------------------------------------------
 
 export default function ManageProfilePage({ onBack }) {
-  const { profile, changePhoto, updateProfile } = useApp();
+  const { profile, changePhoto, updateProfile, refreshFamily } = useApp();
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
   const [phone, setPhone] = useState(profile.phone || "");
@@ -179,6 +180,7 @@ export default function ManageProfilePage({ onBack }) {
       setSubName(""); setSubEmail(""); setSubPassword("");
       setShowCreateSubForm(false);
       loadFamilyInfo();
+      refreshFamily();
     } catch (err) {
       setSubError(err.message || "Couldn't create the account. Please try again.");
     } finally {
@@ -191,6 +193,7 @@ export default function ManageProfilePage({ onBack }) {
     try {
       await deactivateSubAccount(confirmDeactivateSub.id);
       loadFamilyInfo();
+      refreshFamily();
     } catch (err) {
       // best-effort UI; loadFamilyInfo() reflects the real state either way
     } finally {
@@ -435,6 +438,8 @@ export default function ManageProfilePage({ onBack }) {
                 ))}
               </div>
             )}
+
+            <FamilyPinSection />
 
             {subAccountsInfo.sub_accounts.filter((s) => s.is_active).length < subAccountsInfo.max_allowed && (
               showCreateSubForm ? (

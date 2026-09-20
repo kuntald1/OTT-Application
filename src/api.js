@@ -941,6 +941,26 @@ export function deactivateSubAccount(subAccountId) {
   return request(`/sub-accounts/${subAccountId}/deactivate`, { method: "PATCH", auth: true });
 }
 
+// --- Family account switching ("Who's watching?") — routers/family.py ---
+// Wrong PINs come back as 400 ("Incorrect PIN. N attempts left.") and the
+// lockout as 429 — deliberately never 401, which request() above treats as
+// "your session ended" and would log the person out.
+
+export function fetchFamilyAccounts() {
+  return request("/family/accounts", { auth: true });
+}
+
+// Returns { access_token, user } — same shape as login. `pin` is needed only
+// when switching from a family member back into the main account.
+export function switchFamilyAccount(targetId, pin) {
+  return request("/family/switch", { method: "POST", auth: true, body: { target_id: targetId, ...(pin ? { pin } : {}) } });
+}
+
+// First PIN: just newPin. Changing it: currentPin too.
+export function setFamilyPin({ newPin, currentPin }) {
+  return request("/family/pin", { method: "PUT", auth: true, body: { new_pin: newPin, ...(currentPin ? { current_pin: currentPin } : {}) } });
+}
+
 // --- Page Heroes (Plays/Archive/Community/Ticketing banner, admin-managed) ---
 
 export function fetchPageHero(pageKey) {

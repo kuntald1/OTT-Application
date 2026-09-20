@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
-from app.models import AdminUser, User, Subscription, Payment
+from app.models import AdminUser, User, Subscription, Payment, FamilyPin
 from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest, SubscriptionOut, PaymentOut
 from app.security import hash_password
 from app.notifications import send_live_streaming_enabled_email, send_live_streaming_enabled_whatsapp
@@ -34,6 +34,8 @@ def list_users(
         for p in db.query(User).filter(User.id.in_(parent_ids)).all():
             parents_by_id[p.id] = p
 
+    users_with_pin = {row.user_id for row in db.query(FamilyPin.user_id).all()}
+
     out = []
     for u in users:
         parent = parents_by_id.get(u.parent_id) if u.parent_id else None
@@ -42,6 +44,7 @@ def list_users(
             can_live_stream=u.can_live_stream, created_at=u.created_at,
             parent_id=u.parent_id, parent_name=parent.name if parent else None,
             parent_email=parent.email if parent else None,
+            has_family_pin=u.id in users_with_pin,
         ))
     return out
 
@@ -70,6 +73,22 @@ def set_user_password(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.delete("/{user_id}/family-pin", status_code=status.HTTP_204_NO_CONTENT)
+def reset_family_pin(
+    user_id: str,
+    current_admin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Clears a parent's Family PIN (someone forgot it) — superadmin only,
+    like the password reset above. The parent then sets a new one from
+    Manage Profile. Until they do, their sub-accounts can't switch back
+    into the parent, which is the safe default.
+    """
+    user = _get_user_or_404(user_id, db)
+    db.query(FamilyPin).filter(FamilyPin.user_id == user.id).delete()
+    db.commit()
 
 
 @router.put("/{user_id}/live-streaming", response_model=AdminUserAccountOut)

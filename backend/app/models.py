@@ -98,6 +98,34 @@ class User(Base):
     )
 
 
+class FamilyPin(Base):
+    """The 4-digit Family PIN a PARENT account sets so its family accounts
+    can be switched between ("Who's watching?", see routers/family.py).
+    A sub-account can only get back into its parent by entering this PIN;
+    the parent can enter any of its own sub-accounts without one.
+
+    Deliberately its OWN table rather than columns on `users`:
+    Base.metadata.create_all (main.py) only creates missing TABLES — it
+    never adds columns to an existing one — so this new table appears by
+    itself on the next startup, with no manual ALTER TABLE to remember on
+    the production database. One row per parent; no row = no PIN set.
+    The PIN is stored bcrypt-hashed, like passwords. A 4-digit PIN has
+    only 10,000 possibilities, so the real protection is the lockout
+    below (routers/family.py), not the hash.
+    """
+    __tablename__ = "family_pins"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    pin_hash = Column(String(255), nullable=False)
+    # Wrong PINs since the last success/lock; reaching the limit sets
+    # locked_until (and resets this to 0).
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class TicketStatus(str, enum.Enum):
     open = "Open"
     in_progress = "In Progress"

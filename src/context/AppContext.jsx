@@ -17,6 +17,7 @@ import {
   fetchMyList,
   toggleMyListItem,
   removeMyListItem,
+  fetchFamilyAccounts,
 } from "../api";
 // ---------------------------------------------------------------------------
 // AppContext — the one place that owns:
@@ -79,6 +80,11 @@ export function AppProvider({ children }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profile, setProfile] = useState({ id: null, name: "", email: "", photo: null, role: "user", country: "India" });
   const [showLoginModal, setShowLoginModal] = useState(false);
+  // Family accounts ("Who's watching?"): hasFamily = this account has other
+  // family accounts to switch to (drives the "Switch account" menu item);
+  // familyPickerOpen = the picker overlay is showing (see shared/WhosWatching).
+  const [hasFamily, setHasFamily] = useState(false);
+  const [familyPickerOpen, setFamilyPickerOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(true); // true while we check for an existing session
   const [authError, setAuthError] = useState("");
 
@@ -132,6 +138,31 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  // Whether this account has family accounts to switch to. Never throws — a
+  // failure just means no "Switch account" item.
+  const refreshFamily = useCallback(async () => {
+    try {
+      const fam = await fetchFamilyAccounts();
+      const has = fam.accounts.length > 1;
+      setHasFamily(has);
+      return has;
+    } catch {
+      setHasFamily(false);
+      return false;
+    }
+  }, []);
+
+  // Shows "Who's watching?" right after a REAL login (password / OTP /
+  // Google-Facebook redirect) — only when there is a family to pick from.
+  // Deliberately not called on session restore: a page refresh keeps the
+  // account you were on, like Netflix remembering the profile.
+  const openFamilyPickerIfFamily = useCallback(async () => {
+    if (await refreshFamily()) setFamilyPickerOpen(true);
+  }, [refreshFamily]);
+
+  const openFamilyPicker = useCallback(() => setFamilyPickerOpen(true), []);
+  const closeFamilyPicker = useCallback(() => setFamilyPickerOpen(false), []);
+
   // Pulls tickets + current subscription from the backend — called once
   // right after we know who's logged in (session restore, or right after
   // login/register/OAuth completes).
@@ -150,8 +181,10 @@ export function AppProvider({ children }) {
       // Non-fatal — My List just shows empty if this fails
     }
 
+    refreshFamily();
+
     await refreshSubscription();
-  }, [refreshSubscription]);
+  }, [refreshSubscription, refreshFamily]);
 
   // On first load: if there's a token in the URL (just arrived from a
   // Google/Facebook redirect), save it and clean the URL. Then, whichever
@@ -160,6 +193,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get("token");
+    const cameFromSocialLogin = !!urlToken;
     if (urlToken) {
       setToken(urlToken);
       params.delete("token");
@@ -180,14 +214,16 @@ export function AppProvider({ children }) {
       .then((user) => {
         setProfile((p) => toProfile(user, p.photo));
         setIsLoggedIn(true);
-        return loadUserData();
+        const loaded = loadUserData();
+        if (cameFromSocialLogin) openFamilyPickerIfFamily();
+        return loaded;
       })
       .catch(() => {
         // Token expired/invalid — clear it and let them log in again
         setToken(null);
       })
       .finally(() => setAuthLoading(false));
-  }, [loadUserData]);
+  }, [loadUserData, openFamilyPickerIfFamily]);
 
   // Fired by api.js the instant any authenticated request comes back
   // 401 while we're still holding a token — most commonly because this
@@ -226,7 +262,8 @@ export function AppProvider({ children }) {
     setIsLoggedIn(true);
     setShowLoginModal(false);
     loadUserData();
-  }, [loadUserData]);
+    openFamilyPickerIfFamily();
+  }, [loadUserData, openFamilyPickerIfFamily]);
 
   // Phone + WhatsApp OTP login (India) — no password involved. Throws on
   // failure (invalid/expired code, or no account exists with that phone)
@@ -239,7 +276,8 @@ export function AppProvider({ children }) {
     setIsLoggedIn(true);
     setShowLoginModal(false);
     loadUserData();
-  }, [loadUserData]);
+    openFamilyPickerIfFamily();
+  }, [loadUserData, openFamilyPickerIfFamily]);
 
   // Real registration against the backend. Phone is optional UNLESS
   // country is India, in which case the caller must have already
@@ -258,6 +296,8 @@ export function AppProvider({ children }) {
   const logout = useCallback(() => {
     setToken(null);
     setIsLoggedIn(false);
+    setHasFamily(false);
+    setFamilyPickerOpen(false);
     setProfile({ id: null, name: "", email: "", photo: null, role: "user", country: "India" });
     setTickets([]);
     setMyList([]);
@@ -268,6 +308,28 @@ export function AppProvider({ children }) {
     setActivePrice(null);
     setActiveCurrency("INR");
   }, []);
+
+  // Adopts the account a family switch just returned ({ access_token, user }):
+  // the same as a fresh login of THAT account, after clearing everything that
+  // belonged to the previous one so none of it is shown to the next person.
+  // toProfile gets `null` (not the old photo): its fallback would otherwise
+  // carry the previous account's picture over to an account with no photo.
+  const applyAccountSwitch = useCallback((data) => {
+    setAuthError("");
+    setToken(data.access_token);
+    setProfile(toProfile(data.user, null));
+    setIsLoggedIn(true);
+    setTickets([]);
+    setMyList([]);
+    setIsSubscribed(false);
+    setActivePlan(null);
+    setActiveDuration(null);
+    setActiveScreens(null);
+    setActivePrice(null);
+    setActiveCurrency("INR");
+    setFamilyPickerOpen(false);
+    loadUserData();
+  }, [loadUserData]);
 
   // Persists the plan choice to the backend (no payment gateway yet — this
   // activates immediately). Throws on failure so the caller can surface it.
@@ -386,6 +448,7 @@ export function AppProvider({ children }) {
 
   const value = {
     isLoggedIn, profile, showLoginModal, authLoading, authError,
+    hasFamily, familyPickerOpen, openFamilyPicker, closeFamilyPicker, refreshFamily, applyAccountSwitch,
     requestLogin, closeLoginModal, login, loginWithOtp, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,

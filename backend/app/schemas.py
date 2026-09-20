@@ -247,6 +247,9 @@ class AdminUserAccountOut(BaseModel):
     parent_id: Optional[uuid.UUID] = None
     parent_name: Optional[str] = None
     parent_email: Optional[str] = None
+    # Whether this (parent) account has set a Family PIN — drives the
+    # "Reset PIN" button on Admin > Users (routers/family.py).
+    has_family_pin: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -1522,6 +1525,51 @@ class MyParentOut(BaseModel):
     has_parent: bool
     parent_name: Optional[str] = None
     parent_email: Optional[str] = None
+
+
+# --- Family account switching ("Who's watching?") — routers/family.py ---
+
+class FamilyAccountOut(BaseModel):
+    """One tile on the "Who's watching?" screen. Only display-safe fields —
+    the email is masked (k***1@gmail.com), never the full address.
+    """
+    id: uuid.UUID
+    name: str
+    photo_url: Optional[str] = None
+    masked_email: str
+    is_parent: bool
+    is_current: bool
+    # True only for a sub-account looking at its PARENT's tile: getting
+    # into the parent needs the Family PIN. A parent entering its own
+    # sub-accounts (or continuing as itself) never does.
+    requires_pin: bool
+
+
+class FamilyAccountsOut(BaseModel):
+    # Every account this person can pick, the current one first. Length 1
+    # means "no family" — the client skips the picker in that case.
+    accounts: List[FamilyAccountOut]
+    # Whether the family's parent has set a Family PIN yet.
+    pin_set: bool
+
+
+class FamilySwitchRequest(BaseModel):
+    target_id: uuid.UUID
+    # PIN patterns below use [0-9], NOT \d: in Python's regex \d also matches
+    # Bengali/Arabic-Indic digits, so a PIN typed on a Bengali keyboard
+    # ("৪৮২৯") would be accepted and then never match "4829".
+    # Required only when going from a sub-account to its parent.
+    pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4}$")
+
+
+class FamilyPinSetRequest(BaseModel):
+    new_pin: str = Field(pattern=r"^[0-9]{4}$")
+    # Required when changing an existing PIN, ignored for the first one.
+    current_pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4}$")
+
+
+class FamilyPinStatusOut(BaseModel):
+    pin_set: bool
 
 
 class AdminDashboardOut(BaseModel):

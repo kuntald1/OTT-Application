@@ -51,6 +51,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
   const {
     isLoggedIn, isSubscribed, profile, showLoginModal,
     requestLogin, closeLoginModal, login, logout, changePhoto,
+    hasFamily, openFamilyPicker,
   } = useApp();
 
   const [showOrganiserRequestLink, setShowOrganiserRequestLink] = useState(false);
@@ -301,6 +302,8 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                   onClose={() => setShowProfileMenu(false)}
                   onNavigate={onNavigate}
                   onLogout={logout}
+                  hasFamily={hasFamily}
+                  onSwitchAccount={openFamilyPicker}
                   showOrganiserRequestLink={showOrganiserRequestLink}
                   onRequestOrganiser={() => { setShowOrganiserModal(true); setShowProfileMenu(false); }}
                 />
@@ -451,6 +454,16 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               >
                 Manage Profile
               </button>
+              {hasFamily && (
+                <button
+                  type="button"
+                  onClick={() => { openFamilyPicker(); setMenuOpen(false); }}
+                  className="rounded-full px-4 py-2.5 text-sm font-medium"
+                  style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                >
+                  Switch account
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { onNavigate?.("history"); setMenuOpen(false); }}
@@ -1000,7 +1013,7 @@ function FacebookMark({ className }) {
 
 const ROLE_DISPLAY_LABELS = { user: "User", content_creator: "Content Creator", plays_organiser: "Plays Organiser" };
 
-function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, showOrganiserRequestLink, onRequestOrganiser }) {
+function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, hasFamily, onSwitchAccount, showOrganiserRequestLink, onRequestOrganiser }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -1016,6 +1029,16 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, sh
         >
           Manage Profile
         </button>
+        {hasFamily && (
+          <button
+            type="button"
+            onClick={() => { onSwitchAccount?.(); onClose(); }}
+            className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+            style={{ color: COLORS.gold }}
+          >
+            Switch account
+          </button>
+        )}
         <button
           type="button"
           onClick={() => { onNavigate?.("history"); onClose(); }}
