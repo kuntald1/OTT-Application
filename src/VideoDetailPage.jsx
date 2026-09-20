@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Play, Users, Film, Megaphone, VolumeX, IndianRupee } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "./theme";
-import { fetchVideoById, getToken } from "./api";
+import { fetchVideoById, getToken, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken } from "./api";
 
 // ---------------------------------------------------------------------------
 // Real video detail + player page. Reached with a video's id — wire a
@@ -23,6 +23,8 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavig
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [playStarting, setPlayStarting] = useState(false);
+  const [screenLimitError, setScreenLimitError] = useState("");
 
   useEffect(() => {
     setLoading(true);
@@ -31,6 +33,35 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavig
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [videoId]);
+
+  // Screens-limit slot upkeep while playing. This page has no player.js
+  // position feed, so it can't use watch-heartbeat (which is what keeps a
+  // slot alive in the main player, and also credits revenue). Instead it
+  // re-calls the same /playback-session/start every 20s: for a device that
+  // already holds a slot that just refreshes it, and if the family has gone
+  // over the limit in the meantime (e.g. this tab was asleep and the slot
+  // expired) playback is stopped rather than left running unmetered.
+  // The cleanup frees the slot immediately on close / leaving the page.
+  useEffect(() => {
+    if (!playing) return;
+    const sessionToken = getPlaybackSessionToken();
+    const interval = setInterval(async () => {
+      try {
+        const result = await startPlaybackSession(videoId, sessionToken);
+        if (!result.allowed) {
+          setPlaying(false);
+          setScreenLimitError(result.reason || "Device limit reached for your plan.");
+        }
+      } catch {
+        // Transient network error — keep playing; if this device is really
+        // gone, its slot simply expires on the server.
+      }
+    }, 20000);
+    return () => {
+      clearInterval(interval);
+      endPlaybackSession(sessionToken).catch(() => {});
+    };
+  }, [playing, videoId]);
 
   if (loading) {
     return (
@@ -52,6 +83,32 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavig
   const isLoggedIn = !!getToken();
   const isPayPerVideo = video.monetization_type === "pay_per_video";
   const canAttemptPlay = video.has_file && !isPayPerVideo && isLoggedIn;
+
+  // Screens-limit gate — same rule as the main player (VideoBrowsePage):
+  // register this device before playback starts, and only play if allowed.
+  // Fails CLOSED: any error means no playback rather than an unmetered stream.
+  const handlePlayClick = async () => {
+    setScreenLimitError("");
+    // No access -> don't register a slot for a stream that can't play anyway
+    // (the backend also withholds embed_url in that case).
+    if (video.has_access === false) {
+      setScreenLimitError("Subscribe to watch this video.");
+      return;
+    }
+    setPlayStarting(true);
+    try {
+      const result = await startPlaybackSession(videoId, getPlaybackSessionToken());
+      if (result.allowed) {
+        setPlaying(true);
+      } else {
+        setScreenLimitError(result.reason || "Device limit reached for your plan.");
+      }
+    } catch (err) {
+      setScreenLimitError(err.message || "Couldn't start playback. Please try again.");
+    } finally {
+      setPlayStarting(false);
+    }
+  };
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
@@ -110,13 +167,17 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavig
             <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Log in to watch this video.</p>
           ) : !playing ? (
             <button
-              onClick={() => setPlaying(true)}
+              onClick={handlePlayClick}
+              disabled={playStarting}
               className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold hover:opacity-90"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >
-              <Play className="h-4 w-4" fill="currentColor" /> Play
+              <Play className="h-4 w-4" fill="currentColor" /> {playStarting ? "Checking…" : "Play"}
             </button>
           ) : null}
+          {screenLimitError && (
+            <p className="mt-2 text-xs" style={{ color: "#f87171" }}>{screenLimitError}</p>
+          )}
         </div>
 
         {/* Meta row */}
