@@ -71,6 +71,7 @@ def _compute_tier_breakdown_paisa(session_seconds, tiers: list[VideoRevenueTier]
             "range_label": "Flat rate (no custom tiers)",
             "minutes_in_tier": minutes.quantize(Decimal("0.01")),
             "gross_paisa": int((minutes * fallback_rate_paisa_per_minute).quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+            "rate_per_minute_rupees": (Decimal(fallback_rate_paisa_per_minute) / 100).quantize(Decimal("0.01")),
         }]
 
     breakdown = []
@@ -90,6 +91,7 @@ def _compute_tier_breakdown_paisa(session_seconds, tiers: list[VideoRevenueTier]
             "range_label": range_label,
             "minutes_in_tier": minutes_in_band.quantize(Decimal("0.01")),
             "gross_paisa": gross_paisa_in_band,
+            "rate_per_minute_rupees": Decimal(tier.rate_per_minute_inr).quantize(Decimal("0.01")),
         })
         remaining -= minutes_in_band
     return breakdown

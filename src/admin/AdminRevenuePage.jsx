@@ -601,6 +601,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
                                                     <thead>
                                                       <tr>
                                                         <th className="py-1 text-left font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Tier (minutes)</th>
+                                                        <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Rate (₹/min)</th>
                                                         <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Minutes in tier</th>
                                                         <th className="py-1 text-right font-medium" style={{ color: "rgba(245,235,221,0.4)" }}>Creator Earned</th>
                                                       </tr>
@@ -609,6 +610,9 @@ export default function AdminRevenuePage({ currentAdmin }) {
                                                       {v.tier_breakdown.map((t, ti) => (
                                                         <tr key={ti} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                                                           <td className="py-1" style={{ color: "rgba(245,235,221,0.7)" }}>{t.range_label}</td>
+                                                          <td className="py-1 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>
+                                                            {t.rate_per_minute_rupees != null ? `₹${Number(t.rate_per_minute_rupees).toFixed(2)}` : "—"}
+                                                          </td>
                                                           <td className="py-1 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{t.minutes_in_tier}</td>
                                                           <td className="py-1 text-right" style={{ color: COLORS.gold }}>₹{t.creator_earned_rupees}</td>
                                                         </tr>

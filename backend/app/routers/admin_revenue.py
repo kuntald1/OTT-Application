@@ -514,6 +514,7 @@ def get_admin_content_performance_breakdown(
                 range_label=t["range_label"],
                 minutes_in_tier=t["minutes_in_tier"],
                 creator_earned_rupees=(Decimal(tier_creator_paisa) / 100).quantize(Decimal("0.01")),
+                rate_per_minute_rupees=t["rate_per_minute_rupees"],
             ))
 
         result.append(ContentPerformanceViewerBreakdownOut(

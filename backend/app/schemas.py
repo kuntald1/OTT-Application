@@ -1009,6 +1009,9 @@ class ContentPerformanceTierBreakdownOut(BaseModel):
     range_label: str
     minutes_in_tier: Decimal
     creator_earned_rupees: Decimal
+    # The tier's own ₹/minute rate. Optional so any endpoint that doesn't
+    # fill it in (or an older client) keeps working unchanged.
+    rate_per_minute_rupees: Optional[Decimal] = None
 
 
 class ContentPerformanceViewerBreakdownOut(BaseModel):
