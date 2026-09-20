@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare, Heart, MessageCircle, Facebook, Instagram, Send } from "lucide-react";
+import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare, Heart, MessageCircle, Facebook, Instagram, Send, Search, X } from "lucide-react";
 import {
   createAdminBlog, fetchAdminBlogs, updateAdminBlog, deleteAdminBlog, uploadAdminBlogCover,
   fetchAllAdminBlogComments, editAdminBlogComment, deleteAdminBlogComment,
@@ -25,6 +25,7 @@ export default function AdminBlogsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [postSearch, setPostSearch] = useState("");
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -211,6 +212,12 @@ export default function AdminBlogsPage() {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
+  // Search by TITLE only: a post matches when every word typed appears in its
+  // title (case-insensitive, any order). The full list is already loaded, so
+  // this is just a filter — no extra requests.
+  const searchTerms = postSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const visiblePosts = posts.filter((p) => searchTerms.every((t) => (p.title || "").toLowerCase().includes(t)));
+
   return (
     <div>
       <div className="mb-5 flex items-center gap-2">
@@ -219,14 +226,45 @@ export default function AdminBlogsPage() {
         </h1>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setShowCreateForm((v) => !v)}
-        className="mb-4 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
-        style={{ background: COLORS.gold, color: "#0a0104" }}
-      >
-        <Plus className="h-4 w-4" /> New Post
-      </button>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setShowCreateForm((v) => !v)}
+          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
+          style={{ background: COLORS.gold, color: "#0a0104" }}
+        >
+          <Plus className="h-4 w-4" /> New Post
+        </button>
+
+        <div className="relative w-full max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "rgba(245,235,221,0.45)" }} />
+          <input
+            type="text"
+            value={postSearch}
+            onChange={(e) => setPostSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setPostSearch(""); }}
+            placeholder="Search posts by title…"
+            aria-label="Search posts by title"
+            style={{ ...inputStyle, paddingLeft: 34, paddingRight: 34 }}
+          />
+          {postSearch && (
+            <button
+              type="button"
+              onClick={() => setPostSearch("")}
+              aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-80"
+              style={{ color: "rgba(245,235,221,0.6)" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {searchTerms.length > 0 && !loading && (
+          <span className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Showing {visiblePosts.length} of {posts.length} posts
+          </span>
+        )}
+      </div>
 
       {error && (
         <div className="mb-4 rounded-lg px-3 py-2 text-sm" style={{ background: "rgba(255,255,255,0.95)", color: "#b91c1c", border: "1px solid rgba(185,28,28,0.3)" }}>
@@ -268,9 +306,11 @@ export default function AdminBlogsPage() {
         <p style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
       ) : posts.length === 0 ? (
         <p style={{ color: "rgba(245,235,221,0.5)" }}>No posts yet.</p>
+      ) : visiblePosts.length === 0 ? (
+        <p style={{ color: "rgba(245,235,221,0.5)" }}>No posts match "{postSearch.trim()}".</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {posts.map((post) => {
+          {visiblePosts.map((post) => {
             const postComments = allComments.filter((c) => c.blog_id === post.id);
             return (
             <div key={post.id} className="rounded-xl p-4" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>

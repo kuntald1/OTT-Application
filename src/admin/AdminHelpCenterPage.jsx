@@ -21,6 +21,9 @@ const STATUS_STYLE = {
 
 export default function AdminHelpCenterPage() {
   const [sourceTab, setSourceTab] = useState("");
+  // One status filter shared by every tab (All / Messages / Complaints): it
+  // stays put when switching tabs and is applied to whichever tab is open.
+  const [statusFilter, setStatusFilter] = useState("");
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,6 +54,10 @@ export default function AdminHelpCenterPage() {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
+  // The endpoint returns every ticket for the tab (no paging), so the status
+  // filter is applied right here — instant, no extra request.
+  const visibleTickets = statusFilter ? tickets.filter((t) => t.status === statusFilter) : tickets;
+
   return (
     <div>
       <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold" style={{ color: COLORS.cream }}>
@@ -60,7 +67,7 @@ export default function AdminHelpCenterPage() {
         Messages and complaints submitted from the site's Help Center — both land here as tickets.
       </p>
 
-      <div className="mb-6 flex gap-2">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         {SOURCE_TABS.map((t) => (
           <button
             key={t.id}
@@ -72,6 +79,22 @@ export default function AdminHelpCenterPage() {
             {t.label}
           </button>
         ))}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter tickets by status"
+          className="ml-auto rounded-full px-3 py-1.5 text-xs font-semibold outline-none"
+          style={{
+            ...(statusFilter ? STATUS_STYLE[statusFilter] : { background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }),
+            border: "none",
+            colorScheme: "dark",
+          }}
+        >
+          <option value="" style={{ background: COLORS.panel, color: COLORS.cream }}>All statuses</option>
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s} style={{ background: COLORS.panel, color: COLORS.cream }}>{s}</option>
+          ))}
+        </select>
       </div>
 
       {error && <p className="mb-4 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}
@@ -80,9 +103,11 @@ export default function AdminHelpCenterPage() {
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
       ) : tickets.length === 0 ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No tickets found.</p>
+      ) : visibleTickets.length === 0 ? (
+        <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No {statusFilter} tickets found.</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {tickets.map((t) => (
+          {visibleTickets.map((t) => (
             <div key={t.id} className="rounded-xl p-4" style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(245,235,221,0.1)" }}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
