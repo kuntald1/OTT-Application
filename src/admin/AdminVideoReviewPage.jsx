@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Search, X } from "lucide-react";
 import { fetchAdminVideos, approveVideo, rejectVideo, disableVideo, enableVideo, deleteVideo, uploadAdminPersonPhoto, scheduleVideo, cancelVideoSchedule } from "./adminApi";
 import AdminVideoEditForm from "./AdminVideoEditForm";
 import ConfirmDialog from "../shared/ConfirmDialog";
@@ -19,10 +20,28 @@ const VIDEO_STATUS_STYLES = {
   rejected: { bg: "rgba(248,113,113,0.15)", color: "#f87171" },
 };
 
+// Search box — a video matches when EVERY word typed appears somewhere in
+// what the review card shows: title, uploader, section, categories, year,
+// description, and cast/crew names and roles (case-insensitive "contains",
+// so "guards taj" finds "The Guards at the Taj"). The list for each status
+// tab is already loaded in full, so this is just a filter on that list —
+// no extra requests, and the text stays put when switching tabs.
+function videoMatchesSearch(v, terms) {
+  if (terms.length === 0) return true;
+  const haystack = [
+    v.title, v.uploaded_by_name, v.section, v.description, v.release_year,
+    ...(v.categories || []),
+    ...(v.cast || []).flatMap((c) => [c.person?.name, c.character_role]),
+    ...(v.crew || []).flatMap((c) => [c.person?.name, c.role]),
+  ].filter(Boolean).join(" ").toLowerCase();
+  return terms.every((t) => haystack.includes(t));
+}
+
 export default function AdminVideoReviewPage() {
   const [videos, setVideos] = useState([]);
   const [videosLoading, setVideosLoading] = useState(true);
   const [videoStatusFilter, setVideoStatusFilter] = useState("pending");
+  const [videoSearch, setVideoSearch] = useState("");
   const [rejectingVideoId, setRejectingVideoId] = useState(null);
   const [rejectNote, setRejectNote] = useState("");
   const [videoActionError, setVideoActionError] = useState("");
@@ -156,10 +175,45 @@ export default function AdminVideoReviewPage() {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
+  const searchTerms = videoSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const visibleVideos = videos.filter((v) => videoMatchesSearch(v, searchTerms));
+
   return (
     <div>
       <h1 className="mb-1 text-2xl font-semibold" style={{ color: COLORS.cream }}>Video review</h1>
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Watch before you approve. Disable hides a video without deleting it; Delete is permanent and removes the file from Bunny Stream too.</p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "rgba(245,235,221,0.45)" }} />
+          <input
+            type="text"
+            value={videoSearch}
+            onChange={(e) => setVideoSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setVideoSearch(""); }}
+            placeholder="Search title, uploader, category, cast, crew…"
+            aria-label="Search videos"
+            className="w-full rounded-lg border py-2 pl-9 pr-9 text-sm outline-none"
+            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+          />
+          {videoSearch && (
+            <button
+              type="button"
+              onClick={() => setVideoSearch("")}
+              aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-80"
+              style={{ color: "rgba(245,235,221,0.6)" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {searchTerms.length > 0 && !videosLoading && (
+          <span className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Showing {visibleVideos.length} of {videos.length}{videoStatusFilter !== "all" ? ` ${videoStatusFilter}` : ""} videos
+          </span>
+        )}
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-1.5">
         {VIDEO_STATUS_TABS.map((s) => (
@@ -186,9 +240,13 @@ export default function AdminVideoReviewPage() {
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
       ) : videos.length === 0 ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No {videoStatusFilter !== "all" ? videoStatusFilter : ""} videos.</p>
+      ) : visibleVideos.length === 0 ? (
+        <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+          No {videoStatusFilter !== "all" ? videoStatusFilter : ""} videos match "{videoSearch.trim()}".
+        </p>
       ) : (
         <div className="flex flex-col gap-3">
-          {videos.map((v) => {
+          {visibleVideos.map((v) => {
             const st = VIDEO_STATUS_STYLES[v.status] || VIDEO_STATUS_STYLES.pending;
             const isPreviewOpen = expandedPreviewId === v.id;
             return (
