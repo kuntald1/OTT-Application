@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession, fetchMyVideoPurchases } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -25,7 +25,62 @@ import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHi
 
 const MAX_SCREENS = 5;
 
+// A family sub-account shares its parent's plan and never buys or changes one
+// (the backend refuses it too — deps.ensure_can_buy_plan). This wrapper is why
+// every route to this page — menu, "Subscribe to Archive" on a locked video,
+// Community/My List prompts — ends in a clear message instead of a checkout.
+// The real page stays below, untouched, as SubscriptionPurchasePage.
 export default function SubscriptionPage({ onBack }) {
+  const { profile, authLoading } = useApp();
+  // Until the session check finishes the profile is still empty, so we can't
+  // tell yet whether this is a sub-account. Showing the purchase page in that
+  // gap would flash a checkout at someone who isn't allowed to use it.
+  if (authLoading) return <div style={{ background: COLORS.black, minHeight: "100vh" }} />;
+  if (profile.isSubAccount) return <ManagedPlanNotice onBack={onBack} />;
+  return <SubscriptionPurchasePage onBack={onBack} />;
+}
+
+function ManagedPlanNotice({ onBack }) {
+  const { isSubscribed, activePlan, activeDuration, activeScreens } = useApp();
+  const [parentName, setParentName] = useState("");
+
+  useEffect(() => {
+    fetchMyParent()
+      .then((res) => setParentName(res.parent_name || ""))
+      .catch(() => {});
+  }, []);
+
+  const owner = parentName || "the main account holder";
+  return (
+    <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
+      <main className="mx-auto max-w-xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-6 flex items-center gap-1.5 text-sm font-medium hover:opacity-80"
+          style={{ color: COLORS.gold }}
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+          <h1 className="mb-2 text-xl font-semibold" style={{ color: COLORS.cream }}>
+            Your plan is managed by {owner}
+          </h1>
+          <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.65)" }}>
+            This account shares {owner}'s plan, so plans can't be bought or changed here. To change the plan, ask {owner}.
+          </p>
+          <p className="text-sm" style={{ color: isSubscribed ? COLORS.gold : "rgba(245,235,221,0.5)" }}>
+            {isSubscribed
+              ? `Current plan: ${activePlan} · ${activeDuration} · ${activeScreens} screen${activeScreens === 1 ? "" : "s"}`
+              : "There's no active plan on the family account right now."}
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function SubscriptionPurchasePage({ onBack }) {
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [durations, setDurations] = useState([]);

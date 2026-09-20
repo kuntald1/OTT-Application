@@ -271,7 +271,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
             </button>
           </div>
 
-          {isLoggedIn && !isSubscribed && (
+          {isLoggedIn && !isSubscribed && !profile.isSubAccount && (
             <button
               type="button"
               onClick={() => onNavigate?.("subscription")}
@@ -472,14 +472,16 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               >
                 Watch History
               </button>
-              <button
-                type="button"
-                onClick={() => { onNavigate?.("subscription"); setMenuOpen(false); }}
-                className="rounded-full px-4 py-2.5 text-sm font-medium"
-                style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
-              >
-                Subscription Plans
-              </button>
+              {!profile.isSubAccount && (
+                <button
+                  type="button"
+                  onClick={() => { onNavigate?.("subscription"); setMenuOpen(false); }}
+                  className="rounded-full px-4 py-2.5 text-sm font-medium"
+                  style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                >
+                  Subscription Plans
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { onNavigate?.("help"); setMenuOpen(false); }}
@@ -1047,14 +1049,16 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
         >
           Watch History
         </button>
-        <button
-          type="button"
-          onClick={() => { onNavigate?.("subscription"); onClose(); }}
-          className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
-          style={{ color: COLORS.gold }}
-        >
-          Subscription Plans
-        </button>
+        {!profile.isSubAccount && (
+          <button
+            type="button"
+            onClick={() => { onNavigate?.("subscription"); onClose(); }}
+            className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+            style={{ color: COLORS.gold }}
+          >
+            Subscription Plans
+          </button>
+        )}
         <button
           type="button"
           onClick={() => { onNavigate?.("help"); onClose(); }}

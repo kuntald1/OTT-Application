@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, ensure_can_buy_plan
 from app.models import User, Subscription
 from app.routers.videos import _billing_owner
 from app.duration_pricing import get_duration_months_and_discount
@@ -26,6 +26,8 @@ def activate_subscription(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    ensure_can_buy_plan(current_user, db)  # a sub-account shares its parent's plan; see deps.py
+
     # No payment gateway yet — this directly activates the plan. Only one
     # active subscription per user, so deactivate any existing one first.
     db.query(Subscription).filter(

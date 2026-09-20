@@ -109,3 +109,28 @@ def get_current_superadmin(
             detail="This action requires superadmin access.",
         )
     return admin
+
+
+def ensure_can_buy_plan(user: User, db: Session) -> None:
+    """Sub-accounts (User.parent_id — Manage Profile's Family Accounts) don't
+    buy subscription plans: they share whichever plan their parent holds
+    (routers/videos.py's _billing_owner), so anything a sub-account bought
+    would be charged for and then silently IGNORED — access, screens and
+    /subscriptions/me all read the parent's subscription, never the child's
+    own. The parent (the one who pays) manages the plan. Call this first in
+    every endpoint that creates a subscription.
+
+    Deliberately NOT applied to pay-per-video purchases: those are a personal
+    purchase by that account and do work for it (see _check_video_access).
+    An orphaned sub-account (parent row gone) is its own billing owner —
+    exactly as in _billing_owner — so it isn't blocked.
+    """
+    if not user.parent_id:
+        return
+    parent = db.query(User).filter(User.id == user.parent_id).first()
+    if parent is None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"This account's plan is managed by {parent.name}. Ask them to change the plan.",
+    )

@@ -83,6 +83,9 @@ class UserOut(BaseModel):
     reward_points_balance: int
     can_live_stream: bool
     created_at: datetime
+    # Set only for a family sub-account (its parent's id). Lets the apps know
+    # right at login that this account can't buy a plan (see deps.ensure_can_buy_plan).
+    parent_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
 

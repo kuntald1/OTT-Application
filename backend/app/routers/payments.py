@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, ensure_can_buy_plan
 from app.models import (
     User, Payment, PaymentStatus, PaymentGateway,
     SubscriptionPlan, Subscription, TaxConfig, RewardConfig,
@@ -63,6 +63,8 @@ def create_razorpay_order(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    ensure_can_buy_plan(current_user, db)  # a sub-account shares its parent's plan; see deps.py
+
     if current_user.country != "India":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

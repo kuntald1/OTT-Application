@@ -53,6 +53,10 @@ function toProfile(user, existingPhoto = null) {
     photo: user.profile_photo_url || existingPhoto,
     rewardPoints: user.reward_points_balance ?? 0,
     can_live_stream: user.can_live_stream ?? false,
+    // A family sub-account shares its parent's plan and can't buy/change one
+    // (backend: deps.ensure_can_buy_plan). parent_id comes with the login.
+    parentId: user.parent_id || null,
+    isSubAccount: !!user.parent_id,
   };
 }
 
