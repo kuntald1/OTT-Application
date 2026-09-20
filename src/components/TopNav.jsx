@@ -210,9 +210,10 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
             <button
               type="button"
               onClick={() => {
-                if (searchOpen) return;
-                setSearchOpen(true);
-                setTimeout(() => searchInputRef.current?.focus(), 50);
+                // The search icon now opens the "All Videos" page (every
+                // published video, newest first) instead of expanding the
+                // inline search box below.
+                onNavigate?.("allVideos");
               }}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center"
               style={{ color: searchOpen ? "rgba(245,235,221,0.5)" : COLORS.cream, cursor: searchOpen ? "default" : "pointer" }}

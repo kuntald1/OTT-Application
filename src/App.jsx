@@ -4,6 +4,7 @@ import TopNav from './components/TopNav'
 import MovixHero from './VideoStreaming/MovixHero'
 import VideoBrowsePage from './VideoStreaming/VideoBrowsePage'
 import SearchResultsPage from './VideoStreaming/SearchResultsPage'
+import AllVideosPage from './VideoStreaming/AllVideosPage'
 import LiveWatchPage from './VideoStreaming/LiveWatchPage'
 import LiveFloatingBadge from './shared/LiveFloatingBadge'
 import MovixGenreAccordion from './Movies/MovixGenreAccordion'
@@ -180,6 +181,8 @@ export default function App() {
           </div>
         ) : route.view === 'search' ? (
           <SearchResultsPage query={route.params.q} section={route.params.section} onBack={goBack} onNavigate={navigate} />
+        ) : route.view === 'allVideos' ? (
+          <AllVideosPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'liveWatch' ? (
           <LiveWatchPage liveStreamId={route.params.liveStreamId} onBack={goBack} />
         ) : route.view === 'accordion' ? (
