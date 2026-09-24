@@ -148,7 +148,10 @@ export default function AdminRevenuePage({ currentAdmin }) {
       .finally(() => setPerformanceLoading(false));
 
     setSummaryLoading(true);
-    Promise.all([fetchAdminRevenueSummary(creatorFilter || undefined), fetchAdminRevenueByCreator(creatorFilter || undefined)])
+    Promise.all([
+      fetchAdminRevenueSummary(creatorFilter || undefined, cityFilter || undefined, ageGroupFilter || undefined),
+      fetchAdminRevenueByCreator(creatorFilter || undefined, cityFilter || undefined, ageGroupFilter || undefined),
+    ])
       .then(([s, c]) => {
         setSummary(s);
         setByCreator(c);

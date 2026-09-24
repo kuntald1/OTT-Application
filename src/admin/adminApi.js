@@ -460,12 +460,22 @@ export function deleteAdminCategory(categoryId) {
 }
 
 // Revenue Summary (platform-wide KPIs) + Revenue Share Report (per creator).
-export function fetchAdminRevenueSummary(creatorId) {
-  return request(`/admin/revenue/summary${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
+export function fetchAdminRevenueSummary(creatorId, city, ageGroup) {
+  const params = new URLSearchParams();
+  if (creatorId) params.set("creator_id", creatorId);
+  if (city) params.set("city", city);
+  if (ageGroup) params.set("age_group", ageGroup);
+  const qs = params.toString();
+  return request(`/admin/revenue/summary${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
-export function fetchAdminRevenueByCreator(creatorId) {
-  return request(`/admin/revenue/by-creator${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
+export function fetchAdminRevenueByCreator(creatorId, city, ageGroup) {
+  const params = new URLSearchParams();
+  if (creatorId) params.set("creator_id", creatorId);
+  if (city) params.set("city", city);
+  if (ageGroup) params.set("age_group", ageGroup);
+  const qs = params.toString();
+  return request(`/admin/revenue/by-creator${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 // Platform default rate + commission — superadmin-only editing.

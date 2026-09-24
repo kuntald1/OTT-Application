@@ -358,6 +358,8 @@ def get_revenue_by_age_group(
 @router.get("/summary", response_model=AdminRevenueSummaryOut)
 def get_revenue_summary(
     creator_id: str | None = None,
+    city: str | None = None,
+    age_group: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -373,6 +375,13 @@ def get_revenue_summary(
     just that one creator's videos — the whole Content Performance tab
     (this, /by-creator, and /content-performance) filters together off
     the same selection.
+
+    city / age_group (Admin decision, Sept 2026) narrow every number
+    here to only the watch records from viewers matching that filter —
+    same viewer-matching as /content-performance. Unlike creator_id,
+    these do NOT narrow total_published_videos: that figure answers
+    "how big is the catalog", which doesn't change based on who watched
+    it, only on who's uploaded it.
     """
     totals_query = db.query(
         func.coalesce(func.sum(VideoWatchRecord.gross_revenue_paisa), 0).label("gross_paisa"),
@@ -384,6 +393,10 @@ def get_revenue_summary(
     if creator_id:
         totals_query = totals_query.join(Video, Video.id == VideoWatchRecord.video_id).filter(Video.uploaded_by_user_id == creator_id)
         videos_query = videos_query.filter(Video.uploaded_by_user_id == creator_id)
+    if city is not None or age_group is not None:
+        today = datetime.now(timezone.utc).date()
+        matching_ids = user_ids_matching(db, today, city=city, age_group=age_group)
+        totals_query = totals_query.filter(VideoWatchRecord.user_id.in_(matching_ids))
     totals = totals_query.first()
 
     total_videos = videos_query.scalar() or 0
@@ -412,6 +425,8 @@ def get_revenue_summary(
 @router.get("/by-creator", response_model=list[AdminRevenueByCreatorOut])
 def get_revenue_by_creator(
     creator_id: str | None = None,
+    city: str | None = None,
+    age_group: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -419,6 +434,14 @@ def get_revenue_by_creator(
     full Gross → Platform/Creator Share → Paid → Pending chain.
     All-time. Most gross revenue first. creator_id, when given,
     narrows this to that one creator's single row.
+
+    city / age_group (Admin decision, Sept 2026) narrow the Gross/
+    Platform/Owner Share figures to only watch records from viewers
+    matching that filter — same viewer-matching as /content-performance
+    and /summary. Unlike those two, a creator with NO matching watch
+    records simply doesn't appear here at all (this report already
+    omits creators with zero revenue full-stop, via the inner join
+    below — this is the same rule, just narrower).
 
     Pending here is CreatorEarnings.available_balance_paisa — the same
     number the Dashboard's "Revenue Pending Pay" card uses — NOT a
@@ -443,6 +466,10 @@ def get_revenue_by_creator(
     )
     if creator_id:
         gross_query = gross_query.filter(Video.uploaded_by_user_id == creator_id)
+    if city is not None or age_group is not None:
+        today = datetime.now(timezone.utc).date()
+        matching_ids = user_ids_matching(db, today, city=city, age_group=age_group)
+        gross_query = gross_query.filter(VideoWatchRecord.user_id.in_(matching_ids))
     gross_rows = gross_query.group_by(Video.uploaded_by_user_id).all()
     paid_rows = (
         db.query(
