@@ -378,8 +378,12 @@ export function fetchAdminContentPerformance(creatorId, city, ageGroup) {
   return request(`/admin/revenue/content-performance${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
-export function fetchAdminContentPerformanceBreakdown(videoId) {
-  return request(`/admin/revenue/content-performance/${videoId}/breakdown`, { auth: true });
+export function fetchAdminContentPerformanceBreakdown(videoId, city, ageGroup) {
+  const params = new URLSearchParams();
+  if (city) params.set("city", city);
+  if (ageGroup) params.set("age_group", ageGroup);
+  const qs = params.toString();
+  return request(`/admin/revenue/content-performance/${videoId}/breakdown${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 // Category management — powers the Admin > Categories page. Every

@@ -584,6 +584,8 @@ def get_all_content_performance(
 @router.get("/content-performance/{video_id}/breakdown", response_model=list[ContentPerformanceViewerBreakdownOut])
 def get_admin_content_performance_breakdown(
     video_id: str,
+    city: str | None = None,
+    age_group: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -592,6 +594,13 @@ def get_admin_content_performance_breakdown(
     then per-tier drill-down (see that endpoint's docstring for the
     exact-reconciliation logic), just without the "must own this
     video" restriction, since an admin can inspect any video's.
+
+    city / age_group (Admin decision, Sept 2026) — same viewer-matching
+    as /content-performance, so expanding a video's row while a filter
+    is active shows exactly the viewers counted in that row's numbers,
+    not every viewer of the video. Without this, the row said "2
+    viewers" under a filter while the expanded list still showed all 5
+    — a real gap caught by a client walkthrough, Sept 2026.
     """
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
@@ -601,13 +610,16 @@ def get_admin_content_performance_breakdown(
     rate_config = db.query(RevenueRateConfig).first()
     fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
 
-    records = (
+    records_query = (
         db.query(VideoWatchRecord, User)
         .join(User, User.id == VideoWatchRecord.user_id)
         .filter(VideoWatchRecord.video_id == video.id)
-        .order_by(VideoWatchRecord.max_session_seconds.desc())
-        .all()
     )
+    if city is not None or age_group is not None:
+        today = datetime.now(timezone.utc).date()
+        matching_ids = user_ids_matching(db, today, city=city, age_group=age_group)
+        records_query = records_query.filter(VideoWatchRecord.user_id.in_(matching_ids))
+    records = records_query.order_by(VideoWatchRecord.max_session_seconds.desc()).all()
 
     result = []
     for record, viewer in records:

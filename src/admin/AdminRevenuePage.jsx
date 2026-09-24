@@ -76,12 +76,22 @@ export default function AdminRevenuePage({ currentAdmin }) {
     setExpandedVideoId(videoId);
     if (!breakdownByVideoId[videoId]) {
       setBreakdownLoadingId(videoId);
-      fetchAdminContentPerformanceBreakdown(videoId)
+      fetchAdminContentPerformanceBreakdown(videoId, cityFilter || undefined, ageGroupFilter || undefined)
         .then((rows) => setBreakdownByVideoId((m) => ({ ...m, [videoId]: rows })))
         .catch(() => setBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })))
         .finally(() => setBreakdownLoadingId(null));
     }
   };
+
+  // The per-video breakdown is cached by video id only (see above), so a
+  // City/Age group change must invalidate it — otherwise re-expanding a
+  // video after changing the filter would show the OLD filter's viewer
+  // list. Collapses any open row too, matching the summary rows above it
+  // resetting to the new filter.
+  useEffect(() => {
+    setBreakdownByVideoId({});
+    setExpandedVideoId(null);
+  }, [cityFilter, ageGroupFilter]);
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
