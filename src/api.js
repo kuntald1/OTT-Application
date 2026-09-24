@@ -58,12 +58,12 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   return data;
 }
 
-export function registerUser({ name, email, password, phone, country, otp, role, dateOfBirth, city, gender }) {
+export function registerUser({ name, email, password, phone, country, otp, role, dateOfBirth, city }) {
   return request("/auth/register", {
     method: "POST",
     body: {
       name, email, password, phone: phone || null, country, otp: otp || null, role,
-      date_of_birth: dateOfBirth, city: city || null, gender: gender || null,
+      date_of_birth: dateOfBirth, city: city || null,
     },
   });
 }
@@ -74,10 +74,10 @@ export function fetchDemographicsStatus() {
   return request("/auth/me/demographics-status", { auth: true });
 }
 
-export function completeDemographics({ date_of_birth, city, gender }) {
+export function completeDemographics({ date_of_birth, city }) {
   return request("/auth/me/demographics", {
     method: "PUT", auth: true,
-    body: { date_of_birth, city: city || null, gender: gender || null },
+    body: { date_of_birth, city: city || null },
   });
 }
 
@@ -627,6 +627,19 @@ export function fetchMyRevenueByDay(days = 30) {
 
 export function fetchMyRevenueByCountry() {
   return request(`/videos/revenue/by-country/mine`, { auth: true });
+}
+
+// City / age-group breakdowns (Admin decision, Sept 2026) — same real,
+// event-log-backed source as by-country, just grouped by the viewer's
+// UserDemographics instead. City is India-only (see the backend schema's
+// docstring); age_group is one of "18-24"/"25-34"/"35-44"/"45-54"/"55+",
+// or "Unknown" for a viewer with no date of birth on file yet.
+export function fetchMyRevenueByCity() {
+  return request(`/videos/revenue/by-city/mine`, { auth: true });
+}
+
+export function fetchMyRevenueByAgeGroup() {
+  return request(`/videos/revenue/by-age-group/mine`, { auth: true });
 }
 
 // Real, backend-persisted My List — replaces the old in-memory-only

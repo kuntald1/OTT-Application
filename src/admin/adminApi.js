@@ -369,8 +369,13 @@ export function fetchAdminPartners() {
   return request("/admin/partners", { auth: true });
 }
 
-export function fetchAdminContentPerformance(creatorId) {
-  return request(`/admin/revenue/content-performance${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
+export function fetchAdminContentPerformance(creatorId, city, ageGroup) {
+  const params = new URLSearchParams();
+  if (creatorId) params.set("creator_id", creatorId);
+  if (city) params.set("city", city);
+  if (ageGroup) params.set("age_group", ageGroup);
+  const qs = params.toString();
+  return request(`/admin/revenue/content-performance${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 export function fetchAdminContentPerformanceBreakdown(videoId) {
@@ -486,6 +491,17 @@ export function fetchRevenueByDay(days = 30) {
 
 export function fetchRevenueByCountry() {
   return request(`/admin/revenue/analytics/by-country`, { auth: true });
+}
+
+// City / age-group breakdowns (Admin decision, Sept 2026) — platform-wide,
+// same source as by-country. City is India-only; age_group is one of
+// "18-24"/"25-34"/"35-44"/"45-54"/"55+", or "Unknown".
+export function fetchRevenueByCity() {
+  return request(`/admin/revenue/analytics/by-city`, { auth: true });
+}
+
+export function fetchRevenueByAgeGroup() {
+  return request(`/admin/revenue/analytics/by-age-group`, { auth: true });
 }
 
 // AI content optimization — Claude-powered title/description/category

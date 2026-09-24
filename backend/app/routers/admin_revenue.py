@@ -2,21 +2,22 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
 from app.models import (
     AdminUser, User, Video, VideoWatchRecord, WithdrawalRequest, WithdrawalStatus, CreatorEarnings,
-    RevenueRateConfig, RevenueLedgerEntry, VideoRevenueTier,
+    RevenueRateConfig, RevenueLedgerEntry, VideoRevenueTier, UserDemographics,
 )
+from app.demographics_utils import age_group_label, user_ids_matching
 from app.notifications import send_withdrawal_paid_email, send_withdrawal_paid_whatsapp, send_withdrawal_rejected_email
 from app.routers.watch import _compute_tier_breakdown_paisa
 from app.schemas import (
     AdminWithdrawalOut, AdminWithdrawalActionRequest, AdminContentPerformanceOut,
-    AdminRevenueConfigUpdate, RevenueByDayOut, RevenueByCountryOut, RevenueRateOut,
-    AdminRevenueSummaryOut, AdminRevenueByCreatorOut,
+    AdminRevenueConfigUpdate, RevenueByDayOut, RevenueByCountryOut, RevenueByCityOut, RevenueByAgeGroupOut,
+    RevenueRateOut, AdminRevenueSummaryOut, AdminRevenueByCreatorOut,
     ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut,
 )
 from app.models import VideoStatus
@@ -281,6 +282,79 @@ def get_revenue_by_country(
     ]
 
 
+@router.get("/analytics/by-city", response_model=list[RevenueByCityOut])
+def get_revenue_by_city(
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Platform-wide city breakdown — see RevenueByCityOut's docstring for
+    the India-only / "Unknown" caveat. Groups by DISTINCT viewer first
+    (mirrors by-country's func.count(distinct(...))), since city/age
+    aren't denormalized onto RevenueLedgerEntry the way viewer_country is.
+    """
+    rows = (
+        db.query(
+            RevenueLedgerEntry.user_id,
+            func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
+        )
+        .group_by(RevenueLedgerEntry.user_id)
+        .all()
+    )
+    demo_by_user = {
+        d.user_id: d for d in
+        db.query(UserDemographics).filter(UserDemographics.user_id.in_([r.user_id for r in rows]))
+    }
+    buckets: dict = {}
+    for r in rows:
+        demo = demo_by_user.get(r.user_id)
+        key = demo.city if (demo and demo.city) else "Unknown"
+        b = buckets.setdefault(key, {"viewers": 0, "paisa": 0})
+        b["viewers"] += 1
+        b["paisa"] += r.creator_paisa
+    return sorted(
+        (RevenueByCityOut(city=k, viewer_count=v["viewers"],
+                           creator_earned_rupees=(Decimal(v["paisa"]) / 100).quantize(Decimal("0.01")))
+         for k, v in buckets.items()),
+        key=lambda r: r.creator_earned_rupees, reverse=True,
+    )
+
+
+@router.get("/analytics/by-age-group", response_model=list[RevenueByAgeGroupOut])
+def get_revenue_by_age_group(
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Platform-wide age-group breakdown. Buckets come from
+    demographics_utils so they're identical to a creator's own version.
+    """
+    today = datetime.now(timezone.utc).date()
+    rows = (
+        db.query(
+            RevenueLedgerEntry.user_id,
+            func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
+        )
+        .group_by(RevenueLedgerEntry.user_id)
+        .all()
+    )
+    demo_by_user = {
+        d.user_id: d for d in
+        db.query(UserDemographics).filter(UserDemographics.user_id.in_([r.user_id for r in rows]))
+    }
+    buckets: dict = {}
+    for r in rows:
+        demo = demo_by_user.get(r.user_id)
+        key = age_group_label(demo.date_of_birth if demo else None, today)
+        b = buckets.setdefault(key, {"viewers": 0, "paisa": 0})
+        b["viewers"] += 1
+        b["paisa"] += r.creator_paisa
+    return sorted(
+        (RevenueByAgeGroupOut(age_group=k, viewer_count=v["viewers"],
+                               creator_earned_rupees=(Decimal(v["paisa"]) / 100).quantize(Decimal("0.01")))
+         for k, v in buckets.items()),
+        key=lambda r: r.creator_earned_rupees, reverse=True,
+    )
+
+
 @router.get("/summary", response_model=AdminRevenueSummaryOut)
 def get_revenue_summary(
     creator_id: str | None = None,
@@ -413,6 +487,8 @@ def get_revenue_by_creator(
 @router.get("/content-performance", response_model=list[AdminContentPerformanceOut])
 def get_all_content_performance(
     creator_id: str | None = None,
+    city: str | None = None,
+    age_group: str | None = None,
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -422,11 +498,26 @@ def get_all_content_performance(
     see who's generating what. All-time. creator_id, when given,
     narrows this to just that one creator's videos.
 
+    city / age_group (Admin decision, Sept 2026) narrow each video's
+    numbers to only the viewers matching that filter — a video with
+    viewers but none matching still appears, at zero, rather than
+    disappearing (see the join predicate below: the filter lives in the
+    JOIN's ON clause, not a WHERE clause, so it decides which
+    VideoWatchRecord rows count without dropping the Video row itself
+    when none do). Passing both filters together requires a viewer to
+    match BOTH (an AND, not an OR).
+
     Scoped to published/disabled videos only — pending/scheduled/
     rejected ones can never have accrued real watch time (the
     heartbeat endpoint only credits VideoStatus.published videos), so
     including them here would just be permanent zero-row noise.
     """
+    watch_join_conditions = [VideoWatchRecord.video_id == Video.id]
+    if city is not None or age_group is not None:
+        today = datetime.now(timezone.utc).date()
+        matching_ids = user_ids_matching(db, today, city=city, age_group=age_group)
+        watch_join_conditions.append(VideoWatchRecord.user_id.in_(matching_ids))
+
     query = (
         db.query(
             Video.id,
@@ -438,7 +529,7 @@ def get_all_content_performance(
             func.coalesce(func.sum(VideoWatchRecord.creator_credited_paisa), 0).label("credited_paisa"),
         )
         .filter(Video.status.in_([VideoStatus.published, VideoStatus.disabled]))
-        .outerjoin(VideoWatchRecord, VideoWatchRecord.video_id == Video.id)
+        .outerjoin(VideoWatchRecord, and_(*watch_join_conditions))
         .outerjoin(User, User.id == Video.uploaded_by_user_id)
     )
     if creator_id:

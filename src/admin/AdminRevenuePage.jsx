@@ -4,9 +4,15 @@ import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
   fetchAdminContentPerformance, fetchAdminContentPerformanceBreakdown, fetchAdminRevenueConfig, updateAdminRevenueConfig,
   fetchAIConfig, updateAIConfig,
-  fetchRevenueByDay, fetchRevenueByCountry, fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
+  fetchRevenueByDay, fetchRevenueByCountry, fetchRevenueByCity, fetchRevenueByAgeGroup,
+  fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
   fetchAnalyticsInsights,
 } from "./adminApi";
+
+// Mirrors backend app/demographics_utils.py's AGE_GROUPS exactly — keep
+// these in sync if the buckets ever change there.
+const AGE_GROUPS = ["18-24", "25-34", "35-44", "45-54", "55+"];
+
 
 const COLORS = {
   panel: "#150307",
@@ -50,6 +56,12 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [creatorFilter, setCreatorFilter] = useState("");
   const [creatorOptions, setCreatorOptions] = useState([]);
+  // City / age-group filters (Admin decision, Sept 2026) — narrow each
+  // video's numbers to only viewers matching both (an AND), same as the
+  // backend. A video with viewers but none matching still shows, at zero.
+  const [cityFilter, setCityFilter] = useState("");
+  const [ageGroupFilter, setAgeGroupFilter] = useState("");
+  const [cityOptions, setCityOptions] = useState([]);
 
   const [expandedVideoId, setExpandedVideoId] = useState(null);
   const [breakdownByVideoId, setBreakdownByVideoId] = useState({});
@@ -73,6 +85,8 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
+  const [revenueByCity, setRevenueByCity] = useState([]);
+  const [revenueByAgeGroup, setRevenueByAgeGroup] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [insights, setInsights] = useState("");
   const [insightsLoading, setInsightsLoading] = useState(true);
@@ -114,16 +128,21 @@ export default function AdminRevenuePage({ currentAdmin }) {
 
   useEffect(() => {
     if (tab !== "performance") return;
-    // Unfiltered, once per tab-visit — powers the filter dropdown's
-    // options (name/email per creator), independent of whatever the
-    // selected filter narrows the tables below to.
+    // Unfiltered, once per tab-visit — powers the filter dropdowns'
+    // options, independent of whatever the selected filters narrow the
+    // tables below to. City options come from real cities that actually
+    // have revenue (excludes "Unknown", which isn't a filterable value —
+    // see fetchAdminContentPerformance's docstring in the backend).
     fetchAdminRevenueByCreator().then(setCreatorOptions).catch(() => setCreatorOptions([]));
+    fetchRevenueByCity()
+      .then((rows) => setCityOptions(rows.map((r) => r.city).filter((c) => c !== "Unknown").sort()))
+      .catch(() => setCityOptions([]));
   }, [tab]);
 
   useEffect(() => {
     if (tab !== "performance") return;
     setPerformanceLoading(true);
-    fetchAdminContentPerformance(creatorFilter || undefined)
+    fetchAdminContentPerformance(creatorFilter || undefined, cityFilter || undefined, ageGroupFilter || undefined)
       .then(setPerformance)
       .catch(() => setPerformance([]))
       .finally(() => setPerformanceLoading(false));
@@ -139,7 +158,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
         setByCreator([]);
       })
       .finally(() => setSummaryLoading(false));
-  }, [tab, creatorFilter]);
+  }, [tab, creatorFilter, cityFilter, ageGroupFilter]);
 
   const loadInsights = (force = false) => {
     setInsightsLoading(true);
@@ -155,14 +174,18 @@ export default function AdminRevenuePage({ currentAdmin }) {
   useEffect(() => {
     if (tab !== "analytics") return;
     setAnalyticsLoading(true);
-    Promise.all([fetchRevenueByDay(30), fetchRevenueByCountry()])
-      .then(([byDay, byCountry]) => {
+    Promise.all([fetchRevenueByDay(30), fetchRevenueByCountry(), fetchRevenueByCity(), fetchRevenueByAgeGroup()])
+      .then(([byDay, byCountry, byCity, byAgeGroup]) => {
         setRevenueByDay(byDay);
         setRevenueByCountry(byCountry);
+        setRevenueByCity(byCity);
+        setRevenueByAgeGroup(byAgeGroup);
       })
       .catch(() => {
         setRevenueByDay([]);
         setRevenueByCountry([]);
+        setRevenueByCity([]);
+        setRevenueByAgeGroup([]);
       })
       .finally(() => setAnalyticsLoading(false));
 
@@ -446,6 +469,43 @@ export default function AdminRevenuePage({ currentAdmin }) {
                 <option key={c.creator_user_id} value={c.creator_user_id} style={{ background: COLORS.panel, color: COLORS.cream }}>{c.creator_name} — {c.creator_email}</option>
               ))}
             </select>
+
+            <label className="ml-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>City</label>
+            <select
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className="rounded-lg px-3 py-1.5 text-sm"
+              style={{ background: "rgba(245,235,221,0.05)", border: "1px solid rgba(245,235,221,0.15)", color: COLORS.cream }}
+            >
+              <option value="" style={{ background: COLORS.panel, color: COLORS.cream }}>All cities</option>
+              {cityOptions.map((city) => (
+                <option key={city} value={city} style={{ background: COLORS.panel, color: COLORS.cream }}>{city}</option>
+              ))}
+            </select>
+
+            <label className="ml-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Age group</label>
+            <select
+              value={ageGroupFilter}
+              onChange={(e) => setAgeGroupFilter(e.target.value)}
+              className="rounded-lg px-3 py-1.5 text-sm"
+              style={{ background: "rgba(245,235,221,0.05)", border: "1px solid rgba(245,235,221,0.15)", color: COLORS.cream }}
+            >
+              <option value="" style={{ background: COLORS.panel, color: COLORS.cream }}>All ages</option>
+              {AGE_GROUPS.map((g) => (
+                <option key={g} value={g} style={{ background: COLORS.panel, color: COLORS.cream }}>{g}</option>
+              ))}
+              <option value="Unknown" style={{ background: COLORS.panel, color: COLORS.cream }}>Unknown / not provided</option>
+            </select>
+            {(cityFilter || ageGroupFilter) && (
+              <button
+                type="button"
+                onClick={() => { setCityFilter(""); setAgeGroupFilter(""); }}
+                className="ml-1 text-xs hover:opacity-80"
+                style={{ color: COLORS.gold }}
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           {summaryLoading ? (
@@ -720,7 +780,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
               {revenueByCountry.length === 0 ? (
                 <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
               ) : (
-                <div className="overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div className="mb-8 overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: COLORS.panel }}>
@@ -733,6 +793,63 @@ export default function AdminRevenuePage({ currentAdmin }) {
                       {revenueByCountry.map((row) => (
                         <tr key={row.country} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                           <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.country}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.viewer_count}</td>
+                          <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <Globe2 className="h-4 w-4" style={{ color: COLORS.gold }} /> Viewers by city
+              </h3>
+              <p className="mb-3 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>India-only — a viewer from any other country, or one who hasn't added a city yet, falls under "Unknown".</p>
+              {revenueByCity.length === 0 ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+              ) : (
+                <div className="mb-8 overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: COLORS.panel }}>
+                        <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>City</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Viewers</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Creator Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenueByCity.map((row) => (
+                        <tr key={row.city} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.city}</td>
+                          <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.viewer_count}</td>
+                          <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <Globe2 className="h-4 w-4" style={{ color: COLORS.gold }} /> Viewers by age group
+              </h3>
+              {revenueByAgeGroup.length === 0 ? (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+              ) : (
+                <div className="overflow-hidden rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: COLORS.panel }}>
+                        <th className="px-4 py-2.5 text-left font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Age group</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Viewers</th>
+                        <th className="px-4 py-2.5 text-right font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>Creator Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenueByAgeGroup.map((row) => (
+                        <tr key={row.age_group} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td className="px-4 py-2.5" style={{ color: COLORS.cream }}>{row.age_group}</td>
                           <td className="px-4 py-2.5 text-right" style={{ color: "rgba(245,235,221,0.6)" }}>{row.viewer_count}</td>
                           <td className="px-4 py-2.5 text-right font-medium" style={{ color: COLORS.gold }}>₹{row.creator_earned_rupees}</td>
                         </tr>

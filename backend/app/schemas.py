@@ -24,7 +24,6 @@ class UserRegister(BaseModel):
     # India-only at launch; a value outside the India city list is still
     # accepted as free text (an "Other" entry from the picker).
     city: Optional[str] = Field(default=None, max_length=120)
-    gender: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("phone")
     @classmethod
@@ -39,18 +38,6 @@ class UserRegister(BaseModel):
     def empty_city_to_none(cls, v):
         if v is not None and v.strip() == "":
             return None
-        return v
-
-    @field_validator("gender")
-    @classmethod
-    def normalize_gender(cls, v):
-        if v is None:
-            return None
-        v = v.strip().lower()
-        if v == "":
-            return None
-        if v not in ("male", "female", "other"):
-            raise ValueError("gender must be 'male', 'female', 'other', or omitted")
         return v
 
 
@@ -128,31 +115,17 @@ class DemographicsStatusOut(BaseModel):
     is_declared_minor: bool
     date_of_birth: Optional[date] = None
     city: Optional[str] = None
-    gender: Optional[str] = None
 
 
 class DemographicsUpdate(BaseModel):
     date_of_birth: date
     city: Optional[str] = Field(default=None, max_length=120)
-    gender: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("city")
     @classmethod
     def empty_city_to_none(cls, v):
         if v is not None and v.strip() == "":
             return None
-        return v
-
-    @field_validator("gender")
-    @classmethod
-    def normalize_gender(cls, v):
-        if v is None:
-            return None
-        v = v.strip().lower()
-        if v == "":
-            return None
-        if v not in ("male", "female", "other"):
-            raise ValueError("gender must be 'male', 'female', 'other', or omitted")
         return v
 
 
@@ -1117,6 +1090,25 @@ class RevenueByDayOut(BaseModel):
 
 class RevenueByCountryOut(BaseModel):
     country: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class RevenueByCityOut(BaseModel):
+    """India-only, since city is only collected there (Admin decision,
+    Sept 2026) — a viewer from any other country always falls under
+    "Unknown" here, same as one who hasn't completed their profile yet.
+    """
+    city: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class RevenueByAgeGroupOut(BaseModel):
+    # age_group is one of demographics_utils.AGE_GROUPS, or "Unknown" for a
+    # viewer with no date of birth on file yet (or a declared-minor
+    # sub-account, which never has one).
+    age_group: str
     viewer_count: int
     creator_earned_rupees: Decimal
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2, BarChart3, LayoutList, ChevronDown, ChevronRight } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry, fetchContentPerformanceBreakdown } from "../api";
+import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry, fetchMyRevenueByCity, fetchMyRevenueByAgeGroup, fetchContentPerformanceBreakdown } from "../api";
 
 // ---------------------------------------------------------------------------
 // Revenue — Content Creator / Plays Organiser only.
@@ -139,6 +139,8 @@ export default function RevenuePage({ onBack }) {
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
+  const [revenueByCity, setRevenueByCity] = useState([]);
+  const [revenueByAgeGroup, setRevenueByAgeGroup] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   const loadAll = (silent = false) => {
@@ -157,14 +159,18 @@ export default function RevenuePage({ onBack }) {
     setPerformanceLoading(false);
 
     setAnalyticsLoading(true);
-    Promise.all([fetchMyRevenueByDay(30), fetchMyRevenueByCountry()])
-      .then(([byDay, byCountry]) => {
+    Promise.all([fetchMyRevenueByDay(30), fetchMyRevenueByCountry(), fetchMyRevenueByCity(), fetchMyRevenueByAgeGroup()])
+      .then(([byDay, byCountry, byCity, byAgeGroup]) => {
         setRevenueByDay(byDay);
         setRevenueByCountry(byCountry);
+        setRevenueByCity(byCity);
+        setRevenueByAgeGroup(byAgeGroup);
       })
       .catch(() => {
         setRevenueByDay([]);
         setRevenueByCountry([]);
+        setRevenueByCity([]);
+        setRevenueByAgeGroup([]);
       })
       .finally(() => setAnalyticsLoading(false));
 
@@ -284,10 +290,32 @@ export default function RevenuePage({ onBack }) {
                   Revenue share by country
                 </p>
                 {revenueByCountry.length === 0 ? (
+                  <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+                ) : (
+                  <div className="mb-8 rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <PieChart data={topNPlusOther(revenueByCountry, "country", "creator_earned_rupees")} />
+                  </div>
+                )}
+
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Revenue share by city
+                </p>
+                {revenueByCity.length === 0 ? (
+                  <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+                ) : (
+                  <div className="mb-8 rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <PieChart data={topNPlusOther(revenueByCity, "city", "creator_earned_rupees")} />
+                  </div>
+                )}
+
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Revenue share by age group
+                </p>
+                {revenueByAgeGroup.length === 0 ? (
                   <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
                 ) : (
                   <div className="rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <PieChart data={topNPlusOther(revenueByCountry, "country", "creator_earned_rupees")} />
+                    <PieChart data={topNPlusOther(revenueByAgeGroup, "age_group", "creator_earned_rupees")} />
                   </div>
                 )}
               </>

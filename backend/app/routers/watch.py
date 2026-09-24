@@ -9,13 +9,14 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, Video, VideoStatus, VideoRevenueTier, VideoWatchRecord,
-    RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry, PlaybackSession,
+    RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry, PlaybackSession, UserDemographics,
 )
+from app.demographics_utils import age_group_label
 from app.routers.videos import _check_video_access
 from app.schemas import (
     WatchHeartbeatRequest, WatchHeartbeatResponse, ContentPerformanceOut,
     ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut,
-    RevenueByDayOut, RevenueByCountryOut,
+    RevenueByDayOut, RevenueByCountryOut, RevenueByCityOut, RevenueByAgeGroupOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["watch"])
@@ -472,3 +473,80 @@ def get_my_revenue_by_country(
         )
         for r in rows
     ]
+
+
+def _per_viewer_creator_paisa(db: Session, creator_user_id) -> dict:
+    """One row per DISTINCT viewer of this creator's content, summed across
+    every RevenueLedgerEntry credited to them — the building block for the
+    city and age-group breakdowns below (mirrors how by-country groups by
+    a column already ON RevenueLedgerEntry, except city/age aren't denormalized
+    there, so this groups by user_id first and looks up demographics after).
+    """
+    rows = (
+        db.query(
+            RevenueLedgerEntry.user_id,
+            func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
+        )
+        .filter(RevenueLedgerEntry.creator_user_id == creator_user_id)
+        .group_by(RevenueLedgerEntry.user_id)
+        .all()
+    )
+    return {r.user_id: r.creator_paisa for r in rows}
+
+
+@router.get("/revenue/by-city/mine", response_model=list[RevenueByCityOut])
+def get_my_revenue_by_city(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """City breakdown, scoped to this creator's own content — see
+    RevenueByCityOut's docstring for the India-only / "Unknown" caveat.
+    """
+    per_viewer = _per_viewer_creator_paisa(db, current_user.id)
+    demo_by_user = {
+        d.user_id: d for d in
+        db.query(UserDemographics).filter(UserDemographics.user_id.in_(per_viewer.keys()))
+    }
+    buckets: dict = {}
+    for user_id, paisa in per_viewer.items():
+        demo = demo_by_user.get(user_id)
+        key = demo.city if (demo and demo.city) else "Unknown"
+        b = buckets.setdefault(key, {"viewers": 0, "paisa": 0})
+        b["viewers"] += 1
+        b["paisa"] += paisa
+    return sorted(
+        (RevenueByCityOut(city=k, viewer_count=v["viewers"],
+                           creator_earned_rupees=(Decimal(v["paisa"]) / 100).quantize(Decimal("0.01")))
+         for k, v in buckets.items()),
+        key=lambda r: r.creator_earned_rupees, reverse=True,
+    )
+
+
+@router.get("/revenue/by-age-group/mine", response_model=list[RevenueByAgeGroupOut])
+def get_my_revenue_by_age_group(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Age-group breakdown, scoped to this creator's own content. Buckets
+    (18-24, 25-34, 35-44, 45-54, 55+) come from demographics_utils so they
+    stay identical to the admin panel's platform-wide version.
+    """
+    today = datetime.now(timezone.utc).date()
+    per_viewer = _per_viewer_creator_paisa(db, current_user.id)
+    demo_by_user = {
+        d.user_id: d for d in
+        db.query(UserDemographics).filter(UserDemographics.user_id.in_(per_viewer.keys()))
+    }
+    buckets: dict = {}
+    for user_id, paisa in per_viewer.items():
+        demo = demo_by_user.get(user_id)
+        key = age_group_label(demo.date_of_birth if demo else None, today)
+        b = buckets.setdefault(key, {"viewers": 0, "paisa": 0})
+        b["viewers"] += 1
+        b["paisa"] += paisa
+    return sorted(
+        (RevenueByAgeGroupOut(age_group=k, viewer_count=v["viewers"],
+                               creator_earned_rupees=(Decimal(v["paisa"]) / 100).quantize(Decimal("0.01")))
+         for k, v in buckets.items()),
+        key=lambda r: r.creator_earned_rupees, reverse=True,
+    )
