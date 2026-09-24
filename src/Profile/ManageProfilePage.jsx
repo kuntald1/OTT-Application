@@ -153,6 +153,11 @@ export default function ManageProfilePage({ onBack }) {
   const [subName, setSubName] = useState("");
   const [subEmail, setSubEmail] = useState("");
   const [subPassword, setSubPassword] = useState("");
+  // The parent's declaration, required before a sub-account can be created
+  // (backend rejects the request without it) — null means "not yet chosen".
+  // See UserDemographics' docstring: an adult-declared sub-account fills in
+  // its own date of birth/city on its own first login; a minor never does.
+  const [subIsMinor, setSubIsMinor] = useState(null);
   const [creatingSub, setCreatingSub] = useState(false);
   const [subError, setSubError] = useState("");
   const [confirmDeactivateSub, setConfirmDeactivateSub] = useState(null);
@@ -172,12 +177,12 @@ export default function ManageProfilePage({ onBack }) {
   useEffect(() => { loadFamilyInfo(); }, []);
 
   const handleCreateSubAccount = async () => {
-    if (!subName.trim() || !subEmail.trim() || subPassword.length < 8) return;
+    if (!subName.trim() || !subEmail.trim() || subPassword.length < 8 || subIsMinor === null) return;
     setSubError("");
     setCreatingSub(true);
     try {
-      await createSubAccount({ name: subName.trim(), email: subEmail.trim(), password: subPassword });
-      setSubName(""); setSubEmail(""); setSubPassword("");
+      await createSubAccount({ name: subName.trim(), email: subEmail.trim(), password: subPassword, isMinor: subIsMinor });
+      setSubName(""); setSubEmail(""); setSubPassword(""); setSubIsMinor(null);
       setShowCreateSubForm(false);
       loadFamilyInfo();
       refreshFamily();
@@ -420,6 +425,16 @@ export default function ManageProfilePage({ onBack }) {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium" style={{ color: COLORS.cream }}>
                         {s.name} {!s.is_active && <span className="ml-1 text-[10px] font-semibold uppercase" style={{ color: "#f87171" }}>Deactivated</span>}
+                        {s.is_active && (
+                          <span
+                            className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                            style={s.is_minor
+                              ? { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }
+                              : { background: "rgba(212,175,55,0.15)", color: COLORS.gold }}
+                          >
+                            {s.is_minor ? "Minor" : "Adult"}
+                          </span>
+                        )}
                       </p>
                       <p className="truncate text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{s.email}</p>
                     </div>
@@ -447,20 +462,50 @@ export default function ManageProfilePage({ onBack }) {
                   <div className="mb-3">
                     <input type="text" placeholder="Name" value={subName} onChange={(e) => setSubName(e.target.value)} style={inputStyle} className="mb-2" />
                     <input type="email" placeholder="Email" value={subEmail} onChange={(e) => setSubEmail(e.target.value)} style={inputStyle} className="mb-2" />
-                    <input type="password" placeholder="Password (min. 8 characters)" value={subPassword} onChange={(e) => setSubPassword(e.target.value)} style={inputStyle} />
+                    <input type="password" placeholder="Password (min. 8 characters)" value={subPassword} onChange={(e) => setSubPassword(e.target.value)} style={inputStyle} className="mb-3" />
+                    <p className="mb-1.5 text-xs font-medium" style={{ color: "rgba(245,235,221,0.7)" }}>Is this account for someone under 18?</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSubIsMinor(true)}
+                        className="flex-1 rounded-lg px-3 py-2 text-xs font-semibold"
+                        style={subIsMinor === true
+                          ? { background: COLORS.gold, color: "#0a0104" }
+                          : { border: "1px solid rgba(245,235,221,0.2)", color: "rgba(245,235,221,0.7)" }}
+                      >
+                        Yes, under 18
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubIsMinor(false)}
+                        className="flex-1 rounded-lg px-3 py-2 text-xs font-semibold"
+                        style={subIsMinor === false
+                          ? { background: COLORS.gold, color: "#0a0104" }
+                          : { border: "1px solid rgba(245,235,221,0.2)", color: "rgba(245,235,221,0.7)" }}
+                      >
+                        No, 18 or older
+                      </button>
+                    </div>
+                    <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>
+                      {subIsMinor === true
+                        ? "This account will never be asked for date of birth or city."
+                        : subIsMinor === false
+                        ? "This account will be asked to add its own date of birth and city the first time it logs in."
+                        : "This can't be changed later, so please choose carefully."}
+                    </p>
                   </div>
                   {subError && <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{subError}</p>}
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleCreateSubAccount}
-                      disabled={creatingSub || !subName.trim() || !subEmail.trim() || subPassword.length < 8}
+                      disabled={creatingSub || !subName.trim() || !subEmail.trim() || subPassword.length < 8 || subIsMinor === null}
                       className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                       style={{ background: COLORS.gold, color: "#0a0104" }}
                     >
                       {creatingSub ? "Creating…" : "Create"}
                     </button>
-                    <button type="button" onClick={() => { setShowCreateSubForm(false); setSubError(""); }} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>
+                    <button type="button" onClick={() => { setShowCreateSubForm(false); setSubError(""); setSubIsMinor(null); }} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.5)" }}>
                       Cancel
                     </button>
                   </div>

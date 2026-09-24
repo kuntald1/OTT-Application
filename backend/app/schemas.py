@@ -17,6 +17,14 @@ class UserRegister(BaseModel):
     country: str = Field(default="India", max_length=100)
     otp: Optional[str] = Field(default=None, max_length=6)
     role: UserRole = UserRole.user
+    # Required for every main-account registration (Admin decision, Sept
+    # 2026) — used for city/age-group revenue reporting. See
+    # auth.MIN_REGISTRATION_AGE for the under-18 rule enforced server-side.
+    date_of_birth: date
+    # India-only at launch; a value outside the India city list is still
+    # accepted as free text (an "Other" entry from the picker).
+    city: Optional[str] = Field(default=None, max_length=120)
+    gender: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("phone")
     @classmethod
@@ -24,6 +32,25 @@ class UserRegister(BaseModel):
         # Treat blank string from the form the same as "not provided"
         if v is not None and v.strip() == "":
             return None
+        return v
+
+    @field_validator("city")
+    @classmethod
+    def empty_city_to_none(cls, v):
+        if v is not None and v.strip() == "":
+            return None
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def normalize_gender(cls, v):
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if v == "":
+            return None
+        if v not in ("male", "female", "other"):
+            raise ValueError("gender must be 'male', 'female', 'other', or omitted")
         return v
 
 
@@ -88,6 +115,45 @@ class UserOut(BaseModel):
     parent_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
+
+
+class DemographicsStatusOut(BaseModel):
+    """GET /auth/me/demographics-status — whether this account should be
+    shown the one-time "Complete your profile" prompt (date of birth +
+    city), and its current values if any. A declared-minor sub-account is
+    NEVER prompted (needs_profile is always False for it) — see
+    UserDemographics' docstring in models.py.
+    """
+    needs_profile: bool
+    is_declared_minor: bool
+    date_of_birth: Optional[date] = None
+    city: Optional[str] = None
+    gender: Optional[str] = None
+
+
+class DemographicsUpdate(BaseModel):
+    date_of_birth: date
+    city: Optional[str] = Field(default=None, max_length=120)
+    gender: Optional[str] = Field(default=None, max_length=20)
+
+    @field_validator("city")
+    @classmethod
+    def empty_city_to_none(cls, v):
+        if v is not None and v.strip() == "":
+            return None
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def normalize_gender(cls, v):
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if v == "":
+            return None
+        if v not in ("male", "female", "other"):
+            raise ValueError("gender must be 'male', 'female', 'other', or omitted")
+        return v
 
 
 class Token(BaseModel):
@@ -900,6 +966,17 @@ class SendOtpRequest(BaseModel):
     purpose: str = Field(pattern="^(registration|login)$")
 
 
+class SendEmailOtpRequest(BaseModel):
+    """POST /auth/otp/send-email — email-based OTP, currently used only for
+    India registration (replaces the old WhatsApp/phone OTP there; see
+    EmailOtpVerification's docstring in models.py). Purpose is restricted to
+    "registration" — OTP LOGIN still uses phone/WhatsApp (SendOtpRequest
+    above), untouched.
+    """
+    email: EmailStr
+    purpose: str = Field(pattern="^(registration)$")
+
+
 class VerifyOtpLoginRequest(BaseModel):
     phone: str = Field(min_length=6, max_length=20)
     otp: str = Field(min_length=4, max_length=6)
@@ -1499,6 +1576,12 @@ class SubAccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    # The parent declares this — required, no default — so creating a
+    # sub-account always makes a conscious choice rather than silently
+    # defaulting one way. True: never asked for date of birth/city, ever.
+    # False: this sub-account will be prompted to add them on its own first
+    # login (see users.complete_demographics in routers/users.py).
+    is_minor: bool
 
 
 class SubAccountOut(BaseModel):
@@ -1507,6 +1590,7 @@ class SubAccountOut(BaseModel):
     email: EmailStr
     is_active: bool
     created_at: datetime
+    is_minor: bool = False
 
     model_config = {"from_attributes": True}
 

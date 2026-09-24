@@ -113,3 +113,76 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
         _build_text_body(reset_link),
         _build_html_body(reset_link),
     )
+
+
+def _build_otp_html_body(otp_code: str, expire_minutes: int) -> str:
+    return f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+                <span style="font-size:22px; font-weight:600; letter-spacing:0.5px; color:#f5ebdd;">theomy</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd; font-weight:600;">
+                  Verify your email
+                </h1>
+                <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+                  Use this code to finish creating your theomy account.
+                </p>
+                <div style="margin:0 0 20px 0; padding:16px 0; text-align:center; background:rgba(212,175,55,0.08); border-radius:12px;">
+                  <span style="font-size:32px; font-weight:700; letter-spacing:10px; color:#D4AF37;">{otp_code}</span>
+                </div>
+                <p style="margin:0 0 20px 0; font-size:13px; color:rgba(245,235,221,0.5);">
+                  This code expires in {expire_minutes} minutes.
+                </p>
+                <p style="margin:20px 0 0 0; font-size:12px; line-height:1.6; color:rgba(245,235,221,0.4); border-top:1px solid rgba(245,235,221,0.1); padding-top:16px;">
+                  If you didn't request this, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:20px 0 0 0; font-size:11px; color:rgba(245,235,221,0.3);">
+            &copy; theomy
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _build_otp_text_body(otp_code: str, expire_minutes: int) -> str:
+    return f"""Hi,
+
+Your theomy verification code is: {otp_code}
+
+This code expires in {expire_minutes} minutes. If you didn't request
+this, you can safely ignore this email.
+
+— theomy
+"""
+
+
+def send_registration_otp_email(to_email: str, otp_code: str, expire_minutes: int) -> None:
+    """Sends the email-verification code used by India registration (see
+    EmailOtpVerification in models.py). Raises on SMTP failure — unlike
+    send_password_reset_email, this one must not silently swallow errors:
+    without this code the person can't complete registration at all, so the
+    caller (routers/otp.py) turns a failure here into a 502 the frontend
+    can show and let them retry.
+    """
+    _send_email(
+        to_email,
+        "Your theomy verification code",
+        _build_otp_text_body(otp_code, expire_minutes),
+        _build_otp_html_body(otp_code, expire_minutes),
+    )

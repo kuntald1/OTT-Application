@@ -1,7 +1,7 @@
 import secrets
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.email_utils import send_password_reset_email
-from app.models import User, AuthProvider, OtpVerification, OtpPurpose
+from app.models import User, AuthProvider, OtpVerification, OtpPurpose, UserDemographics, EmailOtpVerification
 from app.schemas import (
     UserRegister,
     UserLogin,
@@ -23,8 +23,24 @@ from app.schemas import (
     MessageResponse,
     UserUpdate,
     VerifyOtpLoginRequest,
+    DemographicsStatusOut,
+    DemographicsUpdate,
 )
 from app.security import hash_password, verify_password, create_access_token
+
+# Main accounts must be an adult — this mirrors how Netflix and similar
+# services handle it: they don't do verifiable-parental-consent for a
+# main/billing account, they simply require 18+ there and let anyone
+# younger use a family sub-account instead (see routers/sub_accounts.py,
+# which lets a parent mark a sub-account as a declared minor). Confirmed
+# with the client, Sept 2026 — see the "Registration by users under 18"
+# email thread. Raising this requires a new client decision, not just a
+# code change, since it re-opens the parental-consent question.
+MIN_REGISTRATION_AGE = 18
+
+
+def _age_on(born: date, today: date) -> int:
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -62,10 +78,29 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
                 detail="An account with this phone number already exists",
             )
 
-    # India requires a verified phone number via WhatsApp OTP. Other
-    # countries keep phone optional with no OTP step — this mirrors what
-    # the frontend enforces, but re-checked here since the frontend can't
-    # be trusted to enforce it on its own.
+    today = datetime.now(timezone.utc).date()
+    if payload.date_of_birth > today:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Date of birth can't be in the future.")
+    if _age_on(payload.date_of_birth, today) < MIN_REGISTRATION_AGE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"You must be {MIN_REGISTRATION_AGE} or older to create an account. "
+                "If this account is for someone younger, ask an adult to add them as a family account instead."
+            ),
+        )
+    # City is only collected (and shown) for India — see UserRegister's docstring.
+    if payload.country == "India" and not payload.city:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="City is required.")
+
+    # India requires phone as a plain, required field, but the phone number
+    # ITSELF is no longer OTP-verified (Admin decision, Sept 2026 — this
+    # used to be a WhatsApp OTP to the phone; see EmailOtpVerification's
+    # docstring in models.py for why). Instead, the person's EMAIL is
+    # verified via a one-time code (routers/otp.py's "/send-email"). Other
+    # countries need neither phone nor this verification — this mirrors
+    # what the frontend enforces, but re-checked here since the frontend
+    # can't be trusted to enforce it on its own.
     if payload.country == "India":
         if not payload.phone:
             raise HTTPException(
@@ -75,17 +110,17 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         if not payload.otp:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OTP verification is required for India.",
+                detail="Email verification code is required for India.",
             )
 
         otp_record = (
-            db.query(OtpVerification)
+            db.query(EmailOtpVerification)
             .filter(
-                OtpVerification.phone == payload.phone,
-                OtpVerification.purpose == OtpPurpose.registration,
-                OtpVerification.is_verified == False,  # noqa: E712
+                EmailOtpVerification.email == payload.email,
+                EmailOtpVerification.purpose == OtpPurpose.registration,
+                EmailOtpVerification.is_verified == False,  # noqa: E712
             )
-            .order_by(OtpVerification.created_at.desc())
+            .order_by(EmailOtpVerification.created_at.desc())
             .first()
         )
         invalid_otp = HTTPException(
@@ -127,6 +162,16 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # A main account is always an adult (enforced above), so
+    # is_declared_minor is always False here — only a sub-account's PARENT
+    # can set that flag, at sub-account creation (routers/sub_accounts.py).
+    db.add(UserDemographics(
+        user_id=user.id, date_of_birth=payload.date_of_birth,
+        city=payload.city if payload.country == "India" else None,
+        gender=payload.gender, is_declared_minor=False,
+    ))
+    db.commit()
 
     token = _new_login_token(user, db)
     return Token(access_token=token, user=UserOut.model_validate(user))
@@ -375,3 +420,87 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     db.commit()
 
     return MessageResponse(message="Password reset successfully. You can now log in.")
+
+
+def _demographics_status(user: User, db: Session) -> DemographicsStatusOut:
+    row = db.query(UserDemographics).filter(UserDemographics.user_id == user.id).first()
+    # No row at all only happens for an account created before this feature
+    # shipped (a pre-existing main account, or a social/OAuth signup — see
+    # oauth.py, which doesn't collect date of birth). Default to "not a
+    # declared minor" there ONLY if it isn't a sub-account: a pre-existing
+    # SUB-account with no row defaults to declared-minor instead — the safe
+    # side — until its parent explicitly marks it otherwise. (There's no UI
+    # for a parent to change an existing sub-account's flag yet.)
+    is_declared_minor = row.is_declared_minor if row else bool(user.parent_id)
+    return DemographicsStatusOut(
+        needs_profile=(not is_declared_minor) and (row is None or row.date_of_birth is None),
+        is_declared_minor=is_declared_minor,
+        date_of_birth=row.date_of_birth if row else None,
+        city=row.city if row else None,
+        gender=row.gender if row else None,
+    )
+
+
+@router.get("/me/demographics-status", response_model=DemographicsStatusOut)
+def get_demographics_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Whether the app should show the one-time "Complete your profile"
+    (date of birth + city) prompt for this account, and its current values.
+    Covers every account created before this feature shipped, however it
+    signed up (password, Google, Facebook, OTP) — see this function's
+    docstring in _demographics_status.
+    """
+    return _demographics_status(current_user, db)
+
+
+@router.put("/me/demographics", response_model=DemographicsStatusOut)
+def complete_demographics(
+    payload: DemographicsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Self-completion of date of birth + city — used for (a) a main account
+    created before this feature shipped, and (b) a sub-account its parent
+    declared an ADULT at creation (routers/sub_accounts.py) filling in its
+    own details on first login. A declared-minor sub-account can never call
+    this, even by guessing the request shape — enforced here, not just
+    hidden in the UI.
+    """
+    existing = db.query(UserDemographics).filter(UserDemographics.user_id == current_user.id).first()
+    is_declared_minor = existing.is_declared_minor if existing else bool(current_user.parent_id)
+    if is_declared_minor:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is set up for someone under 18 and can't add these details.",
+        )
+
+    today = datetime.now(timezone.utc).date()
+    if payload.date_of_birth > today:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Date of birth can't be in the future.")
+    if _age_on(payload.date_of_birth, today) < MIN_REGISTRATION_AGE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"This date of birth is under {MIN_REGISTRATION_AGE}. If this account is for someone "
+                "younger, ask the main account holder to set it up as a family account for a minor instead."
+            ),
+        )
+    if current_user.country == "India" and not payload.city:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="City is required.")
+
+    city = payload.city if current_user.country == "India" else None
+    if existing:
+        existing.date_of_birth = payload.date_of_birth
+        existing.city = city
+        existing.gender = payload.gender
+        existing.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(UserDemographics(
+            user_id=current_user.id, date_of_birth=payload.date_of_birth,
+            city=city, gender=payload.gender, is_declared_minor=False,
+        ))
+    db.commit()
+
+    return _demographics_status(current_user, db)

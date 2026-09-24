@@ -58,10 +58,26 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   return data;
 }
 
-export function registerUser({ name, email, password, phone, country, otp, role }) {
+export function registerUser({ name, email, password, phone, country, otp, role, dateOfBirth, city, gender }) {
   return request("/auth/register", {
     method: "POST",
-    body: { name, email, password, phone: phone || null, country, otp: otp || null, role },
+    body: {
+      name, email, password, phone: phone || null, country, otp: otp || null, role,
+      date_of_birth: dateOfBirth, city: city || null, gender: gender || null,
+    },
+  });
+}
+
+// --- Demographics ("Complete your profile") — routers/auth.py ---
+
+export function fetchDemographicsStatus() {
+  return request("/auth/me/demographics-status", { auth: true });
+}
+
+export function completeDemographics({ date_of_birth, city, gender }) {
+  return request("/auth/me/demographics", {
+    method: "PUT", auth: true,
+    body: { date_of_birth, city: city || null, gender: gender || null },
   });
 }
 
@@ -76,6 +92,18 @@ export function sendOtp(phone, purpose) {
   return request("/auth/otp/send", {
     method: "POST",
     body: { phone, purpose },
+  });
+}
+
+// Email-based OTP for India registration (Admin decision, Sept 2026) —
+// replaces the old WhatsApp/phone OTP there. Phone is still collected and
+// required for India (see registerUser above) but is no longer itself
+// verified. OTP LOGIN ("Log in with OTP instead") is untouched and still
+// uses sendOtp(phone, ...) above.
+export function sendRegistrationEmailOtp(email) {
+  return request("/auth/otp/send-email", {
+    method: "POST",
+    body: { email, purpose: "registration" },
   });
 }
 
@@ -933,8 +961,8 @@ export function fetchMyParent() {
   return request("/sub-accounts/my-parent", { auth: true });
 }
 
-export function createSubAccount({ name, email, password }) {
-  return request("/sub-accounts", { method: "POST", auth: true, body: { name, email, password } });
+export function createSubAccount({ name, email, password, isMinor }) {
+  return request("/sub-accounts", { method: "POST", auth: true, body: { name, email, password, is_minor: isMinor } });
 }
 
 export function deactivateSubAccount(subAccountId) {

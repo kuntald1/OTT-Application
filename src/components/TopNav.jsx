@@ -2,8 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp, fetchMyOrganiserRequestStatus } from "../api";
+import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp, sendRegistrationEmailOtp, fetchMyOrganiserRequestStatus } from "../api";
 import { COUNTRIES } from "../shared/countries";
+import CityDropdown from "../shared/CityDropdown";
 import OrganiserRequestModal from "./OrganiserRequestModal";
 
 // ---------------------------------------------------------------------------
@@ -127,7 +128,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
         {/* Logo */}
         <div className="flex flex-shrink-0 items-center gap-2" style={{ color: COLORS.cream }}>
           <MovixMark className="h-6 w-6" style={{ fill: COLORS.gold }} />
-          <span className="text-lg font-semibold tracking-wide">THEOMY</span>
+          <span className="text-lg font-semibold tracking-wide">theomy</span>
         </div>
 
         {/* Desktop menu */}
@@ -598,6 +599,11 @@ function LoginModal({ onClose }) {
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("India");
   const [countryOpen, setCountryOpen] = useState(false);
+  // Required at registration (Admin decision, Sept 2026) — see
+  // auth.MIN_REGISTRATION_AGE for the under-18 rule enforced server-side.
+  const [dob, setDob] = useState("");
+  const [city, setCity] = useState("");
+  const [gender, setGender] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
@@ -628,7 +634,8 @@ function LoginModal({ onClose }) {
       : // register
         isIndia && regOtpSent
         ? regOtpCode.trim()
-        : name.trim() && email.trim() && password.length >= 8 && (!isIndia || phone.trim());
+        : name.trim() && email.trim() && password.length >= 8 && (!isIndia || phone.trim())
+          && dob && (!isIndia || city.trim());
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
@@ -661,7 +668,9 @@ function LoginModal({ onClose }) {
     if (mode === "register" && isIndia && !regOtpSent) {
       setSendingOtp(true);
       try {
-        await sendOtp(phone.trim(), "registration");
+        // Email OTP now (Admin decision, Sept 2026) — phone is still a
+        // required field for India but is no longer itself verified.
+        await sendRegistrationEmailOtp(email.trim());
         setRegOtpSent(true);
       } catch (err) {
         setFormError(err.message || "Couldn't send code. Please try again.");
@@ -687,6 +696,9 @@ function LoginModal({ onClose }) {
           country,
           otp: isIndia ? regOtpCode.trim() : null,
           role: "user",
+          dateOfBirth: dob,
+          city: isIndia ? city.trim() : undefined,
+          gender: gender || undefined,
         });
       }
     } catch (err) {
@@ -715,7 +727,7 @@ function LoginModal({ onClose }) {
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          {mode === "login" ? "Log in to THEOMY"
+          {mode === "login" ? "Log in to theomy"
             : mode === "forgot" ? "Reset your password"
             : mode === "otpLogin" ? "Log in with OTP"
             : "Create your account"}
@@ -920,13 +932,38 @@ function LoginModal({ onClose }) {
                 className="rounded-lg border px-4 py-2.5 text-sm outline-none"
                 style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
               />
+
+              <input
+                type="date"
+                aria-label="Date of birth"
+                max={new Date().toISOString().slice(0, 10)}
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: dob ? COLORS.cream : "rgba(245,235,221,0.4)", colorScheme: "dark" }}
+              />
+
+              {isIndia && <CityDropdown value={city} onChange={setCity} />}
+
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                aria-label="Gender"
+                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream, colorScheme: "dark" }}
+              >
+                <option value="">Gender (prefer not to say)</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
             </>
           )}
 
           {mode === "register" && isIndia && regOtpSent && (
             <>
               <p className="text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-                We sent a code to {phone} via WhatsApp.
+                We sent a verification code to {email}.
               </p>
               <input
                 type="text"
@@ -943,7 +980,7 @@ function LoginModal({ onClose }) {
                 className="self-start text-xs hover:opacity-80"
                 style={{ color: "rgba(245,235,221,0.5)" }}
               >
-                Change phone number
+                Change details
               </button>
             </>
           )}

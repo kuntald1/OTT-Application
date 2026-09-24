@@ -126,6 +126,52 @@ class FamilyPin(Base):
     )
 
 
+class UserDemographics(Base):
+    """Date of birth, city and gender — collected for city/age-group revenue
+    reporting (Admin > Revenue Sharing). NOT stored on `users` for the same
+    reason as FamilyPin: Base.metadata.create_all only creates missing
+    TABLES, never adds columns to an existing one, so this table appears by
+    itself on the next startup with no manual ALTER TABLE. One row per user;
+    no row = not collected (shows as "Unknown" in reports).
+
+    Who has a row here, and when a row is created:
+      - Main accounts: a row with date_of_birth + city is created AT
+        registration (see routers/auth.py) — under-18 is rejected there (see
+        auth.MIN_REGISTRATION_AGE), so a main-account row always means an
+        adult, and is_declared_minor is always False for them.
+      - Sub-accounts: the parent declares, when CREATING the sub-account
+        (routers/sub_accounts.py), whether it's for someone under 18. A row
+        is created immediately either way, so this table is the single
+        source of truth for "is this account a declared minor":
+          * declared an ADULT (is_declared_minor=False): date_of_birth/city
+            start NULL — the app prompts that sub-account, on its OWN first
+            login, to fill them in itself (self-declared, its own consent).
+          * declared a MINOR (is_declared_minor=True): date_of_birth/city
+            stay NULL forever — never asked, never editable — set once at
+            creation and enforced server-side, not just hidden in the UI.
+      No row at all only happens for accounts created before this feature
+      shipped; they show as "Unknown" in reports until they complete a
+      one-time profile prompt (main accounts only — pre-existing sub-accounts
+      are treated as declared minors until their parent says otherwise, the
+      safe default).
+    date_of_birth and city are used only to compute age group and city for
+    aggregated reports — never shown to other users, never used to target
+    ads (see the analytics report itself for the minimum-group-size rule).
+    """
+    __tablename__ = "user_demographics"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    date_of_birth = Column(Date, nullable=True)
+    # India-only city list at launch (Admin decision, Sept 2026) — a free-text
+    # "Other" value from the picker is still stored as plain text here, not
+    # validated against the list, so it survives the list changing later.
+    city = Column(String(120), nullable=True)
+    gender = Column(String(20), nullable=True)  # "male" | "female" | "other" | None ("prefer not to say")
+    is_declared_minor = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class TicketStatus(str, enum.Enum):
     open = "Open"
     in_progress = "In Progress"
@@ -897,6 +943,32 @@ class OtpVerification(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class EmailOtpVerification(Base):
+    """Short-lived registration OTP codes sent by EMAIL. Replaces the
+    WhatsApp/phone-based OTP for INDIA REGISTRATION only (Admin decision,
+    Sept 2026) — phone is still collected and required for India accounts
+    (see routers/auth.py's register()), but is no longer itself verified;
+    the email address is verified instead. OTP LOGIN (routers/auth.py's
+    login_with_otp, routers/otp.py's "/send" WhatsApp endpoint) is a
+    separate, untouched feature and still uses OtpVerification/phone.
+
+    Mirrors OtpVerification's shape and behaviour (lockout after 5 wrong
+    tries, most-recent-row-wins lookup) but is its OWN table rather than an
+    ALTER TABLE on the phone-based one — see FamilyPin's docstring for why
+    that matters (no manual migration needed on the production database).
+    """
+    __tablename__ = "email_otp_verifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False, index=True)
+    otp_code = Column(String(6), nullable=False)
+    purpose = Column(Enum(OtpPurpose), nullable=False)
+    is_verified = Column(Boolean, nullable=False, default=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class ExchangeRateConfig(Base):

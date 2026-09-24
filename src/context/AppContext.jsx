@@ -18,6 +18,8 @@ import {
   toggleMyListItem,
   removeMyListItem,
   fetchFamilyAccounts,
+  fetchDemographicsStatus,
+  completeDemographics as apiCompleteDemographics,
 } from "../api";
 // ---------------------------------------------------------------------------
 // AppContext — the one place that owns:
@@ -89,6 +91,10 @@ export function AppProvider({ children }) {
   // familyPickerOpen = the picker overlay is showing (see shared/WhosWatching).
   const [hasFamily, setHasFamily] = useState(false);
   const [familyPickerOpen, setFamilyPickerOpen] = useState(false);
+  // "Complete your profile" (date of birth + city) — see
+  // shared/CompleteProfileModal.jsx. Checked after every login and on
+  // session restore; never true for a declared-minor sub-account.
+  const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
   const [authLoading, setAuthLoading] = useState(true); // true while we check for an existing session
   const [authError, setAuthError] = useState("");
 
@@ -167,6 +173,23 @@ export function AppProvider({ children }) {
   const openFamilyPicker = useCallback(() => setFamilyPickerOpen(true), []);
   const closeFamilyPicker = useCallback(() => setFamilyPickerOpen(false), []);
 
+  // Checked after every login and on session restore (never on its own —
+  // it never nags on unrelated actions). A network failure here just means
+  // the prompt doesn't show this time rather than blocking the app.
+  const refreshProfileCompletionStatus = useCallback(async () => {
+    try {
+      const status = await fetchDemographicsStatus();
+      setNeedsProfileCompletion(status.needs_profile);
+    } catch {
+      setNeedsProfileCompletion(false);
+    }
+  }, []);
+
+  const completeDemographics = useCallback(async (payload) => {
+    await apiCompleteDemographics(payload);
+    setNeedsProfileCompletion(false);
+  }, []);
+
   // Pulls tickets + current subscription from the backend — called once
   // right after we know who's logged in (session restore, or right after
   // login/register/OAuth completes).
@@ -186,9 +209,10 @@ export function AppProvider({ children }) {
     }
 
     refreshFamily();
+    refreshProfileCompletionStatus();
 
     await refreshSubscription();
-  }, [refreshSubscription, refreshFamily]);
+  }, [refreshSubscription, refreshFamily, refreshProfileCompletionStatus]);
 
   // On first load: if there's a token in the URL (just arrived from a
   // Google/Facebook redirect), save it and clean the URL. Then, whichever
@@ -287,9 +311,9 @@ export function AppProvider({ children }) {
   // country is India, in which case the caller must have already
   // completed WhatsApp OTP verification and pass the code here — the
   // backend re-validates it server-side regardless.
-  const register = useCallback(async ({ name, email, password, phone, country, otp, role }) => {
+  const register = useCallback(async ({ name, email, password, phone, country, otp, role, dateOfBirth, city, gender }) => {
     setAuthError("");
-    const data = await registerUser({ name, email, password, phone, country, otp, role });
+    const data = await registerUser({ name, email, password, phone, country, otp, role, dateOfBirth, city, gender });
     setToken(data.access_token);
     setProfile((p) => toProfile(data.user, p.photo));
     setIsLoggedIn(true);
@@ -302,6 +326,7 @@ export function AppProvider({ children }) {
     setIsLoggedIn(false);
     setHasFamily(false);
     setFamilyPickerOpen(false);
+    setNeedsProfileCompletion(false);
     setProfile({ id: null, name: "", email: "", photo: null, role: "user", country: "India" });
     setTickets([]);
     setMyList([]);
@@ -333,7 +358,7 @@ export function AppProvider({ children }) {
     setActiveCurrency("INR");
     setFamilyPickerOpen(false);
     loadUserData();
-  }, [loadUserData]);
+  }, [loadUserData]); // loadUserData itself calls refreshProfileCompletionStatus()
 
   // Persists the plan choice to the backend (no payment gateway yet — this
   // activates immediately). Throws on failure so the caller can surface it.
@@ -453,6 +478,7 @@ export function AppProvider({ children }) {
   const value = {
     isLoggedIn, profile, showLoginModal, authLoading, authError,
     hasFamily, familyPickerOpen, openFamilyPicker, closeFamilyPicker, refreshFamily, applyAccountSwitch,
+    needsProfileCompletion, completeDemographics,
     requestLogin, closeLoginModal, login, loginWithOtp, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,

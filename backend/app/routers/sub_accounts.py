@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import User, UserRole, AuthProvider, Subscription
+from app.models import User, UserRole, AuthProvider, Subscription, UserDemographics
 from app.schemas import SubAccountCreate, SubAccountOut, MySubAccountsOut, MyParentOut
 from app.security import hash_password
 
@@ -51,7 +51,25 @@ def my_sub_accounts(
         .order_by(User.created_at.asc())
         .all()
     )
-    return MySubAccountsOut(max_allowed=max_allowed, sub_accounts=sub_accounts)
+    # is_minor lives in UserDemographics, not on User — see that model's
+    # docstring for why. A missing row (only possible for a sub-account
+    # created before this feature shipped) defaults to "minor", the safe
+    # side, until the parent explicitly says otherwise (there's no UI to
+    # change it yet — flag if that's needed).
+    minor_by_id = {
+        row.user_id: row.is_declared_minor
+        for row in db.query(UserDemographics).filter(
+            UserDemographics.user_id.in_([s.id for s in sub_accounts])
+        )
+    }
+    out = [
+        SubAccountOut(
+            id=s.id, name=s.name, email=s.email, is_active=s.is_active,
+            created_at=s.created_at, is_minor=minor_by_id.get(s.id, True),
+        )
+        for s in sub_accounts
+    ]
+    return MySubAccountsOut(max_allowed=max_allowed, sub_accounts=out)
 
 
 @router.get("/my-parent", response_model=MyParentOut)
@@ -107,7 +125,19 @@ def create_sub_account(
     db.add(sub_account)
     db.commit()
     db.refresh(sub_account)
-    return sub_account
+
+    # The parent's minor/adult declaration, recorded immediately either way
+    # (see UserDemographics' docstring). A minor's date_of_birth/city stay
+    # NULL forever; an adult's stay NULL until THEY complete their own
+    # profile on first login (routers/users.py's complete_demographics).
+    db.add(UserDemographics(user_id=sub_account.id, is_declared_minor=payload.is_minor))
+    db.commit()
+
+    return SubAccountOut(
+        id=sub_account.id, name=sub_account.name, email=sub_account.email,
+        is_active=sub_account.is_active, created_at=sub_account.created_at,
+        is_minor=payload.is_minor,
+    )
 
 
 @router.patch("/{sub_account_id}/deactivate", response_model=SubAccountOut)
