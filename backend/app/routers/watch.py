@@ -11,12 +11,13 @@ from app.models import (
     User, Video, VideoStatus, VideoRevenueTier, VideoWatchRecord,
     RevenueRateConfig, CreatorEarnings, RevenueLedgerEntry, PlaybackSession, UserDemographics,
 )
-from app.demographics_utils import age_group_label
+from app.demographics_utils import age_group_label, geo_breakdown
 from app.routers.videos import _check_video_access
 from app.schemas import (
     WatchHeartbeatRequest, WatchHeartbeatResponse, ContentPerformanceOut,
     ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut,
     RevenueByDayOut, RevenueByCountryOut, RevenueByCityOut, RevenueByAgeGroupOut,
+    GeoCountryOut,
 )
 
 router = APIRouter(prefix="/videos", tags=["watch"])
@@ -407,6 +408,33 @@ def get_content_performance_breakdown(
     return result
 
 
+@router.get("/{video_id}/revenue/geo-breakdown", response_model=list[GeoCountryOut])
+def get_video_revenue_geo_breakdown(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Country > City > Age group tree for THIS ONE video — "which
+    country, then which city, then which age group watches this video
+    most", the actual question behind uploading more of what works (see
+    demographics_utils.geo_breakdown's docstring). Same ownership rule
+    as /content-performance-breakdown: 404s for a video that isn't
+    this creator's own.
+    """
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found.")
+
+    today = datetime.now(timezone.utc).date()
+    rows = (
+        db.query(VideoWatchRecord.user_id, VideoWatchRecord.creator_credited_paisa)
+        .filter(VideoWatchRecord.video_id == video.id)
+        .all()
+    )
+    per_viewer = {r.user_id: r.creator_credited_paisa for r in rows}
+    return geo_breakdown(db, per_viewer, today)
+
+
 @router.get("/revenue/by-day/mine", response_model=list[RevenueByDayOut])
 def get_my_revenue_by_day(
     days: int = 30,
@@ -550,3 +578,18 @@ def get_my_revenue_by_age_group(
          for k, v in buckets.items()),
         key=lambda r: r.creator_earned_rupees, reverse=True,
     )
+
+
+@router.get("/revenue/geo-breakdown/mine", response_model=list[GeoCountryOut])
+def get_my_revenue_geo_breakdown(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Country > City > Age group tree, scoped to this creator's own
+    content across ALL their videos combined — see
+    demographics_utils.geo_breakdown's docstring for why this exists
+    alongside the separate by-country/by-city/by-age-group breakdowns.
+    """
+    today = datetime.now(timezone.utc).date()
+    per_viewer = _per_viewer_creator_paisa(db, current_user.id)
+    return geo_breakdown(db, per_viewer, today)

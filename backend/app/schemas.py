@@ -1113,6 +1113,34 @@ class RevenueByAgeGroupOut(BaseModel):
     creator_earned_rupees: Decimal
 
 
+class GeoAgeGroupOut(BaseModel):
+    age_group: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class GeoCityOut(BaseModel):
+    city: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+    age_groups: List[GeoAgeGroupOut]
+
+
+class GeoCountryOut(BaseModel):
+    """One node of the Country > City > Age group tree (Admin decision,
+    Sept 2026) — see demographics_utils.geo_breakdown's docstring for why
+    this exists alongside the three separate by-country/by-city/
+    by-age-group breakdowns: those can't answer "of this country's
+    viewers, which city and age group watch most", which was the actual
+    goal (understanding a video's — or the whole catalog's — audience to
+    inform what to upload next).
+    """
+    country: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+    cities: List[GeoCityOut]
+
+
 class AdminRevenueSummaryOut(BaseModel):
     """Platform-wide KPI cards — the theomy equivalent of a "Revenue
     Summary" dashboard, built from real data (VideoWatchRecord,

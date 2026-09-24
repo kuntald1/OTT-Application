@@ -11,14 +11,14 @@ from app.models import (
     AdminUser, User, Video, VideoWatchRecord, WithdrawalRequest, WithdrawalStatus, CreatorEarnings,
     RevenueRateConfig, RevenueLedgerEntry, VideoRevenueTier, UserDemographics,
 )
-from app.demographics_utils import age_group_label, user_ids_matching
+from app.demographics_utils import age_group_label, geo_breakdown, user_ids_matching
 from app.notifications import send_withdrawal_paid_email, send_withdrawal_paid_whatsapp, send_withdrawal_rejected_email
 from app.routers.watch import _compute_tier_breakdown_paisa
 from app.schemas import (
     AdminWithdrawalOut, AdminWithdrawalActionRequest, AdminContentPerformanceOut,
     AdminRevenueConfigUpdate, RevenueByDayOut, RevenueByCountryOut, RevenueByCityOut, RevenueByAgeGroupOut,
     RevenueRateOut, AdminRevenueSummaryOut, AdminRevenueByCreatorOut,
-    ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut,
+    ContentPerformanceViewerBreakdownOut, ContentPerformanceTierBreakdownOut, GeoCountryOut,
 )
 from app.models import VideoStatus
 
@@ -355,6 +355,31 @@ def get_revenue_by_age_group(
     )
 
 
+@router.get("/analytics/geo-breakdown", response_model=list[GeoCountryOut])
+def get_revenue_geo_breakdown(
+    creator_id: str | None = None,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Platform-wide Country > City > Age group tree — see
+    demographics_utils.geo_breakdown's docstring for why this exists
+    alongside the separate by-country/by-city/by-age-group breakdowns.
+    creator_id, when given, narrows this to just that creator's own
+    audience across all their videos (matches every other endpoint on
+    this page that takes creator_id).
+    """
+    today = datetime.now(timezone.utc).date()
+    rows_query = db.query(
+        RevenueLedgerEntry.user_id,
+        func.sum(RevenueLedgerEntry.delta_creator_paisa).label("creator_paisa"),
+    )
+    if creator_id:
+        rows_query = rows_query.filter(RevenueLedgerEntry.creator_user_id == creator_id)
+    rows = rows_query.group_by(RevenueLedgerEntry.user_id).all()
+    per_viewer = {r.user_id: r.creator_paisa for r in rows}
+    return geo_breakdown(db, per_viewer, today)
+
+
 @router.get("/summary", response_model=AdminRevenueSummaryOut)
 def get_revenue_summary(
     creator_id: str | None = None,
@@ -654,3 +679,27 @@ def get_admin_content_performance_breakdown(
             tier_breakdown=tier_out,
         ))
     return result
+
+
+@router.get("/content-performance/{video_id}/geo-breakdown", response_model=list[GeoCountryOut])
+def get_admin_video_revenue_geo_breakdown(
+    video_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin equivalent of a creator's own /videos/{video_id}/revenue/
+    geo-breakdown — same Country > City > Age group tree for this one
+    video, just without the "must own this video" restriction.
+    """
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found.")
+
+    today = datetime.now(timezone.utc).date()
+    rows = (
+        db.query(VideoWatchRecord.user_id, VideoWatchRecord.creator_credited_paisa)
+        .filter(VideoWatchRecord.video_id == video.id)
+        .all()
+    )
+    per_viewer = {r.user_id: r.creator_credited_paisa for r in rows}
+    return geo_breakdown(db, per_viewer, today)
