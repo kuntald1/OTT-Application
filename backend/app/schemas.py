@@ -945,9 +945,17 @@ class SendEmailOtpRequest(BaseModel):
     EmailOtpVerification's docstring in models.py). Purpose is restricted to
     "registration" — OTP LOGIN still uses phone/WhatsApp (SendOtpRequest
     above), untouched.
+
+    phone is optional here (only India registration collects it, and only
+    at this point does the form already have it) — when given, it's
+    duplicate-checked alongside email BEFORE a code is sent (Admin
+    decision, Sept 2026), so a taken phone number is caught here instead
+    of only after the person has already gone through receiving and
+    typing the email code.
     """
     email: EmailStr
     purpose: str = Field(pattern="^(registration)$")
+    phone: Optional[str] = Field(default=None, max_length=20)
 
 
 class VerifyOtpLoginRequest(BaseModel):

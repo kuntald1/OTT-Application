@@ -100,10 +100,15 @@ export function sendOtp(phone, purpose) {
 // required for India (see registerUser above) but is no longer itself
 // verified. OTP LOGIN ("Log in with OTP instead") is untouched and still
 // uses sendOtp(phone, ...) above.
-export function sendRegistrationEmailOtp(email) {
+//
+// Checks email — and phone, when given — for an existing account BEFORE
+// sending anything (Admin decision, Sept 2026), so a duplicate is caught
+// right at "Send verification code" instead of only after the person has
+// received and typed back the email code.
+export function sendRegistrationEmailOtp(email, phone) {
   return request("/auth/otp/send-email", {
     method: "POST",
-    body: { email, purpose: "registration" },
+    body: { email, purpose: "registration", phone: phone || null },
   });
 }
 

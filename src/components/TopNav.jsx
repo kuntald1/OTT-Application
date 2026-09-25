@@ -603,7 +603,6 @@ function LoginModal({ onClose }) {
   // auth.MIN_REGISTRATION_AGE for the under-18 rule enforced server-side.
   const [dob, setDob] = useState("");
   const [city, setCity] = useState("");
-  const [gender, setGender] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
@@ -670,7 +669,7 @@ function LoginModal({ onClose }) {
       try {
         // Email OTP now (Admin decision, Sept 2026) — phone is still a
         // required field for India but is no longer itself verified.
-        await sendRegistrationEmailOtp(email.trim());
+        await sendRegistrationEmailOtp(email.trim(), isIndia ? phone.trim() : undefined);
         setRegOtpSent(true);
       } catch (err) {
         setFormError(err.message || "Couldn't send code. Please try again.");
@@ -698,7 +697,6 @@ function LoginModal({ onClose }) {
           role: "user",
           dateOfBirth: dob,
           city: isIndia ? city.trim() : undefined,
-          gender: gender || undefined,
         });
       }
     } catch (err) {
@@ -933,30 +931,22 @@ function LoginModal({ onClose }) {
                 style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
               />
 
-              <input
-                type="date"
-                aria-label="Date of birth"
-                max={new Date().toISOString().slice(0, 10)}
-                value={dob}
-                onChange={(e) => setDob(e.target.value)}
-                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: dob ? COLORS.cream : "rgba(245,235,221,0.4)", colorScheme: "dark" }}
-              />
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium" style={{ color: "rgba(245,235,221,0.55)" }}>
+                  Date of birth <span style={{ color: "rgba(245,235,221,0.35)" }}>(DD-MM-YYYY)</span>
+                </span>
+                <input
+                  type="date"
+                  aria-label="Date of birth"
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
+                  style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: dob ? COLORS.cream : "rgba(245,235,221,0.4)", colorScheme: "dark" }}
+                />
+              </label>
 
               {isIndia && <CityDropdown value={city} onChange={setCity} />}
-
-              <select
-                value={gender}
-                onChange={(e) => setGender(e.target.value)}
-                aria-label="Gender"
-                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream, colorScheme: "dark" }}
-              >
-                <option value="">Gender (prefer not to say)</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
             </>
           )}
 
