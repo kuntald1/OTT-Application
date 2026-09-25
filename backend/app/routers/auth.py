@@ -160,8 +160,16 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         role=payload.role,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    # flush (not commit) — this sends the INSERT and assigns user.id within
+    # the SAME open transaction as the UserDemographics insert below, so a
+    # single db.commit() covers both. Two separate commits here previously
+    # meant a failure while building UserDemographics (an AttributeError
+    # from stale deployed code once did exactly this) left a real, permanent
+    # User row with no demographics — a person who saw a failed
+    # registration but actually got an account, silently, with no way to
+    # tell from the error they got. get_db() (database.py) doesn't roll
+    # back on its own, so this is the only thing that made it atomic.
+    db.flush()
 
     # A main account is always an adult (enforced above), so
     # is_declared_minor is always False here — only a sub-account's PARENT
@@ -169,9 +177,10 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.add(UserDemographics(
         user_id=user.id, date_of_birth=payload.date_of_birth,
         city=payload.city if payload.country == "India" else None,
-        gender=payload.gender, is_declared_minor=False,
+        is_declared_minor=False,
     ))
     db.commit()
+    db.refresh(user)
 
     token = _new_login_token(user, db)
     return Token(access_token=token, user=UserOut.model_validate(user))
@@ -437,7 +446,6 @@ def _demographics_status(user: User, db: Session) -> DemographicsStatusOut:
         is_declared_minor=is_declared_minor,
         date_of_birth=row.date_of_birth if row else None,
         city=row.city if row else None,
-        gender=row.gender if row else None,
     )
 
 
@@ -494,12 +502,11 @@ def complete_demographics(
     if existing:
         existing.date_of_birth = payload.date_of_birth
         existing.city = city
-        existing.gender = payload.gender
         existing.updated_at = datetime.now(timezone.utc)
     else:
         db.add(UserDemographics(
             user_id=current_user.id, date_of_birth=payload.date_of_birth,
-            city=city, gender=payload.gender, is_declared_minor=False,
+            city=city, is_declared_minor=False,
         ))
     db.commit()
 
