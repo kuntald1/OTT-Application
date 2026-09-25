@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, IndianRupee, TrendingUp, Wallet, Clock, Film, Video, Eye, Globe2, BarChart3, LayoutList, ChevronDown, ChevronRight } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry, fetchMyRevenueByCity, fetchMyRevenueByAgeGroup, fetchContentPerformanceBreakdown } from "../api";
+import { fetchRevenueSummary, requestWithdrawal, fetchWithdrawalHistory, fetchMyContentPerformance, fetchMyRevenueByDay, fetchMyRevenueByCountry, fetchMyRevenueByCity, fetchMyRevenueByAgeGroup, fetchMyRevenueGeoBreakdown, fetchVideoRevenueGeoBreakdown, fetchContentPerformanceBreakdown } from "../api";
+import GeoBreakdownTree from "../shared/GeoBreakdownTree";
 
 // ---------------------------------------------------------------------------
 // Revenue — Content Creator / Plays Organiser only.
@@ -121,6 +122,9 @@ export default function RevenuePage({ onBack }) {
   const [breakdownByVideoId, setBreakdownByVideoId] = useState({});
   const [breakdownLoadingId, setBreakdownLoadingId] = useState(null);
   const [expandedViewerKey, setExpandedViewerKey] = useState(null);
+  // The per-video audience tree is a separate, unfiltered fetch from the
+  // flat viewer breakdown above (see AdminRevenuePage's identical note).
+  const [geoBreakdownByVideoId, setGeoBreakdownByVideoId] = useState({});
 
   const toggleVideoBreakdown = (videoId) => {
     if (expandedVideoId === videoId) {
@@ -135,12 +139,18 @@ export default function RevenuePage({ onBack }) {
         .catch(() => setBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })))
         .finally(() => setBreakdownLoadingId(null));
     }
+    if (!geoBreakdownByVideoId[videoId]) {
+      fetchVideoRevenueGeoBreakdown(videoId)
+        .then((tree) => setGeoBreakdownByVideoId((m) => ({ ...m, [videoId]: tree })))
+        .catch(() => setGeoBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })));
+    }
   };
 
   const [revenueByDay, setRevenueByDay] = useState([]);
   const [revenueByCountry, setRevenueByCountry] = useState([]);
   const [revenueByCity, setRevenueByCity] = useState([]);
   const [revenueByAgeGroup, setRevenueByAgeGroup] = useState([]);
+  const [revenueGeoBreakdown, setRevenueGeoBreakdown] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   const loadAll = (silent = false) => {
@@ -159,18 +169,20 @@ export default function RevenuePage({ onBack }) {
     setPerformanceLoading(false);
 
     setAnalyticsLoading(true);
-    Promise.all([fetchMyRevenueByDay(30), fetchMyRevenueByCountry(), fetchMyRevenueByCity(), fetchMyRevenueByAgeGroup()])
-      .then(([byDay, byCountry, byCity, byAgeGroup]) => {
+    Promise.all([fetchMyRevenueByDay(30), fetchMyRevenueByCountry(), fetchMyRevenueByCity(), fetchMyRevenueByAgeGroup(), fetchMyRevenueGeoBreakdown()])
+      .then(([byDay, byCountry, byCity, byAgeGroup, geo]) => {
         setRevenueByDay(byDay);
         setRevenueByCountry(byCountry);
         setRevenueByCity(byCity);
         setRevenueByAgeGroup(byAgeGroup);
+        setRevenueGeoBreakdown(geo);
       })
       .catch(() => {
         setRevenueByDay([]);
         setRevenueByCountry([]);
         setRevenueByCity([]);
         setRevenueByAgeGroup([]);
+        setRevenueGeoBreakdown([]);
       })
       .finally(() => setAnalyticsLoading(false));
 
@@ -312,12 +324,23 @@ export default function RevenuePage({ onBack }) {
                   Revenue share by age group
                 </p>
                 {revenueByAgeGroup.length === 0 ? (
-                  <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
+                  <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>No revenue events tracked yet.</p>
                 ) : (
-                  <div className="rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="mb-8 rounded-xl p-5" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
                     <PieChart data={topNPlusOther(revenueByAgeGroup, "age_group", "creator_earned_rupees")} />
                   </div>
                 )}
+
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Audience breakdown — country, city, age group
+                </p>
+                <p className="mb-3 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                  Across all your videos combined. Answers "of this city's viewers, which age group" — the pie charts above can't, on their own.
+                </p>
+                <GeoBreakdownTree
+                  data={revenueGeoBreakdown}
+                  colors={{ border: "rgba(255,255,255,0.08)", headerBg: COLORS.blackSoft, text: COLORS.cream, subtext: "rgba(245,235,221,0.6)", gold: COLORS.gold }}
+                />
               </>
             )}
           </div>
@@ -482,6 +505,17 @@ export default function RevenuePage({ onBack }) {
                         {isExpanded && (
                           <tr style={{ background: "rgba(0,0,0,0.15)" }}>
                             <td colSpan={5} className="px-4 py-3 sm:px-8">
+                              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                                <Globe2 className="h-3.5 w-3.5" style={{ color: COLORS.gold }} /> Audience — this video
+                              </p>
+                              <div className="mb-4">
+                                <GeoBreakdownTree
+                                  data={geoBreakdownByVideoId[row.video_id] || []}
+                                  colors={{ border: "rgba(255,255,255,0.08)", headerBg: "rgba(0,0,0,0.2)", text: COLORS.cream, subtext: "rgba(245,235,221,0.6)", gold: COLORS.gold }}
+                                  emptyLabel="No viewer data yet."
+                                />
+                              </div>
+
                               {isLoadingThis ? (
                                 <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading breakdown…</p>
                               ) : !viewers || viewers.length === 0 ? (

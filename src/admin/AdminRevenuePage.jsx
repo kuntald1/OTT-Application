@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Wallet, BarChart3, Check, X, Banknote, Globe2, Settings, TrendingUp, IndianRupee, Users, Film as FilmIcon, Award, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
 import {
   fetchAdminWithdrawals, approveWithdrawal, markWithdrawalPaid, rejectWithdrawal,
-  fetchAdminContentPerformance, fetchAdminContentPerformanceBreakdown, fetchAdminRevenueConfig, updateAdminRevenueConfig,
+  fetchAdminContentPerformance, fetchAdminContentPerformanceBreakdown, fetchAdminVideoGeoBreakdown, fetchAdminRevenueConfig, updateAdminRevenueConfig,
   fetchAIConfig, updateAIConfig,
-  fetchRevenueByDay, fetchRevenueByCountry, fetchRevenueByCity, fetchRevenueByAgeGroup,
+  fetchRevenueByDay, fetchRevenueByCountry, fetchRevenueByCity, fetchRevenueByAgeGroup, fetchRevenueGeoBreakdown,
   fetchAdminRevenueSummary, fetchAdminRevenueByCreator,
   fetchAnalyticsInsights,
 } from "./adminApi";
+import GeoBreakdownTree from "../shared/GeoBreakdownTree";
 
 // Mirrors backend app/demographics_utils.py's AGE_GROUPS exactly — keep
 // these in sync if the buckets ever change there.
@@ -67,6 +68,12 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [breakdownByVideoId, setBreakdownByVideoId] = useState({});
   const [breakdownLoadingId, setBreakdownLoadingId] = useState(null);
   const [expandedViewerKey, setExpandedViewerKey] = useState(null);
+  // The per-video audience tree (Country > City > Age group) is a SEPARATE
+  // fetch from the flat viewer breakdown above — it never takes city/age
+  // filters itself (the whole point is to show every branch, not narrow
+  // it), so unlike breakdownByVideoId it's never invalidated by the page's
+  // City/Age filters changing.
+  const [geoBreakdownByVideoId, setGeoBreakdownByVideoId] = useState({});
 
   const toggleVideoBreakdown = (videoId) => {
     if (expandedVideoId === videoId) {
@@ -80,6 +87,11 @@ export default function AdminRevenuePage({ currentAdmin }) {
         .then((rows) => setBreakdownByVideoId((m) => ({ ...m, [videoId]: rows })))
         .catch(() => setBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })))
         .finally(() => setBreakdownLoadingId(null));
+    }
+    if (!geoBreakdownByVideoId[videoId]) {
+      fetchAdminVideoGeoBreakdown(videoId)
+        .then((tree) => setGeoBreakdownByVideoId((m) => ({ ...m, [videoId]: tree })))
+        .catch(() => setGeoBreakdownByVideoId((m) => ({ ...m, [videoId]: [] })));
     }
   };
 
@@ -97,6 +109,7 @@ export default function AdminRevenuePage({ currentAdmin }) {
   const [revenueByCountry, setRevenueByCountry] = useState([]);
   const [revenueByCity, setRevenueByCity] = useState([]);
   const [revenueByAgeGroup, setRevenueByAgeGroup] = useState([]);
+  const [revenueGeoBreakdown, setRevenueGeoBreakdown] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [insights, setInsights] = useState("");
   const [insightsLoading, setInsightsLoading] = useState(true);
@@ -187,18 +200,20 @@ export default function AdminRevenuePage({ currentAdmin }) {
   useEffect(() => {
     if (tab !== "analytics") return;
     setAnalyticsLoading(true);
-    Promise.all([fetchRevenueByDay(30), fetchRevenueByCountry(), fetchRevenueByCity(), fetchRevenueByAgeGroup()])
-      .then(([byDay, byCountry, byCity, byAgeGroup]) => {
+    Promise.all([fetchRevenueByDay(30), fetchRevenueByCountry(), fetchRevenueByCity(), fetchRevenueByAgeGroup(), fetchRevenueGeoBreakdown()])
+      .then(([byDay, byCountry, byCity, byAgeGroup, geo]) => {
         setRevenueByDay(byDay);
         setRevenueByCountry(byCountry);
         setRevenueByCity(byCity);
         setRevenueByAgeGroup(byAgeGroup);
+        setRevenueGeoBreakdown(geo);
       })
       .catch(() => {
         setRevenueByDay([]);
         setRevenueByCountry([]);
         setRevenueByCity([]);
         setRevenueByAgeGroup([]);
+        setRevenueGeoBreakdown([]);
       })
       .finally(() => setAnalyticsLoading(false));
 
@@ -631,6 +646,17 @@ export default function AdminRevenuePage({ currentAdmin }) {
                         {isExpanded && (
                           <tr style={{ background: "rgba(0,0,0,0.15)" }}>
                             <td colSpan={6} className="px-4 py-3 sm:px-8">
+                              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                                <Globe2 className="h-3.5 w-3.5" style={{ color: COLORS.gold }} /> Audience — this video
+                              </p>
+                              <div className="mb-4">
+                                <GeoBreakdownTree
+                                  data={geoBreakdownByVideoId[row.video_id] || []}
+                                  colors={{ border: "rgba(255,255,255,0.08)", headerBg: "rgba(0,0,0,0.2)", text: COLORS.cream, subtext: "rgba(245,235,221,0.6)", gold: COLORS.gold }}
+                                  emptyLabel="No viewer data yet."
+                                />
+                              </div>
+
                               {isLoadingThis ? (
                                 <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading breakdown…</p>
                               ) : !viewers || viewers.length === 0 ? (
@@ -762,6 +788,19 @@ export default function AdminRevenuePage({ currentAdmin }) {
             <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
           ) : (
             <>
+              <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
+                <Users className="h-4 w-4" style={{ color: COLORS.gold }} /> Audience breakdown — country, city, age group
+              </h3>
+              <p className="mb-3 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                Across every video, platform-wide. Answers "of this city's viewers, which age group" — the three totals below can't, on their own.
+              </p>
+              <div className="mb-8">
+                <GeoBreakdownTree
+                  data={revenueGeoBreakdown}
+                  colors={{ border: "rgba(255,255,255,0.08)", headerBg: COLORS.panel, text: COLORS.cream, subtext: "rgba(245,235,221,0.6)", gold: COLORS.gold }}
+                />
+              </div>
+
               <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold" style={{ color: COLORS.cream }}>
                 <TrendingUp className="h-4 w-4" style={{ color: COLORS.gold }} /> Revenue — last 30 days
               </h3>

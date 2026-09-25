@@ -642,6 +642,19 @@ export function fetchMyRevenueByAgeGroup() {
   return request(`/videos/revenue/by-age-group/mine`, { auth: true });
 }
 
+// Country > City > Age group tree (Admin decision, Sept 2026) — "of this
+// city's viewers, which age group", which the three flat breakdowns above
+// can't answer on their own. `mine` combines all of this creator's videos;
+// the per-video version scopes to one (same ownership check as
+// fetchContentPerformanceBreakdown above).
+export function fetchMyRevenueGeoBreakdown() {
+  return request(`/videos/revenue/geo-breakdown/mine`, { auth: true });
+}
+
+export function fetchVideoRevenueGeoBreakdown(videoId) {
+  return request(`/videos/${videoId}/revenue/geo-breakdown`, { auth: true });
+}
+
 // Real, backend-persisted My List — replaces the old in-memory-only
 // implementation that vanished on refresh/logout. Works uniformly for
 // real videos and demo cards alike (see MyListItem's model docstring).

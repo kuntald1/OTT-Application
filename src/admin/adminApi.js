@@ -518,6 +518,18 @@ export function fetchRevenueByAgeGroup() {
   return request(`/admin/revenue/analytics/by-age-group`, { auth: true });
 }
 
+// Country > City > Age group tree (Admin decision, Sept 2026) — "of this
+// city's viewers, which age group", which the three flat breakdowns above
+// can't answer. Platform-wide; creatorId (optional) narrows it to one
+// creator's own audience, same as the other Content Performance filters.
+export function fetchRevenueGeoBreakdown(creatorId) {
+  return request(`/admin/revenue/analytics/geo-breakdown${creatorId ? `?creator_id=${creatorId}` : ""}`, { auth: true });
+}
+
+export function fetchAdminVideoGeoBreakdown(videoId) {
+  return request(`/admin/revenue/content-performance/${videoId}/geo-breakdown`, { auth: true });
+}
+
 // AI content optimization — Claude-powered title/description/category
 // suggestions at upload time, and a plain-language read of the
 // Analytics numbers on the Revenue page.
