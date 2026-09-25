@@ -33,11 +33,21 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    // FastAPI puts validation/auth errors in `detail`
-    const message =
-      typeof data.detail === "string"
-        ? data.detail
-        : "Something went wrong. Please try again.";
+    // FastAPI puts validation/auth errors in `detail` — a string for our
+    // own HTTPException calls, but a LIST of Pydantic error objects (one
+    // per invalid field) for schema validation failures (422s) like a
+    // malformed email — those used to fall through to a useless generic
+    // message instead of telling the person what to fix.
+    const message = (() => {
+      if (typeof data.detail === "string") return data.detail;
+      if (Array.isArray(data.detail) && data.detail.length > 0) {
+        const raw = typeof data.detail[0]?.msg === "string" ? data.detail[0].msg : null;
+        // Pydantic v2 prefixes some messages with "Value error, " — that's
+        // an implementation detail, not something to show the person.
+        return raw ? raw.replace(/^Value error,\s*/i, "") : "Please check the highlighted field and try again.";
+      }
+      return "Something went wrong. Please try again.";
+    })();
 
     // A logged-in request that comes back 401 while we're still holding
     // a token means the backend rejected THIS specific session — most
@@ -104,11 +114,12 @@ export function sendOtp(phone, purpose) {
 // Checks email — and phone, when given — for an existing account BEFORE
 // sending anything (Admin decision, Sept 2026), so a duplicate is caught
 // right at "Send verification code" instead of only after the person has
-// received and typed back the email code.
-export function sendRegistrationEmailOtp(email, phone) {
+// received and typed back the email code. Also checks dateOfBirth, when
+// given, against the same under-18 rule registerUser enforces below.
+export function sendRegistrationEmailOtp(email, phone, dateOfBirth) {
   return request("/auth/otp/send-email", {
     method: "POST",
-    body: { email, purpose: "registration", phone: phone || null },
+    body: { email, purpose: "registration", phone: phone || null, date_of_birth: dateOfBirth || null },
   });
 }
 

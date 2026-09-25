@@ -952,10 +952,17 @@ class SendEmailOtpRequest(BaseModel):
     decision, Sept 2026), so a taken phone number is caught here instead
     of only after the person has already gone through receiving and
     typing the email code.
+
+    date_of_birth is likewise optional (the form has it by the time "Send
+    verification code" is clicked) — when given, the under-18 rule is
+    checked here too, before sending anything, for the same reason: no
+    point making someone verify an email for an account that can never be
+    created (Admin decision, Sept 2026 — see auth.MIN_REGISTRATION_AGE).
     """
     email: EmailStr
     purpose: str = Field(pattern="^(registration)$")
     phone: Optional[str] = Field(default=None, max_length=20)
+    date_of_birth: Optional[date] = None
 
 
 class VerifyOtpLoginRequest(BaseModel):

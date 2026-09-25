@@ -669,7 +669,9 @@ function LoginModal({ onClose }) {
       try {
         // Email OTP now (Admin decision, Sept 2026) — phone is still a
         // required field for India but is no longer itself verified.
-        await sendRegistrationEmailOtp(email.trim(), isIndia ? phone.trim() : undefined);
+        // dob is also sent so the under-18 rule is caught here, before a
+        // code goes out, instead of only after it's been typed back in.
+        await sendRegistrationEmailOtp(email.trim(), isIndia ? phone.trim() : undefined, dob);
         setRegOtpSent(true);
       } catch (err) {
         setFormError(err.message || "Couldn't send code. Please try again.");
