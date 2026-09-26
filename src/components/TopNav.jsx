@@ -128,7 +128,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
         {/* Logo */}
         <div className="flex flex-shrink-0 items-center gap-2" style={{ color: COLORS.cream }}>
           <MovixMark className="h-6 w-6" style={{ fill: COLORS.gold }} />
-          <span className="text-lg font-semibold tracking-wide">theomy</span>
+          <span className="text-lg font-semibold tracking-wide">THEOMY</span>
         </div>
 
         {/* Desktop menu */}
@@ -727,7 +727,7 @@ function LoginModal({ onClose }) {
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
-          {mode === "login" ? "Log in to theomy"
+          {mode === "login" ? "Log in to THEOMY"
             : mode === "forgot" ? "Reset your password"
             : mode === "otpLogin" ? "Log in with OTP"
             : "Create your account"}
