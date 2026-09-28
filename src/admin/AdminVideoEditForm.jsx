@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
-import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin } from "./adminApi";
+import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin, fetchAdminSpecialCategories, addVideoToAdminSpecialCategory, removeVideoFromAdminSpecialCategory } from "./adminApi";
 import { startResumableVideoUpload } from "../shared/tusUpload";
 import { LANGUAGE_OPTIONS } from "../shared/languages";
 import { fetchCategoryOptions } from "../api";
@@ -92,6 +92,88 @@ function makeEmptyCrew() {
     occupation: "", date_of_birth: "", birthplace: "", about: "",
     early_life: "", personal_life: "", debut_initial_years: "", breakthrough_beyond: "", recent_projects: "",
   };
+}
+
+// "Section Wise Rows" — the same hand-curated rows as Special Categories >
+// Section Wise Video (same table, same add/remove endpoints), reachable from the
+// video's side so publishing and placing a video is one screen. Changes save
+// immediately (like the ad cue points below), not with "Save changes". Only the
+// permanent rows (no date window) are listed — dated banners stay under Special
+// Categories. Rows of the video's own section (or "both") are offered; a row that
+// already holds the video but is of the other section (the video was moved
+// Play <-> Archive since) is still listed so it can be untoggled.
+function SectionRowsPicker({ video, pendingSection }) {
+  const [rows, setRows] = useState(null); // null = loading
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdminSpecialCategories()
+      .then((list) => { if (!cancelled) setRows(list.filter((sc) => !sc.visible_from)); })
+      .catch(() => { if (!cancelled) { setRows([]); setError("Couldn't load the Section Wise Video rows."); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  const isMember = (sc) => sc.videos.some((v) => v.id === video.id);
+  const matchesSection = (sc) => sc.section === "both" || sc.section === video.section;
+  const shown = (rows || []).filter((sc) => matchesSection(sc) || isMember(sc));
+  // Rows are matched to the SAVED section; a not-yet-saved Section change would
+  // pick rows for the wrong one, so wait for Save changes first.
+  const sectionUnsaved = pendingSection !== video.section;
+
+  const toggle = async (sc) => {
+    setBusyId(sc.id);
+    setError("");
+    try {
+      const updatedRow = isMember(sc)
+        ? await removeVideoFromAdminSpecialCategory(sc.id, video.id)
+        : await addVideoToAdminSpecialCategory(sc.id, video.id);
+      setRows((list) => list.map((r) => (r.id === updatedRow.id ? updatedRow : r)));
+    } catch (err) {
+      setError(err.message || "Couldn't update this row.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div>
+      <label style={labelStyle}>Section Wise Rows</label>
+      {rows === null ? (
+        <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Loading…</p>
+      ) : shown.length === 0 ? (
+        <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+          No {video.section} rows yet — create one under Special Categories &gt; Section Wise Video.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {shown.map((sc) => {
+            const selected = isMember(sc);
+            const otherSection = !matchesSection(sc);
+            return (
+              <button
+                key={sc.id}
+                type="button"
+                onClick={() => toggle(sc)}
+                disabled={busyId === sc.id || sectionUnsaved}
+                className="rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-40"
+                style={{ borderColor: selected ? COLORS.gold : "rgba(245,235,221,0.15)", background: selected ? "rgba(212,175,55,0.14)" : "transparent", color: selected ? COLORS.gold : "rgba(245,235,221,0.7)" }}
+              >
+                {sc.title}{otherSection ? " (other section)" : ""}{sc.is_disabled ? " · disabled" : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-1 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+        {sectionUnsaved
+          ? "Save the new Section first, then pick rows for it."
+          : "Saved as you tick. The video shows in a row once it is published."}
+      </p>
+      {error && <p className="mt-1 text-xs" style={{ color: "#f87171" }}>{error}</p>}
+    </div>
+  );
 }
 
 export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpdated }) {
@@ -364,6 +446,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
           })}
         </div>
       </div>
+      <SectionRowsPicker video={video} pendingSection={form.section} />
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
           <label style={labelStyle}>Languages</label>

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import SpecialCategory, SpecialCategoryVideo, Video, VideoSection
+from app.models import SpecialCategory, SpecialCategoryVideo, Video, VideoSection, VideoStatus
 from app.schemas import SpecialCategoryOut, SpecialCategoryVideoCardOut
 
 router = APIRouter(prefix="/special-categories", tags=["special-categories"])
@@ -60,7 +60,15 @@ def list_active_special_categories(section: str = "play", db: Session = Depends(
             l.video_id
             for l in db.query(SpecialCategoryVideo).filter(SpecialCategoryVideo.special_category_id == sc.id).all()
         ]
-        videos = db.query(Video).filter(Video.id.in_(video_ids)).all() if video_ids else []
+        # Published only: a row can now hold a video that is still Pending /
+        # Scheduled (assigned from Video Review > Edit before it goes live), or
+        # one that was Disabled / Rejected after being added — none of those
+        # may show on the site. (Admin's own list, admin_special_categories,
+        # deliberately still shows every member.)
+        videos = (
+            db.query(Video).filter(Video.id.in_(video_ids), Video.status == VideoStatus.published).all()
+            if video_ids else []
+        )
         out.append(SpecialCategoryOut(
             id=sc.id,
             title=sc.title,
