@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Users, Search, Key, KeyRound, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil, ImagePlus } from "lucide-react";
-import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, resetUserFamilyPin, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
+import { fetchAdminUsers, giveOrganiserAdminAccess, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, resetUserFamilyPin, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
 import CreateOrganiserForm from "./CreateOrganiserForm";
@@ -79,6 +79,19 @@ export default function AdminUsersPage({ currentAdmin }) {
   const [confirmToggleUser, setConfirmToggleUser] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
   const [viewingAboutUser, setViewingAboutUser] = useState(null);
+
+  const handleGiveAdminAccess = async (user) => {
+    setBusyId(user.id);
+    setError("");
+    try {
+      await giveOrganiserAdminAccess(user.id);
+      load(search);
+    } catch (err) {
+      setError(err.message || "Couldn't give admin access.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleToggleActiveConfirmed = async () => {
     const user = confirmToggleUser;
@@ -214,6 +227,27 @@ export default function AdminUsersPage({ currentAdmin }) {
           >
             <BookOpen className="h-3.5 w-3.5" /> About Page
           </button>
+        )}
+        {isSuperadmin && u.role === "plays_organiser" && (
+          u.has_admin_access ? (
+            <span
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+              style={{ background: "rgba(111,207,151,0.15)", color: "#6FCF97" }}
+            >
+              <UserCheck className="h-3.5 w-3.5" /> Admin access
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleGiveAdminAccess(u)}
+              disabled={busyId === u.id}
+              title="Create their Admin Portal login, linked to this account"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+              style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}
+            >
+              <KeyRound className="h-3.5 w-3.5" /> Give admin access
+            </button>
+          )
         )}
         {(u.role === "content_creator" || u.role === "plays_organiser") && (
           <button

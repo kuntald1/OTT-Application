@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText, Compass } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText, Compass, Upload, IndianRupee, CalendarPlus } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -26,6 +26,7 @@ import AdminArchiveHeroSlidesPage from "./AdminArchiveHeroSlidesPage";
 import AdminContentPolicyPage from "./AdminContentPolicyPage";
 import AdminAdBannersPage from "./AdminAdBannersPage";
 import AdminDiscoverySettingsPage from "./AdminDiscoverySettingsPage";
+import { OrganiserAddVideoPage, OrganiserRevenuePage, OrganiserEventListingPage } from "./OrganiserSitePages";
 
 const COLORS = {
   bg: "radial-gradient(ellipse at top right, rgba(173,10,10,0.16) 0%, transparent 45%), radial-gradient(ellipse at bottom left, rgba(255,0,0,0.55) 0%, transparent 55%) rgb(48,3,18)",
@@ -41,6 +42,11 @@ const COLORS = {
 // own set of features without crowding everything else.
 export default function AdminLayout({ currentAdmin, onLogout }) {
   const isSuperadmin = currentAdmin.role === "superadmin";
+  // The three organiser pages exist only for the Plays Organiser role (their
+  // menus come from Admin Accounts > Role permissions). Superadmin sees every
+  // other menu, but these work on the caller's OWN site account, which a
+  // superadmin doesn't have — so they are never shown to one.
+  const isOrganiserAdmin = currentAdmin.role === "plays_organiser";
 
   // Superadmin always sees everything. An ordinary admin whose
   // allowed_menu_keys is null/undefined is "unrestricted" (same as
@@ -96,6 +102,9 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "live", label: "Live Streaming", icon: Radio, visible: canSeeMenu("live") },
     { id: "users", label: "User Management", icon: UserCog, visible: canSeeMenu("users") },
     { id: "admins", label: "Admin Accounts", icon: Users, visible: isSuperadmin },
+    { id: "organiser-add-video", label: "Organiser Add Video", icon: Upload, visible: isOrganiserAdmin && canSeeMenu("organiser-add-video") },
+    { id: "organiser-revenue", label: "Revenue", icon: IndianRupee, visible: isOrganiserAdmin && canSeeMenu("organiser-revenue") },
+    { id: "organiser-event-listing", label: "Organiser Event Listing", icon: CalendarPlus, visible: isOrganiserAdmin && canSeeMenu("organiser-event-listing") },
   ];
 
   const handleLogout = () => {
@@ -186,6 +195,9 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "live" && <AdminLiveStreamsPage currentAdmin={currentAdmin} />}
           {activePage === "users" && <AdminUsersPage currentAdmin={currentAdmin} />}
           {activePage === "admins" && isSuperadmin && <AdminAccountsPage currentAdmin={currentAdmin} />}
+          {activePage === "organiser-add-video" && isOrganiserAdmin && canSeeMenu("organiser-add-video") && <OrganiserAddVideoPage currentAdmin={currentAdmin} />}
+          {activePage === "organiser-revenue" && isOrganiserAdmin && canSeeMenu("organiser-revenue") && <OrganiserRevenuePage currentAdmin={currentAdmin} />}
+          {activePage === "organiser-event-listing" && isOrganiserAdmin && canSeeMenu("organiser-event-listing") && <OrganiserEventListingPage currentAdmin={currentAdmin} />}
         </div>
       </main>
     </div>

@@ -223,6 +223,7 @@ export default function RevenuePage({ onBack }) {
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
+        {onBack && (
         <button
           type="button"
           onClick={onBack}
@@ -231,6 +232,7 @@ export default function RevenuePage({ onBack }) {
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
+        )}
 
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Revenue</h1>
         <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>

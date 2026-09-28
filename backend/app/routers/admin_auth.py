@@ -31,8 +31,11 @@ def _admin_out(admin: AdminUser, db: Session) -> AdminOut:
     (plays_organiser) the menu list is the ROLE's, never the account's own
     column; superadmin/admin are returned exactly as stored."""
     out = AdminOut.model_validate(admin)
+    update = {"has_site_account": admin.linked_user_id is not None}
     keys = effective_menu_keys(admin, db)
-    return out.model_copy(update={"allowed_menu_keys": keys}) if keys is not None else out
+    if keys is not None:
+        update["allowed_menu_keys"] = keys
+    return out.model_copy(update=update)
 
 
 @router.post("/login", response_model=AdminToken)

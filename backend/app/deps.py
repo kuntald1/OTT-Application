@@ -2,15 +2,49 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-from app.admin_roles import organiser_path_allowed
+from app.admin_roles import organiser_path_allowed, organiser_user_api_allowed
 from app.database import get_db
-from app.models import User, AdminUser, AdminRole
+from app.models import User, AdminUser, AdminRole, UserRole
 from app.security import decode_access_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _linked_user_for_organiser_admin(
+    request: Request, admin_id, db: Session
+) -> User | None:
+    """A plays_organiser ADMIN token used on the site's user APIs.
+
+    Returns the users row the admin login is linked to (admin_users.
+    linked_user_id) — but only for a method+path covered by a menu granted to
+    the role (admin_roles.ORGANISER_MENU_USER_ROUTES). None when the token
+    isn't an active plays_organiser admin at all (caller answers 401 as
+    before); 403 when it is one but this call isn't allowed or there is no
+    linked site account. Never matches by email: the link is set by the
+    server only.
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if admin is None or not admin.is_active or admin.role != AdminRole.plays_organiser:
+        return None
+    denied = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Your account doesn't have access to this.",
+    )
+    if admin.linked_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your admin account is not linked to a site account.",
+        )
+    if not organiser_user_api_allowed(admin, request.method, request.url.path, db):
+        raise denied
+    linked = db.query(User).filter(User.id == admin.linked_user_id).first()
+    if linked is None or linked.role != UserRole.plays_organiser:
+        raise denied
+    return linked
+
+
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -27,6 +61,10 @@ def get_current_user(
     user_id = payload.get("sub")
 
     user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        # Not a site account id — may be a plays_organiser admin token (an
+        # admin id never exists in `users`, so this can't shadow a real user).
+        user = _linked_user_for_organiser_admin(request, user_id, db)
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"

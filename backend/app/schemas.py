@@ -309,6 +309,9 @@ class AdminUserAccountOut(BaseModel):
     # Whether this (parent) account has set a Family PIN — drives the
     # "Reset PIN" button on Admin > Users (routers/family.py).
     has_family_pin: bool = False
+    # plays_organiser only: an admin_users login is linked to this account
+    # (User Management > "Give admin access" / Create organiser checkbox).
+    has_admin_access: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -1286,6 +1289,9 @@ class AdminOut(BaseModel):
     is_active: bool
     created_at: datetime
     allowed_menu_keys: Optional[List[str]] = None
+    # True when this admin login is linked to a site (`users`) account — the
+    # organiser pages need one (videos/revenue/enquiries belong to users.id).
+    has_site_account: bool = False
 
     model_config = {"from_attributes": True}
 

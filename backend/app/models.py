@@ -1090,6 +1090,14 @@ class AdminUser(Base):
     # (as opposed to NULL) means "no menus" — a deliberate, fully
     # locked-down account.
     allowed_menu_keys = Column(ARRAY(String), nullable=True)
+    # plays_organiser only: the `users` row (role plays_organiser) whose
+    # videos / revenue / withdrawals / event enquiries this admin login
+    # works on. Set ONLY by the server (Create organiser + "Give admin
+    # access" in User Management) — never by matching emails. NULL = an
+    # admin-only account with no site account (it can open no organiser
+    # page). Needs: ALTER TABLE admin_users ADD COLUMN linked_user_id UUID
+    # NULL REFERENCES users(id);
+    linked_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

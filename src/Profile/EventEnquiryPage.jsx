@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, Upload, X, Plus, Trash2, ChevronDown, Paperclip } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { useApp } from "../context/AppContext";
+import { useAppOptional } from "../context/AppContext";
 import { submitEventEnquiry, uploadEventEnquiryPoster, fetchMyEventEnquiries, fetchCategoryOptions } from "../api";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 
@@ -37,7 +37,7 @@ function makeEmptyTier() {
   return { key: Math.random().toString(36).slice(2), tier_name: "", price: "", quantity: "" };
 }
 
-export default function EventEnquiryPage({ onBack }) {
+export default function EventEnquiryPage({ onBack, defaultContact }) {
   const [CATEGORIES, setCategories] = useState(FALLBACK_CATEGORIES);
 
   useEffect(() => {
@@ -45,7 +45,9 @@ export default function EventEnquiryPage({ onBack }) {
       if (cats.length > 0) setCategories(cats);
     }).catch(() => {});
   }, []);
-  const { profile } = useApp();
+  // profile is absent inside /admin (no AppProvider there) — the admin's own
+  // name/email (defaultContact) prefill the contact fields instead.
+  const profile = useAppOptional()?.profile || defaultContact || {};
 
   const [form, setForm] = useState({
     org_name: "",
@@ -175,6 +177,7 @@ export default function EventEnquiryPage({ onBack }) {
     return (
       <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
         <main className="mx-auto max-w-xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
+          {onBack && (
           <button
             type="button"
             onClick={onBack}
@@ -183,6 +186,7 @@ export default function EventEnquiryPage({ onBack }) {
           >
             <ArrowLeft className="h-4 w-4" /> Back
           </button>
+          )}
 
           <div className="rounded-2xl p-8 text-center" style={{ background: COLORS.blackSoft, border: "1px solid rgba(111,207,151,0.35)" }}>
             <CheckCircle2 className="mx-auto mb-4 h-10 w-10" style={{ color: "#6FCF97" }} />
@@ -210,6 +214,7 @@ export default function EventEnquiryPage({ onBack }) {
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className="mx-auto max-w-2xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
+        {onBack && (
         <button
           type="button"
           onClick={onBack}
@@ -218,6 +223,7 @@ export default function EventEnquiryPage({ onBack }) {
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
+        )}
 
         <h1 className="mb-1 text-3xl font-semibold" style={{ color: COLORS.cream }}>Event Listing Enquiry</h1>
         <p className="mb-8 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>

@@ -621,6 +621,12 @@ export function resetUserFamilyPin(userId) {
   return request(`/admin/users/${userId}/family-pin`, { method: "DELETE", auth: true });
 }
 
+// "Give admin access" on a Plays Organiser row — creates their admin-portal
+// login linked to this site account (superadmin only).
+export function giveOrganiserAdminAccess(userId) {
+  return request(`/admin/users/${userId}/admin-access`, { method: "POST", auth: true });
+}
+
 export function setUserActive(userId, enabled) {
   return request(`/admin/users/${userId}/active`, {
     method: "PUT",

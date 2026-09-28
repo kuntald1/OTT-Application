@@ -496,3 +496,9 @@ export function useApp() {
   if (!ctx) throw new Error("useApp() must be used inside <AppProvider>");
   return ctx;
 }
+
+// Same context, but null instead of throwing outside <AppProvider> — for a
+// page that is also shown inside /admin (mounted outside AppProvider).
+export function useAppOptional() {
+  return useContext(AppContext);
+}

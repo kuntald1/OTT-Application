@@ -332,9 +332,11 @@ export default function MyVideoListPage({ onBack }) {
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-24 sm:px-10 sm:pt-28">
+        {onBack && (
         <button type="button" onClick={onBack} className="mb-6 flex items-center gap-1.5 text-sm font-medium hover:opacity-80" style={{ color: COLORS.gold }}>
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
+        )}
 
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>

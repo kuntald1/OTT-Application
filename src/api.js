@@ -8,7 +8,20 @@ const BASE_URL = "/api";
 
 const TOKEN_KEY = "theomy_token";
 
+// Lets the admin portal reuse the site's own pages (Organiser Add Video /
+// Revenue / Event Listing — see admin/OrganiserSitePages.jsx) with the ADMIN
+// token: the backend treats a plays_organiser admin token as its linked site
+// account on those pages' endpoints. Returns undefined = "not overridden, use
+// the site token" (everywhere outside /admin, so the site is unaffected);
+// null/string = the token to use.
+let tokenSource = null;
+export function setTokenSource(fn) {
+  tokenSource = fn;
+}
+
 export function getToken() {
+  const overridden = tokenSource ? tokenSource() : undefined;
+  if (overridden !== undefined) return overridden;
   return localStorage.getItem(TOKEN_KEY);
 }
 
@@ -57,7 +70,8 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
     // actively-open tab notices immediately instead of silently failing
     // requests with a dead token. AppContext listens for this event to
     // show the login modal with an explanation.
-    if (auth && res.status === 401 && getToken()) {
+    // (Not when the admin token is in use — that must never wipe the site token.)
+    if (auth && res.status === 401 && getToken() && !(tokenSource && tokenSource() !== undefined)) {
       setToken(null);
       window.dispatchEvent(new CustomEvent("auth:sessionEnded", { detail: message }));
     }

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -36,6 +37,9 @@ def list_users(
             parents_by_id[p.id] = p
 
     users_with_pin = {row.user_id for row in db.query(FamilyPin.user_id).all()}
+    linked_user_ids = {
+        row.linked_user_id for row in db.query(AdminUser.linked_user_id).filter(AdminUser.linked_user_id.isnot(None)).all()
+    }
 
     out = []
     for u in users:
@@ -46,6 +50,7 @@ def list_users(
             parent_id=u.parent_id, parent_name=parent.name if parent else None,
             parent_email=parent.email if parent else None,
             has_family_pin=u.id in users_with_pin,
+            has_admin_access=u.id in linked_user_ids,
         ))
     return out
 
@@ -90,6 +95,7 @@ def create_organiser(
     )
     db.add(user)
     if payload.give_admin_access:
+        db.flush()  # assigns user.id, saved below as the admin login's linked_user_id
         # "Give access to Admin Portal": a SECOND row, in admin_users, with the
         # same email and the same starting password hash (the two logins are
         # separate afterwards — changing one password doesn't change the
@@ -101,6 +107,7 @@ def create_organiser(
         db.add(AdminUser(
             name=payload.name.strip(), email=payload.email,
             hashed_password=user.hashed_password, role=AdminRole.plays_organiser,
+            linked_user_id=user.id,
         ))
     db.commit()
     db.refresh(user)
@@ -108,6 +115,7 @@ def create_organiser(
         id=user.id, name=user.name, email=user.email, role=user.role.value, is_active=user.is_active,
         can_live_stream=user.can_live_stream, created_at=user.created_at,
         parent_id=None, parent_name=None, parent_email=None, has_family_pin=False,
+        has_admin_access=payload.give_admin_access,
     )
 
 
@@ -116,6 +124,49 @@ def _get_user_or_404(user_id: str, db: Session) -> User:
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
+
+
+@router.post("/{user_id}/admin-access", response_model=AdminUserAccountOut)
+def give_admin_access(
+    user_id: str,
+    current_admin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """"Give admin access" on an existing Plays Organiser row — superadmin
+    only. Same result as ticking "Give access to Admin Portal" when creating
+    the organiser: an admin_users login (role plays_organiser) LINKED to this
+    users row (linked_user_id), so the organiser can run their own videos /
+    revenue / event enquiries from /admin.
+
+    If an admin_users row with this email already exists it is linked only
+    when it is an unlinked plays_organiser one (this click is the explicit
+    superadmin decision — the server never links by email on its own);
+    anything else is refused. Its password is left as it is.
+    """
+    user = _get_user_or_404(user_id, db)
+    if user.role != UserRole.plays_organiser:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only a Plays Organiser can be given admin portal access.")
+    if db.query(AdminUser).filter(AdminUser.linked_user_id == user.id).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This organiser already has admin portal access.")
+
+    existing = db.query(AdminUser).filter(email_equals(AdminUser.email, user.email)).first()
+    if existing is not None:
+        if existing.role != AdminRole.plays_organiser or existing.linked_user_id is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An admin account with this email already exists")
+        existing.linked_user_id = user.id
+    else:
+        db.add(AdminUser(
+            name=user.name, email=user.email, hashed_password=user.hashed_password,
+            role=AdminRole.plays_organiser, is_active=user.is_active, linked_user_id=user.id,
+        ))
+    db.commit()
+    db.refresh(user)
+    return AdminUserAccountOut(
+        id=user.id, name=user.name, email=user.email, role=user.role.value, is_active=user.is_active,
+        can_live_stream=user.can_live_stream, created_at=user.created_at,
+        parent_id=user.parent_id, parent_name=None, parent_email=None, has_family_pin=False,
+        has_admin_access=True,
+    )
 
 
 @router.put("/{user_id}/password", response_model=AdminUserAccountOut)
@@ -189,7 +240,8 @@ def set_user_active(
         # (admin_users, same email). Deactivating only the site account would
         # leave that one working, so the two switch together.
         for admin_row in db.query(AdminUser).filter(
-            AdminUser.role == AdminRole.plays_organiser, email_equals(AdminUser.email, user.email)
+            AdminUser.role == AdminRole.plays_organiser,
+            or_(AdminUser.linked_user_id == user.id, email_equals(AdminUser.email, user.email)),
         ).all():
             admin_row.is_active = payload.enabled
     db.commit()
