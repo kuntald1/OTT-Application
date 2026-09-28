@@ -493,6 +493,8 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
               </button>
               {(profile.role === "content_creator" || profile.role === "plays_organiser") && (
                 <>
+                  {/* Plays Organiser now runs these three from the /admin portal (Organiser Add Video / Revenue / Organiser Event Listing), so the links are hidden for that role only. Content Creators still see them. Delete the role condition on a button to show it again. */}
+                  {profile.role !== "plays_organiser" && (
                   <button
                     type="button"
                     onClick={() => { onNavigate?.("myVideos"); setMenuOpen(false); }}
@@ -501,6 +503,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                   >
                     My Video List
                   </button>
+                  )}
                   {profile.can_live_stream && (
                     <button
                       type="button"
@@ -511,6 +514,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                       My Live Events
                     </button>
                   )}
+                  {profile.role !== "plays_organiser" && (
                   <button
                     type="button"
                     onClick={() => { onNavigate?.("revenue"); setMenuOpen(false); }}
@@ -519,6 +523,8 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                   >
                     Revenue
                   </button>
+                  )}
+                  {profile.role !== "plays_organiser" && (
                   <button
                     type="button"
                     onClick={() => { onNavigate?.("eventEnquiry"); setMenuOpen(false); }}
@@ -527,6 +533,7 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                   >
                     Event Listing Enquiry
                   </button>
+                  )}
                 </>
               )}
               <button
@@ -1098,6 +1105,8 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
         </button>
         {(profile.role === "content_creator" || profile.role === "plays_organiser") && (
           <>
+            {/* Plays Organiser now runs these three from the /admin portal (Organiser Add Video / Revenue / Organiser Event Listing), so the links are hidden for that role only. Content Creators still see them. Delete the role condition on a button to show it again. */}
+            {profile.role !== "plays_organiser" && (
             <button
               type="button"
               onClick={() => { onNavigate?.("myVideos"); onClose(); }}
@@ -1106,6 +1115,7 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
             >
               My Video List
             </button>
+            )}
             {profile.can_live_stream && (
               <button
                 type="button"
@@ -1116,6 +1126,7 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
                 My Live Events
               </button>
             )}
+            {profile.role !== "plays_organiser" && (
             <button
               type="button"
               onClick={() => { onNavigate?.("revenue"); onClose(); }}
@@ -1124,6 +1135,8 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
             >
               Revenue
             </button>
+            )}
+            {profile.role !== "plays_organiser" && (
             <button
               type="button"
               onClick={() => { onNavigate?.("eventEnquiry"); onClose(); }}
@@ -1132,6 +1145,7 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
             >
               Event Listing Enquiry
             </button>
+            )}
           </>
         )}
         <div className="border-t pt-3" style={{ borderColor: "rgba(245,235,221,0.12)" }}>
