@@ -1,7 +1,8 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from app.admin_roles import organiser_path_allowed
 from app.database import get_db
 from app.models import User, AdminUser, AdminRole
 from app.security import decode_access_token
@@ -70,6 +71,7 @@ def get_current_user_optional(
 
 
 def get_current_admin(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> AdminUser:
@@ -96,6 +98,14 @@ def get_current_admin(
     if admin is None or not admin.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin account not found"
+        )
+    # A plays_organiser admin is DENY-BY-DEFAULT (see app/admin_roles.py for
+    # why): every other admin route accepts any admin token, so this is the
+    # one place that keeps an outside partner away from all of them.
+    if admin.role == AdminRole.plays_organiser and not organiser_path_allowed(admin, request.url.path, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account doesn't have access to this.",
         )
     return admin
 

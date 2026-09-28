@@ -23,12 +23,13 @@ export default function CreateOrganiserForm({ onCreated }) {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("India");
+  const [giveAdminAccess, setGiveAdminAccess] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
-    setName(""); setEmail(""); setPassword(""); setPhone(""); setCountry("India"); setError("");
+    setName(""); setEmail(""); setPassword(""); setPhone(""); setCountry("India"); setGiveAdminAccess(false); setError("");
   };
 
   const submit = async (e) => {
@@ -42,8 +43,11 @@ export default function CreateOrganiserForm({ onCreated }) {
     setNotice("");
     setSaving(true);
     try {
-      const created = await createOrganiserAccount({ name: name.trim(), email: email.trim(), password, phone: phone.trim(), country: country.trim() });
-      setNotice(`Organiser created: ${created.email}. They log in on the main site with this email and the password you set.`);
+      const created = await createOrganiserAccount({ name: name.trim(), email: email.trim(), password, phone: phone.trim(), country: country.trim(), giveAdminAccess });
+      setNotice(
+        `Organiser created: ${created.email}. They log in on the main site with this email and the password you set.` +
+        (giveAdminAccess ? " They can also log in to the Admin Portal with the same email and password; what they can open there is set under Admin Accounts > Role permissions." : "")
+      );
       reset();
       setOpen(false);
       onCreated?.(created);
@@ -85,6 +89,24 @@ export default function CreateOrganiserForm({ onCreated }) {
             <input type="tel" placeholder="Phone (optional)" aria-label="Organiser phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-lg border px-3 py-2 text-sm outline-none" style={INPUT_STYLE} />
             <input type="text" placeholder="Country" aria-label="Organiser country" value={country} onChange={(e) => setCountry(e.target.value)} className="rounded-lg border px-3 py-2 text-sm outline-none" style={INPUT_STYLE} />
           </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm" style={{ color: COLORS.cream }}>
+            <input
+              type="checkbox"
+              aria-label="Give access to Admin Portal"
+              checked={giveAdminAccess}
+              onChange={(e) => setGiveAdminAccess(e.target.checked)}
+              disabled={saving}
+              className="mt-0.5"
+            />
+            <span>
+              Give access to Admin Portal
+              <span className="block text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                Also creates an admin login (role: Plays Organiser) with the same email and starting password. Its menus come from the role,
+                set under Admin Accounts &gt; Role permissions — until you enable some, it can open nothing. The two passwords are separate afterwards.
+              </span>
+            </span>
+          </label>
 
           <p className="mt-3 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
             The email is not verified — double-check it, or the organiser won't be able to log in or reset their password.

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchAdminList, createAdminAccount, deactivateAdminAccount, updateAdminMenuPermissions } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import RolePermissionsPanel from "./RolePermissionsPanel";
 
 const COLORS = {
   panel: "#150307",
@@ -35,6 +36,9 @@ const ASSIGNABLE_MENUS = [
   { key: "live", label: "Live Streaming" },
   { key: "users", label: "User Management" },
 ];
+
+// Display names for the role column (the stored value is plays_organiser).
+const ROLE_LABELS = { superadmin: "Superadmin", admin: "Admin", plays_organiser: "Plays Organiser" };
 
 export default function AdminAccountsPage({ currentAdmin }) {
   const [admins, setAdmins] = useState([]);
@@ -199,6 +203,8 @@ export default function AdminAccountsPage({ currentAdmin }) {
         </form>
       )}
 
+      <RolePermissionsPanel role="plays_organiser" />
+
       {loading ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
       ) : (
@@ -212,7 +218,7 @@ export default function AdminAccountsPage({ currentAdmin }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                    {a.name} <span className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize" style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}>{a.role}</span>
+                    {a.name} <span className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize" style={{ background: "rgba(212,175,55,0.15)", color: COLORS.gold }}>{ROLE_LABELS[a.role] || a.role}</span>
                     {a.role === "admin" && a.allowed_menu_keys !== null && (
                       <span className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(91,155,213,0.15)", color: "#5B9BD5" }}>
                         Restricted ({a.allowed_menu_keys.length} menu{a.allowed_menu_keys.length === 1 ? "" : "s"})

@@ -1,10 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.admin_roles import ROLE_ASSIGNABLE, ROLE_LABELS, ORGANISER_MENUS, effective_menu_keys, menus_for_role
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
-from app.models import AdminUser, AdminRole
-from app.schemas import AdminLoginRequest, AdminToken, AdminOut, AdminCreateRequest, AdminMenuPermissionsUpdate
+from app.identity_utils import email_equals
+from app.models import AdminUser, AdminRole, AdminRoleMenu
+from app.schemas import (
+    AdminLoginRequest, AdminToken, AdminOut, AdminCreateRequest, AdminMenuPermissionsUpdate,
+    AdminRolePermissionsOut, AdminRolePermissionsUpdate, AdminRoleMenuOption,
+)
 from app.security import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/admin/auth", tags=["admin-auth"])
@@ -21,9 +26,20 @@ ASSIGNABLE_MENU_KEYS = {
 }
 
 
+def _admin_out(admin: AdminUser, db: Session) -> AdminOut:
+    """AdminOut for the admin shell. For a role-based account
+    (plays_organiser) the menu list is the ROLE's, never the account's own
+    column; superadmin/admin are returned exactly as stored."""
+    out = AdminOut.model_validate(admin)
+    keys = effective_menu_keys(admin, db)
+    return out.model_copy(update={"allowed_menu_keys": keys}) if keys is not None else out
+
+
 @router.post("/login", response_model=AdminToken)
 def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)):
-    admin = db.query(AdminUser).filter(AdminUser.email == payload.email).first()
+    # Case-insensitive: an organiser who was given admin access types the
+    # same email they use on the main site, in whatever capitalisation.
+    admin = db.query(AdminUser).filter(email_equals(AdminUser.email, payload.email)).first()
 
     # Same error for "no such admin" and "wrong password" — don't reveal
     # which one it was.
@@ -37,12 +53,12 @@ def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)):
         raise invalid_creds
 
     token = create_access_token(subject=str(admin.id))
-    return AdminToken(access_token=token, admin=AdminOut.model_validate(admin))
+    return AdminToken(access_token=token, admin=_admin_out(admin, db))
 
 
 @router.get("/me", response_model=AdminOut)
-def read_current_admin(current_admin: AdminUser = Depends(get_current_admin)):
-    return current_admin
+def read_current_admin(current_admin: AdminUser = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return _admin_out(current_admin, db)
 
 
 @router.get("/admins", response_model=list[AdminOut])
@@ -50,7 +66,7 @@ def list_admins(
     current_superadmin: AdminUser = Depends(get_current_superadmin),
     db: Session = Depends(get_db),
 ):
-    return db.query(AdminUser).order_by(AdminUser.created_at.desc()).all()
+    return [_admin_out(a, db) for a in db.query(AdminUser).order_by(AdminUser.created_at.desc()).all()]
 
 
 @router.post("/admins", response_model=AdminOut, status_code=status.HTTP_201_CREATED)
@@ -59,7 +75,7 @@ def create_admin(
     current_superadmin: AdminUser = Depends(get_current_superadmin),
     db: Session = Depends(get_db),
 ):
-    existing = db.query(AdminUser).filter(AdminUser.email == payload.email).first()
+    existing = db.query(AdminUser).filter(email_equals(AdminUser.email, payload.email)).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -95,6 +111,8 @@ def update_admin_menu_permissions(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin account not found.")
     if admin.role == AdminRole.superadmin:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Superadmin accounts always have full access and can't be restricted.")
+    if admin.role == AdminRole.plays_organiser:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This account's menus come from its role — edit them under Role permissions.")
 
     if payload.allowed_menu_keys is not None:
         invalid = set(payload.allowed_menu_keys) - ASSIGNABLE_MENU_KEYS
@@ -123,3 +141,56 @@ def deactivate_admin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found")
     admin.is_active = False
     db.commit()
+
+
+# ------------------------------------------------ role-based menu permissions
+def _role_or_404(role: str) -> str:
+    if role not in ROLE_ASSIGNABLE:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown role.")
+    return role
+
+
+def _role_permissions_out(role: str, db: Session) -> AdminRolePermissionsOut:
+    return AdminRolePermissionsOut(
+        role=role,
+        role_label=ROLE_LABELS.get(role, role),
+        menu_keys=menus_for_role(db, role),
+        available=[AdminRoleMenuOption(key=k, label=ORGANISER_MENUS[k]) for k in sorted(ROLE_ASSIGNABLE[role])],
+    )
+
+
+@router.get("/role-permissions/{role}", response_model=AdminRolePermissionsOut)
+def get_role_permissions(
+    role: str,
+    current_superadmin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Admin Accounts > Role permissions — which menus every account of this
+    role sees. Superadmin only."""
+    return _role_permissions_out(_role_or_404(role), db)
+
+
+@router.put("/role-permissions/{role}", response_model=AdminRolePermissionsOut)
+def update_role_permissions(
+    role: str,
+    payload: AdminRolePermissionsUpdate,
+    current_superadmin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Replaces the role's whole menu set. Only keys registered for THIS role
+    (admin_roles.ROLE_ASSIGNABLE) are accepted — the powerful staff menus
+    (users, revenue sharing, subscriptions...) can never be granted to an
+    organiser this way, whatever is sent. Delete + insert in one commit, so
+    a failure can't leave the role half-updated.
+    """
+    role = _role_or_404(role)
+    requested = set(payload.menu_keys)
+    invalid = requested - ROLE_ASSIGNABLE[role]
+    if invalid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown menu key(s) for this role: {sorted(invalid)}")
+
+    db.query(AdminRoleMenu).filter(AdminRoleMenu.role == role).delete(synchronize_session=False)
+    for key in sorted(requested):
+        db.add(AdminRoleMenu(role=role, menu_key=key))
+    db.commit()
+    return _role_permissions_out(role, db)

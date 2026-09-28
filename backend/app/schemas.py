@@ -334,6 +334,10 @@ class AdminCreateOrganiserRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     phone: Optional[str] = Field(default=None, max_length=20)
     country: str = Field(default="India", max_length=100)
+    # "Give access to Admin Portal": also creates an admin_users row (role
+    # plays_organiser, same email and starting password) so the organiser can
+    # log in at /admin too — see admin_roles.py for how that role is confined.
+    give_admin_access: bool = False
 
     @field_validator("phone")
     @classmethod
@@ -1270,7 +1274,7 @@ class AdminWithdrawalActionRequest(BaseModel):
 
 
 class AdminLoginRequest(BaseModel):
-    email: EmailStr
+    email: NormEmail
     password: str = Field(min_length=1)
 
 
@@ -1284,6 +1288,23 @@ class AdminOut(BaseModel):
     allowed_menu_keys: Optional[List[str]] = None
 
     model_config = {"from_attributes": True}
+
+
+class AdminRoleMenuOption(BaseModel):
+    key: str
+    label: str
+
+
+class AdminRolePermissionsOut(BaseModel):
+    """Role-based admin menu permission (Admin Accounts > Role permissions)."""
+    role: str
+    role_label: str
+    menu_keys: List[str]
+    available: List[AdminRoleMenuOption]
+
+
+class AdminRolePermissionsUpdate(BaseModel):
+    menu_keys: List[str]
 
 
 class AdminMenuPermissionsUpdate(BaseModel):
@@ -1301,7 +1322,7 @@ class AdminToken(BaseModel):
 
 class AdminCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    email: EmailStr
+    email: NormEmail
     password: str = Field(min_length=8, max_length=128)
     role: str = Field(pattern="^(superadmin|admin)$", default="admin")
 

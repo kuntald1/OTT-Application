@@ -127,7 +127,7 @@ class FamilyPin(Base):
 
 
 class UserDemographics(Base):
-    """Date of birth, city and gender — collected for city/age-group revenue
+    """Date of birth and city — collected for city/age-group revenue
     reporting (Admin > Revenue Sharing). NOT stored on `users` for the same
     reason as FamilyPin: Base.metadata.create_all only creates missing
     TABLES, never adds columns to an existing one, so this table appears by
@@ -166,7 +166,13 @@ class UserDemographics(Base):
     # "Other" value from the picker is still stored as plain text here, not
     # validated against the list, so it survives the list changing later.
     city = Column(String(120), nullable=True)
-    gender = Column(String(20), nullable=True)  # "male" | "female" | "other" | None ("prefer not to say")
+    # Gender was retired (Admin decision, Sept 2026) — no longer collected,
+    # requested, or returned anywhere. Deliberately NOT dropping the column
+    # here: if it was already created on the production database, a handful
+    # of accounts may have a value in it already, and a plain model-field
+    # removal (unlike ALTER TABLE ADD COLUMN) needs no migration either way
+    # — the column, if it exists, is simply never read or written from here
+    # on. No action needed on the production database.
     is_declared_minor = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -1018,6 +1024,32 @@ class RewardConfig(Base):
 class AdminRole(str, enum.Enum):
     superadmin = "superadmin"
     admin = "admin"
+    # A Plays Organiser who was also given access to /admin (Admin > User
+    # Management > Create organiser > "Give access to Admin Portal"). Unlike
+    # `admin`, its menus come from the ROLE (admin_role_menus below), never
+    # from a per-account list, and every admin API call it makes is denied
+    # unless a granted menu covers it (deps.get_current_admin). Adding this
+    # value to an existing database needs:
+    #   ALTER TYPE adminrole ADD VALUE IF NOT EXISTS 'plays_organiser';
+    plays_organiser = "plays_organiser"
+
+
+class AdminRoleMenu(Base):
+    """Role-based admin menu permission (Admin decision, Sept 2026): which
+    /admin menus every account of a given role can see — one shared set per
+    role, edited in one place (Admin Accounts > Role permissions), NOT per
+    account. Currently only the plays_organiser role uses this; `admin`
+    accounts keep their per-account Manage Permissions list
+    (AdminUser.allowed_menu_keys) exactly as before. A role with no rows
+    here has no menus at all (deny by default).
+    """
+    __tablename__ = "admin_role_menus"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    role = Column(String(50), nullable=False, index=True)
+    menu_key = Column(String(80), nullable=False)
+
+    __table_args__ = (UniqueConstraint("role", "menu_key", name="uq_admin_role_menu"),)
 
 
 class AdminUser(Base):

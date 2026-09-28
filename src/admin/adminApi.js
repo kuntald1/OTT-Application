@@ -574,12 +574,22 @@ export function updateAIConfig(insightCacheHours) {
 // Superadmin-only: creates a Plays Organiser directly as a normal `users`
 // row (role plays_organiser) — NOT an Admin Account. See
 // routers/admin_users.py create_organiser for why.
-export function createOrganiserAccount({ name, email, password, phone, country }) {
+export function createOrganiserAccount({ name, email, password, phone, country, giveAdminAccess }) {
   return request("/admin/users/organiser", {
     method: "POST",
     auth: true,
-    body: { name, email, password, phone: phone || null, country: country || "India" },
+    body: { name, email, password, phone: phone || null, country: country || "India", give_admin_access: !!giveAdminAccess },
   });
+}
+
+// Role-based admin menu permission (Admin Accounts > Role permissions) —
+// one shared menu set per role, NOT per account. Superadmin only.
+export function fetchRolePermissions(role) {
+  return request(`/admin/auth/role-permissions/${role}`, { auth: true });
+}
+
+export function updateRolePermissions(role, menuKeys) {
+  return request(`/admin/auth/role-permissions/${role}`, { method: "PUT", auth: true, body: { menu_keys: menuKeys } });
 }
 
 export function fetchAdminUsers(search) {

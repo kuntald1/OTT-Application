@@ -153,7 +153,15 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
       {/* Content */}
       <main className="flex-1 px-8 py-8">
         <div className="mx-auto max-w-3xl">
-          {activePage === "dashboard" && <AdminDashboardPage onDrillDown={handleDrillDown} />}
+          {NAV_ITEMS.every((item) => !item.visible) && (
+            // An account with no visible menu (e.g. a Plays Organiser with
+            // admin access whose role has no built page enabled yet) used to
+            // land on the Dashboard anyway. Show why instead.
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+              No admin pages are available for your account yet. Please contact the superadmin.
+            </p>
+          )}
+          {activePage === "dashboard" && canSeeMenu("dashboard") && <AdminDashboardPage onDrillDown={handleDrillDown} />}
           {activePage === "reports" && <AdminReportsPage key={reportsInitialTab} initialTab={reportsInitialTab} />}
           {activePage === "videos" && <AdminVideoReviewPage />}
           {activePage === "add-video" && <AdminAddVideoPage />}

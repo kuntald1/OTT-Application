@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
 from app.identity_utils import email_equals, phone_equals
-from app.models import AdminUser, User, Subscription, Payment, FamilyPin, AuthProvider, UserRole
+from app.models import AdminRole, AdminUser, User, Subscription, Payment, FamilyPin, AuthProvider, UserRole
 from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest, AdminCreateOrganiserRequest, SubscriptionOut, PaymentOut
 from app.security import hash_password
 from app.notifications import send_live_streaming_enabled_email, send_live_streaming_enabled_whatsapp
@@ -76,6 +76,8 @@ def create_organiser(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists")
     if payload.phone and db.query(User).filter(phone_equals(User.phone, payload.phone)).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this phone number already exists")
+    if payload.give_admin_access and db.query(AdminUser).filter(email_equals(AdminUser.email, payload.email)).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An admin account with this email already exists")
 
     user = User(
         name=payload.name.strip(),
@@ -87,6 +89,19 @@ def create_organiser(
         role=UserRole.plays_organiser,
     )
     db.add(user)
+    if payload.give_admin_access:
+        # "Give access to Admin Portal": a SECOND row, in admin_users, with the
+        # same email and the same starting password hash (the two logins are
+        # separate afterwards — changing one password doesn't change the
+        # other). Same commit as the users row, so a failure can't leave an
+        # organiser with a site login but a half-made admin one, or the
+        # reverse. Its menus come from the role, never from this row
+        # (allowed_menu_keys stays NULL and is ignored for this role); until a
+        # menu is granted under Role permissions it can open nothing.
+        db.add(AdminUser(
+            name=payload.name.strip(), email=payload.email,
+            hashed_password=user.hashed_password, role=AdminRole.plays_organiser,
+        ))
     db.commit()
     db.refresh(user)
     return AdminUserAccountOut(
@@ -169,6 +184,14 @@ def set_user_active(
     """
     user = _get_user_or_404(user_id, db)
     user.is_active = payload.enabled
+    if user.role == UserRole.plays_organiser:
+        # An organiser who was given admin-portal access has a SECOND login
+        # (admin_users, same email). Deactivating only the site account would
+        # leave that one working, so the two switch together.
+        for admin_row in db.query(AdminUser).filter(
+            AdminUser.role == AdminRole.plays_organiser, email_equals(AdminUser.email, user.email)
+        ).all():
+            admin_row.is_active = payload.enabled
     db.commit()
     db.refresh(user)
     return user
