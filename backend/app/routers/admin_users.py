@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
+from app.identity_utils import email_equals, phone_equals
 from app.models import AdminUser, User, Subscription, Payment, FamilyPin, AuthProvider, UserRole
 from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest, AdminCreateOrganiserRequest, SubscriptionOut, PaymentOut
 from app.security import hash_password
@@ -71,9 +72,9 @@ def create_organiser(
 
     Duplicate email/phone messages match /auth/register exactly.
     """
-    if db.query(User).filter(User.email == payload.email).first():
+    if db.query(User).filter(email_equals(User.email, payload.email)).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists")
-    if payload.phone and db.query(User).filter(User.phone == payload.phone).first():
+    if payload.phone and db.query(User).filter(phone_equals(User.phone, payload.phone)).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this phone number already exists")
 
     user = User(

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.identity_utils import email_equals, normalize_email
 from app.models import User, AuthProvider
 from app.security import create_access_token
 
@@ -28,7 +29,8 @@ def _find_or_create_social_user(
     if user:
         return user
 
-    user = db.query(User).filter(User.email == email).first()
+    email = normalize_email(email)
+    user = db.query(User).filter(email_equals(User.email, email)).first()
     if user:
         return user
 

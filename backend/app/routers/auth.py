@@ -26,6 +26,7 @@ from app.schemas import (
     DemographicsStatusOut,
     DemographicsUpdate,
 )
+from app.identity_utils import email_equals, phone_equals
 from app.security import hash_password, verify_password, create_access_token
 
 # Main accounts must be an adult — this mirrors how Netflix and similar
@@ -63,7 +64,7 @@ def _new_login_token(user: User, db: Session) -> str:
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register(payload: UserRegister, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == payload.email).first()
+    existing = db.query(User).filter(email_equals(User.email, payload.email)).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -71,7 +72,7 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         )
 
     if payload.phone:
-        existing_phone = db.query(User).filter(User.phone == payload.phone).first()
+        existing_phone = db.query(User).filter(phone_equals(User.phone, payload.phone)).first()
         if existing_phone:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -188,7 +189,7 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = db.query(User).filter(email_equals(User.email, payload.email)).first()
 
     # Same error for "no such user" and "wrong password" — don't reveal
     # which one it was, that would let someone enumerate valid emails.
@@ -247,7 +248,7 @@ def login_with_otp(payload: VerifyOtpLoginRequest, db: Session = Depends(get_db)
 
     otp_record.is_verified = True
 
-    user = db.query(User).filter(User.phone == payload.phone, User.is_active == True).first()  # noqa: E712
+    user = db.query(User).filter(phone_equals(User.phone, payload.phone), User.is_active == True).first()  # noqa: E712
     if not user:
         db.commit()
         raise HTTPException(
@@ -294,7 +295,7 @@ def update_current_user(
     if payload.email is not None and payload.email != current_user.email:
         existing = (
             db.query(User)
-            .filter(User.email == payload.email, User.id != current_user.id)
+            .filter(email_equals(User.email, payload.email), User.id != current_user.id)
             .first()
         )
         if existing:
@@ -305,7 +306,21 @@ def update_current_user(
         current_user.email = payload.email
 
     if payload.phone is not None:
-        current_user.phone = payload.phone
+        # "" (a cleared field) becomes NULL — storing an empty string would
+        # collide on the unique index for the second person to clear theirs.
+        new_phone = payload.phone or None
+        if new_phone:
+            taken = (
+                db.query(User)
+                .filter(phone_equals(User.phone, new_phone), User.id != current_user.id)
+                .first()
+            )
+            if taken:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="That phone number is already in use by another account",
+                )
+        current_user.phone = new_phone
 
     db.commit()
     db.refresh(current_user)
@@ -372,7 +387,7 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         message="If an account exists for that email, a reset link has been sent."
     )
 
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = db.query(User).filter(email_equals(User.email, payload.email)).first()
 
     # No account, or a social-only account with no password to reset —
     # silently do nothing but still return the generic message.

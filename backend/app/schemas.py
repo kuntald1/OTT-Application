@@ -2,16 +2,30 @@ import re
 import uuid
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, field_validator
 
+from app.identity_utils import normalize_email, normalize_phone
 from app.models import UserRole, TicketStatus, PaymentStatus, PaymentGateway
+
+# Identity fields on INPUT schemas for `users` accounts (see
+# identity_utils.py for why): an email is stored/compared lowercase, a phone
+# without spaces/dashes/dots/brackets. Output schemas keep plain EmailStr —
+# they must serialise whatever is already stored.
+NormEmail = Annotated[EmailStr, AfterValidator(normalize_email)]
+
+
+def _required_phone(v: str) -> str:
+    cleaned = normalize_phone(v)
+    if cleaned is None:
+        raise ValueError("Phone number is required")
+    return cleaned
 
 
 class UserRegister(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    email: EmailStr
+    email: NormEmail
     password: str = Field(min_length=8, max_length=128)
     phone: Optional[str] = Field(default=None, max_length=20)
     country: str = Field(default="India", max_length=100)
@@ -27,11 +41,9 @@ class UserRegister(BaseModel):
 
     @field_validator("phone")
     @classmethod
-    def empty_phone_to_none(cls, v):
-        # Treat blank string from the form the same as "not provided"
-        if v is not None and v.strip() == "":
-            return None
-        return v
+    def normalise_phone(cls, v):
+        # Blank (or only formatting characters) means "not provided"
+        return normalize_phone(v)
 
     @field_validator("city")
     @classmethod
@@ -42,12 +54,12 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: NormEmail
     password: str
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: NormEmail
 
 
 class ResetPasswordRequest(BaseModel):
@@ -71,15 +83,20 @@ class ChangePasswordRequest(BaseModel):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    email: Optional[EmailStr] = None
+    email: Optional[NormEmail] = None
     phone: Optional[str] = Field(default=None, max_length=20)
 
     @field_validator("phone")
     @classmethod
-    def empty_phone_to_none(cls, v):
-        if v is not None and v.strip() == "":
+    def normalise_phone(cls, v):
+        # Unlike registration, blank here is kept as "" (rather than None):
+        # None means "field not sent", "" means "clear my phone" — the
+        # endpoint turns "" into NULL. (Previously a blank was stored as an
+        # empty string, which the unique index turns into a 500 for the
+        # second person to clear theirs.)
+        if v is None:
             return None
-        return v
+        return normalize_phone(v) or ""
 
 
 # This is the ONLY shape a user is ever returned in. There is no
@@ -313,17 +330,15 @@ class AdminCreateOrganiserRequest(BaseModel):
     like any other account without them.
     """
     name: str = Field(min_length=1, max_length=255)
-    email: EmailStr
+    email: NormEmail
     password: str = Field(min_length=8, max_length=128)
     phone: Optional[str] = Field(default=None, max_length=20)
     country: str = Field(default="India", max_length=100)
 
     @field_validator("phone")
     @classmethod
-    def empty_phone_to_none(cls, v):
-        if v is not None and v.strip() == "":
-            return None
-        return v
+    def normalise_phone(cls, v):
+        return normalize_phone(v)
 
 
 class AdminUserToggleRequest(BaseModel):
@@ -964,6 +979,11 @@ class SendOtpRequest(BaseModel):
     phone: str = Field(min_length=6, max_length=20)
     purpose: str = Field(pattern="^(registration|login)$")
 
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return _required_phone(v)
+
 
 class SendEmailOtpRequest(BaseModel):
     """POST /auth/otp/send-email — email-based OTP, currently used only for
@@ -985,15 +1005,25 @@ class SendEmailOtpRequest(BaseModel):
     point making someone verify an email for an account that can never be
     created (Admin decision, Sept 2026 — see auth.MIN_REGISTRATION_AGE).
     """
-    email: EmailStr
+    email: NormEmail
     purpose: str = Field(pattern="^(registration)$")
     phone: Optional[str] = Field(default=None, max_length=20)
     date_of_birth: Optional[date] = None
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return normalize_phone(v)
 
 
 class VerifyOtpLoginRequest(BaseModel):
     phone: str = Field(min_length=6, max_length=20)
     otp: str = Field(min_length=4, max_length=6)
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return _required_phone(v)
 
 
 class ExchangeRateOut(BaseModel):
@@ -1635,7 +1665,7 @@ class SubAccountCreate(BaseModel):
     is already a verified account vouching for this one.
     """
     name: str = Field(min_length=1, max_length=255)
-    email: EmailStr
+    email: NormEmail
     password: str = Field(min_length=8, max_length=128)
     # The parent declares this — required, no default — so creating a
     # sub-account always makes a conscious choice rather than silently

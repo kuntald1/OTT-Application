@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.identity_utils import email_equals, phone_equals
 from app.models import OtpVerification, OtpPurpose, EmailOtpVerification, User
 from app.routers.auth import MIN_REGISTRATION_AGE, _age_on
 from app.notifications import send_otp_whatsapp
@@ -61,9 +62,9 @@ def send_email_otp(payload: SendEmailOtpRequest, db: Session = Depends(get_db)):
     unlikely in practice, and the age check is trivially re-verifiable
     there too).
     """
-    if db.query(User).filter(User.email == payload.email).first():
+    if db.query(User).filter(email_equals(User.email, payload.email)).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists")
-    if payload.phone and db.query(User).filter(User.phone == payload.phone).first():
+    if payload.phone and db.query(User).filter(phone_equals(User.phone, payload.phone)).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this phone number already exists")
     if payload.date_of_birth is not None:
         today = datetime.now(timezone.utc).date()
