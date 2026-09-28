@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Users, Search, Key, KeyRound, Video, UserX, UserCheck, X, Send, CornerDownRight, Eye, BookOpen, Plus, Pencil, ImagePlus } from "lucide-react";
-import { fetchAdminUsers, giveOrganiserAdminAccess, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, resetUserFamilyPin, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
+import { fetchAdminUsers, giveOrganiserAdminAccess, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, resetUserFamilyPin, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, fetchAdminStudioCoverImage, uploadAdminStudioCoverImage } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
 import CreateOrganiserForm from "./CreateOrganiserForm";
