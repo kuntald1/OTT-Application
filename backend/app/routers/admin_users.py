@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin, get_current_superadmin
-from app.models import AdminUser, User, Subscription, Payment, FamilyPin
-from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest, SubscriptionOut, PaymentOut
+from app.models import AdminUser, User, Subscription, Payment, FamilyPin, AuthProvider, UserRole
+from app.schemas import AdminUserAccountOut, AdminUserSetPasswordRequest, AdminUserToggleRequest, AdminCreateOrganiserRequest, SubscriptionOut, PaymentOut
 from app.security import hash_password
 from app.notifications import send_live_streaming_enabled_email, send_live_streaming_enabled_whatsapp
 
@@ -47,6 +47,52 @@ def list_users(
             has_family_pin=u.id in users_with_pin,
         ))
     return out
+
+
+@router.post("/organiser", response_model=AdminUserAccountOut, status_code=status.HTTP_201_CREATED)
+def create_organiser(
+    payload: AdminCreateOrganiserRequest,
+    current_admin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Create a Plays Organiser account directly. Superadmin only — same
+    restriction as creating Admin Accounts, since this too hands out a
+    new login.
+
+    Saved in `users` (role = plays_organiser), never `admin_users`: an
+    organiser's videos, revenue ledger, withdrawals, event enquiries and
+    donations are all foreign keys to users.id, and a partner must not
+    sit in the staff table where a permissions mistake could expose the
+    admin portal. No email/phone OTP here (the admin vouches for the
+    address), so a mistyped email creates an account nobody can reach —
+    the admin UI says so. Date of birth/city are NOT collected: the new
+    organiser is prompted for them on first login (needs_profile is true
+    for any account without them), which also runs the 18+ check.
+
+    Duplicate email/phone messages match /auth/register exactly.
+    """
+    if db.query(User).filter(User.email == payload.email).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists")
+    if payload.phone and db.query(User).filter(User.phone == payload.phone).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this phone number already exists")
+
+    user = User(
+        name=payload.name.strip(),
+        email=payload.email,
+        phone=payload.phone,
+        country=payload.country,
+        hashed_password=hash_password(payload.password),
+        auth_provider=AuthProvider.local,
+        role=UserRole.plays_organiser,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return AdminUserAccountOut(
+        id=user.id, name=user.name, email=user.email, role=user.role.value, is_active=user.is_active,
+        can_live_stream=user.can_live_stream, created_at=user.created_at,
+        parent_id=None, parent_name=None, parent_email=None, has_family_pin=False,
+    )
 
 
 def _get_user_or_404(user_id: str, db: Session) -> User:

@@ -300,6 +300,32 @@ class AdminUserSetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=200)
 
 
+class AdminCreateOrganiserRequest(BaseModel):
+    """POST /admin/users/organiser — a superadmin creates a Plays
+    Organiser directly (Admin decision, Sept 2026), instead of waiting for
+    a normal user to request the role. The result is an ordinary `users`
+    row with role = plays_organiser, NOT an Admin Account: organisers own
+    videos, revenue, withdrawals and donations, all of which are foreign
+    keys to users.id, and they must never be able to reach the admin
+    portal. No OTP — the admin types the email and a starting password,
+    and the organiser logs in on the main site and is prompted for date
+    of birth/city (and the 18+ check) on their own first login, exactly
+    like any other account without them.
+    """
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    country: str = Field(default="India", max_length=100)
+
+    @field_validator("phone")
+    @classmethod
+    def empty_phone_to_none(cls, v):
+        if v is not None and v.strip() == "":
+            return None
+        return v
+
+
 class AdminUserToggleRequest(BaseModel):
     enabled: bool
 

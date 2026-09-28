@@ -32,7 +32,17 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data.detail === "string" ? data.detail : "Something went wrong. Please try again.");
+    // FastAPI's own validation failures (422 — a malformed email, a too-short
+    // password) come back as a LIST of error objects, not a string; without
+    // this they all fell through to the generic message. Same fix as the
+    // customer site's src/api.js request().
+    let message = "Something went wrong. Please try again.";
+    if (typeof data.detail === "string") {
+      message = data.detail;
+    } else if (Array.isArray(data.detail) && typeof data.detail[0]?.msg === "string") {
+      message = data.detail[0].msg.replace(/^Value error,\s*/i, "");
+    }
+    throw new Error(message);
   }
   return data;
 }
@@ -561,6 +571,17 @@ export function updateAIConfig(insightCacheHours) {
 
 // User Management — regular platform accounts (User/Content Creator/
 // Plays Organiser), separate from Admin Accounts.
+// Superadmin-only: creates a Plays Organiser directly as a normal `users`
+// row (role plays_organiser) — NOT an Admin Account. See
+// routers/admin_users.py create_organiser for why.
+export function createOrganiserAccount({ name, email, password, phone, country }) {
+  return request("/admin/users/organiser", {
+    method: "POST",
+    auth: true,
+    body: { name, email, password, phone: phone || null, country: country || "India" },
+  });
+}
+
 export function fetchAdminUsers(search) {
   return request(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`, { auth: true });
 }

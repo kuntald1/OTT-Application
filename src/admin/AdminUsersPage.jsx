@@ -3,6 +3,7 @@ import { Users, Search, Key, KeyRound, Video, UserX, UserCheck, X, Send, CornerD
 import { fetchAdminUsers, setUserPassword, setUserLiveStreaming, setUserActive, notifyUserLiveStreaming, resetUserFamilyPin, fetchAdminUserSubscriptions, fetchAdminUserPayments, fetchAdminOrganiserSections, createAdminOrganiserSection, updateAdminOrganiserSection, deleteAdminOrganiserSection, uploadAdminStudioCoverImage } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import AdminOrganiserRequestsTab from "./AdminOrganiserRequestsTab";
+import CreateOrganiserForm from "./CreateOrganiserForm";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
@@ -294,6 +295,7 @@ export default function AdminUsersPage({ currentAdmin }) {
         <AdminOrganiserRequestsTab />
       ) : (
         <>
+      {isSuperadmin && <CreateOrganiserForm onCreated={() => load(search)} />}
       <form onSubmit={handleSearch} className="mb-6 flex gap-2">
         <input
           type="text"
