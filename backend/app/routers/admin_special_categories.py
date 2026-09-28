@@ -15,6 +15,21 @@ from app.schemas import (
 router = APIRouter(prefix="/admin/special-categories", tags=["admin-special-categories"])
 
 
+def _reject_if_section_mismatch(sc_section: VideoSection, video: Video) -> None:
+    """A Play video may only join a Play (or "both") row and an Archive video
+    only an Archive (or "both") row — access is decided by the VIDEO's own
+    section, so a mixed row would show viewers a video they can't open. The
+    search picker and the Edit-form chips already only offer matching rows;
+    this is the same rule on the server. Only ADDING is checked: removing is
+    always allowed, and memberships that already exist are left as they are.
+    """
+    if sc_section != VideoSection.both and video.section != sc_section:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'This row is for {sc_section.value} videos, but "{video.title}" is a {video.section.value} video.',
+        )
+
+
 def _to_out(sc: SpecialCategory, db: Session) -> SpecialCategoryOut:
     links = db.query(SpecialCategoryVideo).filter(SpecialCategoryVideo.special_category_id == sc.id).all()
     video_ids = [l.video_id for l in links]
@@ -163,6 +178,7 @@ def create_special_category(
     for video_id in payload.video_ids:
         video = db.query(Video).filter(Video.id == video_id).first()
         if video:
+            _reject_if_section_mismatch(sc.section, video)  # nothing is committed if this raises
             db.add(SpecialCategoryVideo(special_category_id=sc.id, video_id=video.id))
     db.commit()
     db.refresh(sc)
@@ -258,6 +274,7 @@ def add_video_to_special_category(
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    _reject_if_section_mismatch(sc.section, video)
     exists = (
         db.query(SpecialCategoryVideo)
         .filter(SpecialCategoryVideo.special_category_id == sc.id, SpecialCategoryVideo.video_id == video.id)
