@@ -189,8 +189,16 @@ export default function AdminAccountsPage({ currentAdmin }) {
             >
               <option value="admin">Admin</option>
               <option value="superadmin">Superadmin</option>
+              <option value="plays_organiser">Plays Organiser</option>
             </select>
           </div>
+          {form.role === "plays_organiser" && (
+            <p className="mb-3 text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
+              Creates an Admin Portal login only — no main-site account. Its menus come from Role permissions below, and until you enable
+              some it can open nothing. For an organiser who also uploads videos and earns revenue on the site, use User Management &gt;
+              Create organiser instead.
+            </p>
+          )}
           {error && <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}
           <button
             type="submit"
@@ -306,7 +314,11 @@ export default function AdminAccountsPage({ currentAdmin }) {
       <ConfirmDialog
         open={!!confirmDeactivateId}
         title="Deactivate admin account"
-        message="Deactivate this admin account? They will no longer be able to log in."
+        message={
+          admins.find((a) => a.id === confirmDeactivateId)?.role === "plays_organiser"
+            ? "Deactivate this Plays Organiser's Admin Portal login? They will no longer be able to log in to the Admin Portal. Any main-site account they have is not affected — manage that under User Management."
+            : "Deactivate this admin account? They will no longer be able to log in."
+        }
         confirmLabel="Deactivate"
         danger
         busy={deactivating}

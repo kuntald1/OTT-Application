@@ -82,6 +82,13 @@ def create_admin(
             detail="An admin account with this email already exists",
         )
 
+    # role "plays_organiser" is created HERE as an admin_users row ONLY —
+    # deliberately no `users` row (Admin decision, Sept 2026). Such an account
+    # is an Admin Portal login, nothing more: it owns no videos/revenue and
+    # doesn't appear on the site as an organiser. To create a full organiser
+    # (site account + optional admin login) use User Management > Create
+    # organiser. Its menus come from the role (admin_roles.py), and its API
+    # access is deny-by-default (deps.get_current_admin).
     admin = AdminUser(
         name=payload.name,
         email=payload.email,
@@ -91,7 +98,7 @@ def create_admin(
     db.add(admin)
     db.commit()
     db.refresh(admin)
-    return admin
+    return _admin_out(admin, db)
 
 
 @router.put("/admins/{admin_id}/menu-permissions", response_model=AdminOut)

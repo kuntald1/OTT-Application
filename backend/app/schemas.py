@@ -1324,7 +1324,7 @@ class AdminCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: NormEmail
     password: str = Field(min_length=8, max_length=128)
-    role: str = Field(pattern="^(superadmin|admin)$", default="admin")
+    role: str = Field(pattern="^(superadmin|admin|plays_organiser)$", default="admin")
 
 
 class MyListItemIn(BaseModel):
