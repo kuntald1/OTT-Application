@@ -101,6 +101,7 @@ function SubscriptionPurchasePage({ onBack }) {
   // banner only while auto-renew is actually on, with a way to turn it off.
   const [autopay, setAutopay] = useState(null);
   const [cancellingAutopay, setCancellingAutopay] = useState(false);
+  const [confirmCancelAutopay, setConfirmCancelAutopay] = useState(false);
 
   const loadAutopay = async () => {
     try {
@@ -116,7 +117,6 @@ function SubscriptionPurchasePage({ onBack }) {
   }, [isLoggedIn, isIndia]);
 
   const handleCancelAutopay = async () => {
-    if (!window.confirm("Turn off auto-renew? Your current plan stays active until it expires and you won't be charged again.")) return;
     setCancellingAutopay(true);
     try {
       await cancelMyAutopay();
@@ -125,6 +125,7 @@ function SubscriptionPurchasePage({ onBack }) {
       setError(err.message || "Couldn't turn off auto-renew. Please try again.");
     } finally {
       setCancellingAutopay(false);
+      setConfirmCancelAutopay(false);
     }
   };
 
@@ -306,7 +307,7 @@ function SubscriptionPurchasePage({ onBack }) {
             <button
               type="button"
               disabled={cancellingAutopay}
-              onClick={handleCancelAutopay}
+              onClick={() => setConfirmCancelAutopay(true)}
               className="rounded-full px-4 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
             >
@@ -742,6 +743,46 @@ function SubscriptionPurchasePage({ onBack }) {
           </div>
         )}
       </main>
+
+      {confirmCancelAutopay && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: "rgba(10,1,4,0.8)" }}
+          onClick={() => { if (!cancellingAutopay) setConfirmCancelAutopay(false); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6"
+            style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.2)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-2 text-lg font-semibold" style={{ color: COLORS.cream }}>Turn off auto-renew?</h2>
+            <p className="mb-5 text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.7)" }}>
+              Your current plan stays active until it expires, and you won't be charged again.
+              You can turn auto-renew back on any time by subscribing again.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={cancellingAutopay}
+                onClick={() => setConfirmCancelAutopay(false)}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              >
+                Keep auto-renew
+              </button>
+              <button
+                type="button"
+                disabled={cancellingAutopay}
+                onClick={handleCancelAutopay}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
+              >
+                {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {checkoutPlan && (
         <CheckoutModal
