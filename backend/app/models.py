@@ -378,6 +378,45 @@ class Payment(Base):
     )
 
 
+class AutopaySubscription(Base):
+    """A UPI Autopay (recurring) Razorpay subscription — one row per
+    auto-renew setup attempt. Deliberately its OWN table rather than columns
+    on `subscriptions`/`payments`: Base.metadata.create_all only creates
+    missing TABLES, never adds columns, so this table appears by itself on
+    the next startup with no manual ALTER TABLE (same reason as FamilyPin).
+
+    The amounts are FIXED at signup (plan price + GST at that moment) because
+    a Razorpay Plan has one fixed amount — later admin price or GST changes
+    do not affect an existing auto-renew until the customer sets it up again.
+
+    status: "created" (checkout opened, not yet authorised) | "active" |
+    "halted" (Razorpay gave up after failed charges) | "cancelled" |
+    "completed" (all billing cycles used). `subscription_id` points at the
+    ONE `subscriptions` row that every renewal extends.
+    """
+    __tablename__ = "autopay_subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    subscription_id = Column(UUID(as_uuid=True), ForeignKey("subscriptions.id"), nullable=True)
+
+    razorpay_plan_id = Column(String(100), nullable=False)
+    razorpay_subscription_id = Column(String(100), nullable=False, unique=True, index=True)
+
+    plan_name = Column(String(50), nullable=False)
+    duration_label = Column(String(50), nullable=False)
+    screens = Column(Integer, nullable=False, default=1)
+    base_amount = Column(Numeric(10, 2), nullable=False)
+    tax_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+
+    status = Column(String(20), nullable=False, default="created")
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class TaxConfig(Base):
     """Single-row table holding the current GST rate. Admin-editable
     (update the one row) — the checkout flow always reads the latest value,

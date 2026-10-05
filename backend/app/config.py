@@ -47,6 +47,12 @@ class Settings:
     RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
+    # Razorpay webhook secret — created in Razorpay Dashboard → Account &
+    # Settings → Webhooks, and used to verify the X-Razorpay-Signature header
+    # on /api/payments/razorpay/webhook. UPI Autopay renewals are reported to
+    # us ONLY through this webhook, so auto-renew cannot work without it.
+    RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
     # Stripe (test mode) — used for subscription checkout (non-India, USD)
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
     STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")

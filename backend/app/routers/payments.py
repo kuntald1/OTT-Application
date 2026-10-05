@@ -12,7 +12,7 @@ from app.database import get_db
 from app.deps import get_current_user, ensure_can_buy_plan
 from app.models import (
     User, Payment, PaymentStatus, PaymentGateway,
-    SubscriptionPlan, Subscription, TaxConfig, RewardConfig,
+    SubscriptionPlan, Subscription, TaxConfig, RewardConfig, AutopaySubscription,
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
 from app.duration_pricing import get_duration_months_and_discount
@@ -64,6 +64,17 @@ def create_razorpay_order(
     db: Session = Depends(get_db),
 ):
     ensure_can_buy_plan(current_user, db)  # a sub-account shares its parent's plan; see deps.py
+
+    # A one-time purchase while an auto-renew (UPI Autopay) is active would
+    # leave the old mandate charging for the OLD plan alongside the new one.
+    # The customer cancels auto-renew first (Subscription page), then buys.
+    if db.query(AutopaySubscription).filter(
+        AutopaySubscription.user_id == current_user.id, AutopaySubscription.status == "active"
+    ).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Auto-renew is on for your current plan. Turn off auto-renew first to buy a different plan.",
+        )
 
     if current_user.country != "India":
         raise HTTPException(

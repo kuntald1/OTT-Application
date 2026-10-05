@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createAutopaySubscription, verifyAutopayPayment, fetchMyAutopay, cancelMyAutopay, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -96,6 +96,37 @@ function SubscriptionPurchasePage({ onBack }) {
 
   const isIndia = profile.country === "India";
   const [exchangeRate, setExchangeRate] = useState(null);
+
+  // UPI Autopay (auto-renew) status — shown as a card under the current-plan
+  // banner only while auto-renew is actually on, with a way to turn it off.
+  const [autopay, setAutopay] = useState(null);
+  const [cancellingAutopay, setCancellingAutopay] = useState(false);
+
+  const loadAutopay = async () => {
+    try {
+      setAutopay(await fetchMyAutopay());
+    } catch {
+      setAutopay(null);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && isIndia) loadAutopay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, isIndia]);
+
+  const handleCancelAutopay = async () => {
+    if (!window.confirm("Turn off auto-renew? Your current plan stays active until it expires and you won't be charged again.")) return;
+    setCancellingAutopay(true);
+    try {
+      await cancelMyAutopay();
+      await loadAutopay();
+    } catch (err) {
+      setError(err.message || "Couldn't turn off auto-renew. Please try again.");
+    } finally {
+      setCancellingAutopay(false);
+    }
+  };
 
   useEffect(() => {
     fetchSubscriptionDurations()
@@ -259,6 +290,28 @@ function SubscriptionPurchasePage({ onBack }) {
             <p className="text-sm" style={{ color: "#6FCF97" }}>
               You're currently on the <b>{activePlan}</b> plan — {activeDuration}, {activeScreens} screen{activeScreens > 1 ? "s" : ""}, {activeCurrency === "USD" ? "$" : "₹"}{activePrice} total.
             </p>
+          </div>
+        )}
+
+        {/* UPI Autopay status */}
+        {autopay && autopay.active && (
+          <div
+            className="mx-auto mb-8 flex max-w-4xl flex-wrap items-center gap-3 rounded-2xl px-5 py-4"
+            style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.3)" }}
+          >
+            <p className="flex-1 text-sm" style={{ color: COLORS.gold }}>
+              Auto-renew is on — ₹{autopay.total_amount} will be charged via UPI Autopay
+              {autopay.next_renewal_at ? ` around ${formatDate(autopay.next_renewal_at)}` : ""}, then every {String(autopay.duration_label || "").toLowerCase()}.
+            </p>
+            <button
+              type="button"
+              disabled={cancellingAutopay}
+              onClick={handleCancelAutopay}
+              className="rounded-full px-4 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
+            >
+              {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
+            </button>
           </div>
         )}
 
@@ -707,6 +760,7 @@ function SubscriptionPurchasePage({ onBack }) {
             refreshSubscription();
             refreshProfile();
             loadHistoryAndPayments();
+            loadAutopay();
           }}
         />
       )}
@@ -732,17 +786,21 @@ function SubscriptionPurchasePage({ onBack }) {
 // ---------------------------------------------------------------------------
 function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userEmail, userPhone, isIndia, exchangeRate, onClose, onSuccess }) {
   const [useRewards, setUseRewards] = useState(false);
+  const [autoRenew, setAutoRenew] = useState(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
 
   const monthly = plan.basePrice + (screens - 1) * plan.perExtraScreen;
   const preRewardsInr = Math.round(monthly * duration.months * (1 - duration.discount));
-  const pointsUsed = useRewards ? Math.min(rewardPoints, preRewardsInr) : 0;
+  // Auto-renew has one fixed recurring amount, so reward points can't be redeemed on it.
+  const pointsUsed = useRewards && !autoRenew ? Math.min(rewardPoints, preRewardsInr) : 0;
   const taxableInr = preRewardsInr - pointsUsed;
 
   const gstPercent = taxConfig ? Number(taxConfig.gst_percent) : 18;
   const taxAmountInr = isIndia ? Math.round((taxableInr * gstPercent) / 100) : 0;
   const totalInr = taxableInr + taxAmountInr;
+  // What every auto-renew charge will be: full plan price + GST, no reward discount.
+  const recurringInr = preRewardsInr + (isIndia ? Math.round((preRewardsInr * gstPercent) / 100) : 0);
 
   // USD — from the plan's own USD price, not converted from the INR
   // total. Reward points are still valued in ₹ (that's how they're
@@ -809,6 +867,60 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
     }
   };
 
+  const handlePayWithAutopay = async () => {
+    setError("");
+    setPaying(true);
+    try {
+      const sub = await createAutopaySubscription({
+        planName: plan.name,
+        durationLabel: duration.label,
+        screens,
+      });
+
+      if (!window.Razorpay) {
+        throw new Error("Payment widget failed to load. Please refresh and try again.");
+      }
+
+      const rzp = new window.Razorpay({
+        key: sub.razorpay_key_id,
+        subscription_id: sub.razorpay_subscription_id,
+        name: "theomy",
+        description: `${sub.plan_name} — ${sub.duration_label} (auto-renew)`,
+        prefill: { email: userEmail, contact: userPhone || undefined },
+        theme: { color: "#D4AF37" },
+        handler: async (response) => {
+          try {
+            const result = await verifyAutopayPayment({
+              autopayId: sub.autopay_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySubscriptionId: response.razorpay_subscription_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            if (!result.activated) {
+              window.alert("Auto-renew is set up. Your plan activates as soon as the first payment is confirmed — usually within a minute. Refresh this page shortly.");
+            }
+            onSuccess();
+          } catch (err) {
+            setError(err.message || "Payment verification failed. If money was deducted, contact support.");
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setPaying(false),
+        },
+      });
+      rzp.on("payment.failed", () => {
+        setError("Payment failed. Please try again.");
+        setPaying(false);
+      });
+      rzp.open();
+    } catch (err) {
+      setError(err.message || "Couldn't start auto-renew checkout. Please try again.");
+      setPaying(false);
+    }
+  };
+
   const handlePayWithStripe = async () => {
     setError("");
     setPaying(true);
@@ -840,7 +952,7 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
           {plan.name} — {duration.label}, {screens} screen{screens > 1 ? "s" : ""}
         </p>
 
-        {rewardPoints > 0 && (
+        {rewardPoints > 0 && !autoRenew && (
           <button
             type="button"
             onClick={() => setUseRewards((v) => !v)}
@@ -861,6 +973,32 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
               <div
                 className="h-4 w-4 rounded-full bg-white transition-transform"
                 style={{ transform: useRewards ? "translateX(16px)" : "translateX(0)" }}
+              />
+            </div>
+          </button>
+        )}
+
+        {isIndia && (
+          <button
+            type="button"
+            onClick={() => setAutoRenew((v) => !v)}
+            className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
+            style={{
+              background: autoRenew ? "rgba(212,175,55,0.1)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${autoRenew ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.08)"}`,
+            }}
+          >
+            <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
+              Auto-renew with UPI Autopay — ₹{recurringInr} every {duration.label.toLowerCase()}. Approve once in your UPI app; turn it off any time.
+              {rewardPoints > 0 && autoRenew ? " Reward points can't be redeemed on auto-renew." : ""}
+            </span>
+            <div
+              className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
+              style={{ background: autoRenew ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}
+            >
+              <div
+                className="h-4 w-4 rounded-full bg-white transition-transform"
+                style={{ transform: autoRenew ? "translateX(16px)" : "translateX(0)" }}
               />
             </div>
           </button>
@@ -913,11 +1051,11 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
             <button
               type="button"
               disabled={paying}
-              onClick={handlePayWithRazorpay}
+              onClick={autoRenew ? handlePayWithAutopay : handlePayWithRazorpay}
               className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >
-              {paying ? "Processing…" : `Pay ₹${totalInr} with Razorpay`}
+              {paying ? "Processing…" : autoRenew ? `Pay ₹${recurringInr} & turn on auto-renew` : `Pay ₹${totalInr} with Razorpay`}
             </button>
           ) : (
             <div>

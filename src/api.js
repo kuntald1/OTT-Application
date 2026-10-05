@@ -853,6 +853,38 @@ export function verifyRazorpayPayment({ paymentId, razorpayOrderId, razorpayPaym
   });
 }
 
+// UPI Autopay (auto-renew) — Razorpay Subscriptions. Opt-in at checkout;
+// the first charge is authorised in the customer's UPI app and Razorpay
+// then renews it automatically (renewals reach the server by webhook).
+export function createAutopaySubscription({ planName, durationLabel, screens }) {
+  return request("/payments/autopay/create", {
+    method: "POST",
+    auth: true,
+    body: { plan_name: planName, duration_label: durationLabel, screens },
+  });
+}
+
+export function verifyAutopayPayment({ autopayId, razorpayPaymentId, razorpaySubscriptionId, razorpaySignature }) {
+  return request("/payments/autopay/verify", {
+    method: "POST",
+    auth: true,
+    body: {
+      autopay_id: autopayId,
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_subscription_id: razorpaySubscriptionId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
+}
+
+export function fetchMyAutopay() {
+  return request("/payments/autopay/me", { auth: true });
+}
+
+export function cancelMyAutopay() {
+  return request("/payments/autopay/cancel", { method: "POST", auth: true });
+}
+
 // Public, no auth — used to build the nav (top-level items + Category
 // dropdown) from the database instead of a hardcoded array.
 export function fetchMenus() {
