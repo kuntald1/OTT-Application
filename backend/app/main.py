@@ -30,7 +30,7 @@ def _on_shutdown():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://movixa.duckdns.org"],
+    allow_origins=["https://movixa.duckdns.org", "https://theomy.com", "https://www.theomy.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
