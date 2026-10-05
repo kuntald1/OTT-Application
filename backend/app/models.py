@@ -1108,7 +1108,6 @@ class AgeRating(str, enum.Enum):
     ua7 = "UA7+"
     ua13 = "UA13+"
     ua16 = "UA16+"
-    a = "A"
 
 
 class VideoSection(str, enum.Enum):

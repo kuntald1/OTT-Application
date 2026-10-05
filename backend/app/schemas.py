@@ -1488,7 +1488,7 @@ class VideoCreate(BaseModel):
     # one is set (see admin_videos.py's _require_categories_before_publish).
     categories: List[str] = Field(default=[], max_length=3)
     release_year: int = Field(ge=1900, le=2100)
-    age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+|A)$")
+    age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+)$")
     languages: Optional[List[str]] = None
     has_ads: bool = True
     monetization_type: str = Field(pattern="^(subscription_only|pay_per_video)$", default="subscription_only")
