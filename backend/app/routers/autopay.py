@@ -10,11 +10,13 @@ How it differs from the one-time flow in payments.py:
     is idempotent on the Razorpay payment id, so the browser's verify call
     and the webhook racing each other for the first charge is harmless.
 
+Access is counted in calendar months + a few grace days (AUTOPAY_GRACE_DAYS).
 Auto-renew is opt-in (a checkbox at checkout) and India/Razorpay only.
 Reward points can't be redeemed on an auto-renew purchase: a Razorpay Plan
 has ONE fixed recurring amount, so a first-charge-only discount isn't
 possible. Points are still EARNED on every charge.
 """
+import calendar
 import hashlib
 import hmac
 import json
@@ -47,6 +49,28 @@ router = APIRouter(prefix="/payments", tags=["autopay"])
 # cancel any time; this is only the ceiling. Change here if Razorpay or the
 # UPI mandate rules turn out to cap tenure lower.
 AUTOPAY_MAX_YEARS = 5
+
+# Razorpay bills by CALENDAR months (5 Oct -> 5 Nov), not 30-day blocks, so an
+# auto-renew plan's access is counted in calendar months too, plus a few days
+# of grace: a charge that lands a little late, or that fails once and is
+# retried by Razorpay, then never locks a paying customer out. The grace is
+# part of subscriptions.expires_at; the real paid-period end is always
+# expires_at minus this many days (that is how a renewal knows where to
+# continue from, so the grace never piles up cycle after cycle).
+AUTOPAY_GRACE_DAYS = 3
+
+
+def _add_months(dt: datetime, months: int, anchor_day: Optional[int] = None) -> datetime:
+    """dt plus `months` calendar months. A day that doesn't exist in the
+    target month clamps to that month's last day (31 Jan + 1 month = 28 Feb).
+    `anchor_day` is the day-of-month the billing started on: passing it makes
+    a later month go back to that day (28 Feb + 1 month = 31 Mar) instead of
+    staying stuck on the clamped one, so the paid period never drifts earlier
+    than Razorpay's own monthly schedule."""
+    index = dt.month - 1 + months
+    year, month = dt.year + index // 12, index % 12 + 1
+    day = min(anchor_day or dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
 
 
 def _client() -> razorpay.Client:
@@ -264,18 +288,28 @@ def _apply_charge(db: Session, autopay_id: uuid.UUID, razorpay_payment_id: str) 
             screens=autopay.screens,
             price=autopay.total_amount,
             is_active=True,
-            expires_at=now + timedelta(days=months * 30),
+            expires_at=_add_months(now, months) + timedelta(days=AUTOPAY_GRACE_DAYS),
         )
         db.add(subscription)
         db.flush()
         autopay.subscription_id = subscription.id
     else:
-        # Renewal — extend from whichever is later, now or the current
-        # expiry, so an early or late charge never shortens paid time.
+        # Renewal. expires_at includes the grace days (see AUTOPAY_GRACE_DAYS),
+        # so the paid period actually ended `grace` earlier. If this charge
+        # arrived while access was still running, bill continuously from that
+        # real period end; if access had already lapsed (a long-halted
+        # mandate that recovered), start the new period from now instead.
+        grace = timedelta(days=AUTOPAY_GRACE_DAYS)
         current_expiry = subscription.expires_at
         if current_expiry.tzinfo is None:  # defensive: treat a naive timestamp as UTC
             current_expiry = current_expiry.replace(tzinfo=timezone.utc)
-        subscription.expires_at = max(now, current_expiry) + timedelta(days=months * 30)
+        still_running = now <= current_expiry
+        period_start = current_expiry - grace if still_running else now
+        # Keep the day-of-month the first charge happened on (a 31st-start
+        # plan returns to the 31st after a short month). Not when restarting
+        # from "now" after a lapse — that starts a fresh anchor.
+        anchor_day = subscription.started_at.day if (still_running and subscription.started_at) else None
+        subscription.expires_at = _add_months(period_start, months, anchor_day) + grace
         subscription.is_active = True
 
     autopay.status = "active"
@@ -404,7 +438,7 @@ def my_autopay(
         duration_label=autopay.duration_label,
         screens=autopay.screens,
         total_amount=autopay.total_amount,
-        next_renewal_at=subscription.expires_at if subscription else None,
+        next_renewal_at=(subscription.expires_at - timedelta(days=AUTOPAY_GRACE_DAYS)) if subscription else None,
     )
 
 
