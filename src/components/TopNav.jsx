@@ -1014,7 +1014,7 @@ function LoginModal({ onClose }) {
               >
                 Back to login
               </button>
-            ) : (
+            ) : null /*(
               <button
                 onClick={() => { setFormError(""); resetRegOtp(); setMode((m) => (m === "login" ? "register" : "login")); }}
                 className="text-xs font-medium hover:opacity-90"
@@ -1022,7 +1022,7 @@ function LoginModal({ onClose }) {
               >
                 {mode === "login" ? "New Registration" : "Already have an account? Log in"}
               </button>
-            )}
+            )}*/
           </div>
         </div>
         )}
