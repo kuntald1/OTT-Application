@@ -1022,7 +1022,8 @@ function LoginModal({ onClose }) {
               >
                 {mode === "login" ? "New Registration" : "Already have an account? Log in"}
               </button>
-            )}*/
+            )*/
+            }
           </div>
         </div>
         )}
