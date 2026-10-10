@@ -54,6 +54,22 @@ export function adminLogin(email, password) {
   });
 }
 
+export function adminForgotPassword(email) {
+  return request("/admin/auth/forgot-password", { method: "POST", body: { email } });
+}
+
+export function adminResetPassword(token, newPassword) {
+  return request("/admin/auth/reset-password", { method: "POST", body: { token, new_password: newPassword } });
+}
+
+export function setAdminAccountPassword(adminId, newPassword) {
+  return request(`/admin/auth/admins/${adminId}/password`, {
+    method: "PUT",
+    auth: true,
+    body: { new_password: newPassword },
+  });
+}
+
 export function fetchCurrentAdmin() {
   return request("/admin/auth/me", { auth: true });
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchAdminList, createAdminAccount, deactivateAdminAccount, updateAdminMenuPermissions } from "./adminApi";
+import { fetchAdminList, createAdminAccount, deactivateAdminAccount, updateAdminMenuPermissions, setAdminAccountPassword } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 
@@ -121,6 +121,27 @@ export default function AdminAccountsPage({ currentAdmin }) {
     }
   };
 
+  const [changingPasswordId, setChangingPasswordId] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState("");
+
+  const handleSavePassword = async (adminId) => {
+    setSavingPassword(true);
+    setError("");
+    setPasswordMsg("");
+    try {
+      await setAdminAccountPassword(adminId, newPassword);
+      setPasswordMsg("Password updated.");
+      setNewPassword("");
+      setChangingPasswordId(null);
+    } catch (err) {
+      setError(err.message || "Couldn't change the password.");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const handleDeactivateConfirmed = async () => {
     setDeactivating(true);
     try {
@@ -213,6 +234,9 @@ export default function AdminAccountsPage({ currentAdmin }) {
 
       <RolePermissionsPanel role="plays_organiser" />
 
+      {passwordMsg && <p className="mb-3 text-xs font-medium" style={{ color: "#4ade80" }}>{passwordMsg}</p>}
+      {error && !showCreate && <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}
+
       {loading ? (
         <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
       ) : (
@@ -245,6 +269,15 @@ export default function AdminAccountsPage({ currentAdmin }) {
                       {managingPermissionsId === a.id ? "Close" : "Manage Permissions"}
                     </button>
                   )}
+                  {(a.role === "admin" || a.role === "plays_organiser") && a.is_active && (
+                    <button
+                      onClick={() => { setChangingPasswordId(changingPasswordId === a.id ? null : a.id); setNewPassword(""); setError(""); setPasswordMsg(""); }}
+                      className="text-xs font-medium hover:opacity-80"
+                      style={{ color: COLORS.gold }}
+                    >
+                      {changingPasswordId === a.id ? "Close" : "Change Password"}
+                    </button>
+                  )}
                   {a.is_active ? (
                     a.id !== currentAdmin.id && (
                       <button
@@ -260,6 +293,28 @@ export default function AdminAccountsPage({ currentAdmin }) {
                   )}
                 </div>
               </div>
+
+              {changingPasswordId === a.id && (
+                <div className="mt-3 flex flex-wrap items-center gap-3 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  <input
+                    type="password"
+                    placeholder="New password (min. 8 characters)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-64 rounded-lg border px-3 py-2 text-sm outline-none"
+                    style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+                  />
+                  <button
+                    onClick={() => handleSavePassword(a.id)}
+                    disabled={savingPassword || newPassword.length < 8}
+                    className="rounded-full px-4 py-1.5 text-xs font-semibold text-black disabled:opacity-40"
+                    style={{ background: COLORS.gold }}
+                  >
+                    {savingPassword ? "Saving…" : "Save password"}
+                  </button>
+                </div>
+              )}
 
               {managingPermissionsId === a.id && (
                 <div className="mt-3 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>

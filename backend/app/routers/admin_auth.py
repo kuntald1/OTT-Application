@@ -1,5 +1,12 @@
+import hashlib
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from jose import jwt, JWTError
 from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.email_utils import send_admin_password_reset_email
 
 from app.admin_roles import ROLE_ASSIGNABLE, ROLE_LABELS, ORGANISER_MENUS, effective_menu_keys, menus_for_role
 from app.database import get_db
@@ -9,6 +16,7 @@ from app.models import AdminUser, AdminRole, AdminRoleMenu
 from app.schemas import (
     AdminLoginRequest, AdminToken, AdminOut, AdminCreateRequest, AdminMenuPermissionsUpdate,
     AdminRolePermissionsOut, AdminRolePermissionsUpdate, AdminRoleMenuOption,
+    AdminSetPasswordRequest, AdminResetPasswordRequest, ForgotPasswordRequest, MessageResponse,
 )
 from app.security import hash_password, verify_password, create_access_token
 
@@ -57,6 +65,60 @@ def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(subject=str(admin.id))
     return AdminToken(access_token=token, admin=_admin_out(admin, db))
+
+
+# ------------------------------------------------ forgot / reset password
+# Stateless, signed reset token (no extra DB column). It is signed with a key
+# DERIVED from the JWT secret, so it can never be accepted as an admin login
+# token (those use the plain secret). "fp" is a fingerprint of the current
+# password hash, so the link stops working the moment the password changes —
+# i.e. it is single-use.
+def _reset_key() -> str:
+    return settings.JWT_SECRET_KEY + ":admin-password-reset"
+
+
+def _pw_fingerprint(hashed_password: str) -> str:
+    return hashlib.sha256(hashed_password.encode()).hexdigest()[:24]
+
+
+def _make_reset_token(admin: AdminUser) -> str:
+    exp = datetime.now(timezone.utc) + timedelta(minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"sub": str(admin.id), "fp": _pw_fingerprint(admin.hashed_password), "exp": exp, "purpose": "admin_reset"},
+        _reset_key(), algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def admin_forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    # Same generic answer whether or not the account exists.
+    generic = MessageResponse(message="If an account exists for that email, a reset link has been sent.")
+    admin = db.query(AdminUser).filter(email_equals(AdminUser.email, payload.email)).first()
+    if not admin or not admin.is_active:
+        return generic
+    reset_link = f"{settings.FRONTEND_URL}/admin/reset-password?token={_make_reset_token(admin)}"
+    try:
+        send_admin_password_reset_email(admin.email, reset_link)
+    except Exception:
+        pass
+    return generic
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def admin_reset_password(payload: AdminResetPasswordRequest, db: Session = Depends(get_db)):
+    invalid = HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This reset link is invalid or has expired.")
+    try:
+        data = jwt.decode(payload.token, _reset_key(), algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        raise invalid
+    if data.get("purpose") != "admin_reset":
+        raise invalid
+    admin = db.query(AdminUser).filter(AdminUser.id == data.get("sub")).first()
+    if not admin or not admin.is_active or data.get("fp") != _pw_fingerprint(admin.hashed_password):
+        raise invalid
+    admin.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return MessageResponse(message="Password reset successfully. You can now log in.")
 
 
 @router.get("/me", response_model=AdminOut)
@@ -133,6 +195,26 @@ def update_admin_menu_permissions(
     db.commit()
     db.refresh(admin)
     return admin
+
+
+@router.put("/admins/{admin_id}/password", response_model=MessageResponse)
+def set_admin_password(
+    admin_id: str,
+    payload: AdminSetPasswordRequest,
+    current_superadmin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Admin Accounts > Change password — superadmin sets a new password for
+    an Admin or Plays Organiser account (admin_users.hashed_password).
+    Superadmin accounts are excluded (incl. your own)."""
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin account not found.")
+    if admin.role not in (AdminRole.admin, AdminRole.plays_organiser):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only Admin and Plays Organiser passwords can be changed here.")
+    admin.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return MessageResponse(message="Password updated.")
 
 
 @router.delete("/admins/{admin_id}", status_code=status.HTTP_204_NO_CONTENT)

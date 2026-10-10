@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import AdminLoginPage from "./AdminLoginPage";
 import AdminLayout from "./AdminLayout";
+import AdminResetPasswordPage from "./AdminResetPasswordPage";
 import { getAdminToken, fetchCurrentAdmin } from "./adminApi";
 
 // Entirely self-contained — does NOT use the regular consumer AppContext
@@ -23,6 +24,19 @@ export default function AdminApp() {
       .catch(() => setCurrentAdmin(null))
       .finally(() => setCheckingSession(false));
   }, []);
+
+  // Link from the reset email: /admin/reset-password?token=...
+  if (window.location.pathname.replace(/\/+$/, "") === "/admin/reset-password") {
+    const resetToken = new URLSearchParams(window.location.search).get("token");
+    if (resetToken) {
+      return (
+        <AdminResetPasswordPage
+          token={resetToken}
+          onDone={() => { window.location.href = "/admin"; }}
+        />
+      );
+    }
+  }
 
   if (checkingSession) {
     return (

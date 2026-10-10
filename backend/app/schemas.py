@@ -1326,6 +1326,16 @@ class AdminToken(BaseModel):
     admin: AdminOut
 
 
+class AdminSetPasswordRequest(BaseModel):
+    """Superadmin setting another admin_users account's password."""
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class AdminCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: NormEmail
@@ -1488,7 +1498,7 @@ class VideoCreate(BaseModel):
     # one is set (see admin_videos.py's _require_categories_before_publish).
     categories: List[str] = Field(default=[], max_length=3)
     release_year: int = Field(ge=1900, le=2100)
-    age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+)$")
+    age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+|A)$")
     languages: Optional[List[str]] = None
     has_ads: bool = True
     monetization_type: str = Field(pattern="^(subscription_only|pay_per_video)$", default="subscription_only")

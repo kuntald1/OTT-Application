@@ -186,3 +186,13 @@ def send_registration_otp_email(to_email: str, otp_code: str, expire_minutes: in
         _build_otp_text_body(otp_code, expire_minutes),
         _build_otp_html_body(otp_code, expire_minutes),
     )
+
+
+def send_admin_password_reset_email(to_email: str, reset_link: str) -> None:
+    """Same themed reset email as the main site, for Admin Portal accounts."""
+    _send_email(
+        to_email,
+        "Reset your theomy Admin password",
+        _build_text_body(reset_link),
+        _build_html_body(reset_link),
+    )

@@ -55,7 +55,7 @@ export function OrganiserAddVideoPage({ currentAdmin }) {
 }
 
 export function OrganiserRevenuePage({ currentAdmin }) {
-  return <Frame currentAdmin={currentAdmin}><RevenuePage /></Frame>;
+  return <Frame currentAdmin={currentAdmin}><RevenuePage hideViewerDetails /></Frame>;
 }
 
 export function OrganiserEventListingPage({ currentAdmin }) {
