@@ -103,7 +103,9 @@ function topNPlusOther(rows, labelKey, valueKey, n = 5) {
   return top;
 }
 
-export default function RevenuePage({ onBack }) {
+// hideViewerDetails: Plays Organiser (admin portal) hides the per-viewer
+// "Details" list under each video. Kept in code, not deleted — pass false/omit to show.
+export default function RevenuePage({ onBack, hideViewerDetails = false }) {
   const [pageTab, setPageTab] = useState("graph");
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -518,7 +520,7 @@ export default function RevenuePage({ onBack }) {
                                 />
                               </div>
 
-                              {isLoadingThis ? (
+                              {hideViewerDetails ? null : isLoadingThis ? (
                                 <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Loading breakdown…</p>
                               ) : !viewers || viewers.length === 0 ? (
                                 <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>No viewer data yet.</p>

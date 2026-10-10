@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +20,8 @@ from app.schemas import (
     AdminSetPasswordRequest, AdminResetPasswordRequest, ForgotPasswordRequest, MessageResponse,
 )
 from app.security import hash_password, verify_password, create_access_token
+
+logger = logging.getLogger("admin_auth")
 
 router = APIRouter(prefix="/admin/auth", tags=["admin-auth"])
 
@@ -95,12 +98,16 @@ def admin_forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
     generic = MessageResponse(message="If an account exists for that email, a reset link has been sent.")
     admin = db.query(AdminUser).filter(email_equals(AdminUser.email, payload.email)).first()
     if not admin or not admin.is_active:
+        logger.warning("admin forgot-password: no active admin_users row for %r - no email sent", payload.email)
         return generic
     reset_link = f"{settings.FRONTEND_URL}/admin/reset-password?token={_make_reset_token(admin)}"
     try:
         send_admin_password_reset_email(admin.email, reset_link)
+        logger.info("admin forgot-password: reset email sent to %s", admin.email)
     except Exception:
-        pass
+        # Client still gets the generic answer, but the real reason (SMTP
+        # login/auth failure etc.) is now visible in `docker logs`.
+        logger.exception("admin forgot-password: SMTP send FAILED for %s", admin.email)
     return generic
 
 

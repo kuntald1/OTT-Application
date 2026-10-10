@@ -555,7 +555,7 @@ export default function MyVideoListPage({ onBack }) {
               className="rounded-full px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
             >
-              {submitting ? "Submitting…" : "Submit for review"}
+              {submitting ? "Submitting…" : "Continue for upload video"}
             </button>
           </div>
         )}
