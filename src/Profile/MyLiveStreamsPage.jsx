@@ -262,21 +262,6 @@ export default function MyLiveStreamsPage({ onBack }) {
                         Ready to broadcast — point OBS (or similar) at the RTMP URL + Stream Key above and press
                         Start Streaming there any time. No need to create a new event.
                       </p>
-                      <div className="mt-2 rounded-lg p-2" style={{ background: "rgba(245,158,11,0.08)", border: "1px dashed rgba(245,158,11,0.4)" }}>
-                        <button
-                          type="button"
-                          onClick={() => handleSimulateStart(s)}
-                          disabled={simulatingId === s.id}
-                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-                          style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
-                        >
-                          <Play className="h-3.5 w-3.5" /> {simulatingId === s.id ? "Starting…" : "Start Streaming"}
-                        </button>
-                        <p className="mt-1.5 text-[11px]" style={{ color: "rgba(245,158,11,0.8)" }}>
-                          ⚠️ Temporary / test only — marks this "Live" without a real broadcast, just to preview
-                          the Live Now UI.
-                        </p>
-                      </div>
                     </>
                   )}
 
