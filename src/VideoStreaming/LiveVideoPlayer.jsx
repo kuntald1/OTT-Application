@@ -37,17 +37,21 @@ export default function LiveVideoPlayer({ playbackUrl }) {
       const videoEl = videoRef.current;
       if (!videoEl || !playbackUrl) return;
 
-      if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+      const playNative = () => {
         videoEl.src = playbackUrl;
         videoEl.play().catch(() => {});
-        return;
-      }
+      };
 
       try {
         await loadScriptOnce("https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js", () => !!window.Hls);
         if (cancelled) return;
         if (!window.Hls || !window.Hls.isSupported()) {
-          setLoadError("This browser can't play live video.");
+          // Safari / iOS: hls.js unsupported, use native HLS.
+          if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+            playNative();
+          } else {
+            setLoadError("This browser can't play live video.");
+          }
           return;
         }
         const hls = new window.Hls({ liveDurationInfinity: true });
@@ -56,7 +60,12 @@ export default function LiveVideoPlayer({ playbackUrl }) {
         hls.on(window.Hls.Events.MANIFEST_PARSED, () => videoEl.play().catch(() => {}));
         hlsRef.current = hls;
       } catch (e) {
-        setLoadError("Live playback couldn't load.");
+        // hls.js script blocked/offline: fall back to native HLS if the browser claims it.
+        if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+          playNative();
+        } else {
+          setLoadError("Live playback couldn't load.");
+        }
       }
     }
 
