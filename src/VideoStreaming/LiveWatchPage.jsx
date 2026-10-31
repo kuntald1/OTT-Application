@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Radio, CalendarClock, Lock } from "lucide-react";
 import { COLORS } from "../theme";
-import { fetchLiveStream } from "../api";
+import { fetchLiveStream, createLiveStreamPurchaseOrder, verifyLiveStreamPurchasePayment } from "../api";
 import { useApp } from "../context/AppContext";
 import LiveVideoPlayer from "./LiveVideoPlayer";
 import { formatShowTime, formatPrice, liveEventAction } from "../shared/liveAccess";
@@ -20,7 +20,7 @@ import { formatShowTime, formatPrice, liveEventAction } from "../shared/liveAcce
 // Everything that isn't "here's the player": each state says what's
 // true and, where there's something to do about it, offers the one
 // button that does it.
-function LockedPanel({ live, onNavigate, requestLogin }) {
+function LockedPanel({ live, onNavigate, requestLogin, onBuy, buying, buyError }) {
   const action = liveEventAction(live);
   const when = formatShowTime(live.scheduled_start_at);
   const price = formatPrice(live);
@@ -48,9 +48,7 @@ function LockedPanel({ live, onNavigate, requestLogin }) {
     icon = <Lock className="h-6 w-6" />;
     headline = "This show is on air now";
     detail = price ? `Buy this show for ${price} to watch it.` : "Buy this show to watch it.";
-    // Checkout isn't wired yet — saying so beats a button that does
-    // nothing. Replaced by the real Razorpay flow in the payment pass.
-    cta = { label: "Ticket sales open soon", onClick: null };
+    cta = { label: buying ? "Opening checkout…" : action.label, onClick: buying ? null : onBuy };
   }
 
   return (
@@ -72,6 +70,9 @@ function LockedPanel({ live, onNavigate, requestLogin }) {
           {cta.label}
         </button>
       )}
+      {buyError && (
+        <p className="max-w-sm text-xs" style={{ color: "#f87171" }}>{buyError}</p>
+      )}
     </div>
   );
 }
@@ -79,15 +80,79 @@ function LockedPanel({ live, onNavigate, requestLogin }) {
 export default function LiveWatchPage({ liveStreamId, onBack, onNavigate }) {
   const [live, setLive] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { requestLogin } = useApp();
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState("");
+  const { requestLogin, profile } = useApp();
 
-  useEffect(() => {
+  const loadLive = () => {
     setLoading(true);
     fetchLiveStream(liveStreamId)
       .then(setLive)
       .catch(() => setLive(null))
       .finally(() => setLoading(false));
-  }, [liveStreamId]);
+  };
+
+  useEffect(loadLive, [liveStreamId]);
+
+  // Razorpay's widget, loaded once lazily — same pattern as
+  // SubscriptionPage.jsx and VideoBrowsePage.jsx, so "Buy" works even
+  // if this is the first page the viewer has opened this session.
+  useEffect(() => {
+    if (document.getElementById("razorpay-checkout-js")) return;
+    const script = document.createElement("script");
+    script.id = "razorpay-checkout-js";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  const handleBuy = async () => {
+    setBuyError("");
+    setBuying(true);
+    try {
+      const order = await createLiveStreamPurchaseOrder(liveStreamId);
+      if (!window.Razorpay) {
+        throw new Error("Payment widget failed to load. Please refresh and try again.");
+      }
+      const rzp = new window.Razorpay({
+        key: order.razorpay_key_id,
+        amount: Math.round(Number(order.amount) * 100),
+        currency: order.currency,
+        name: "theomy",
+        description: order.live_stream_title,
+        order_id: order.razorpay_order_id,
+        prefill: { email: profile?.email, contact: profile?.phone || undefined },
+        theme: { color: "#D4AF37" },
+        handler: async (response) => {
+          try {
+            await verifyLiveStreamPurchasePayment({
+              purchaseId: order.purchase_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            // Re-fetch rather than flipping a local flag: the server is
+            // what decides has_access, and only it can hand back the
+            // playback_url this page needs.
+            loadLive();
+          } catch (err) {
+            setBuyError(err.message || "Payment verification failed. If money was deducted, contact support.");
+          } finally {
+            setBuying(false);
+          }
+        },
+        modal: { ondismiss: () => setBuying(false) },
+      });
+      rzp.on("payment.failed", () => {
+        setBuyError("Payment failed. Please try again.");
+        setBuying(false);
+      });
+      rzp.open();
+    } catch (err) {
+      setBuyError(err.message || "Couldn't start checkout. Please try again.");
+      setBuying(false);
+    }
+  };
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
@@ -111,7 +176,14 @@ export default function LiveWatchPage({ liveStreamId, onBack, onNavigate }) {
               {live.playback_url && live.status === "active" ? (
                 <LiveVideoPlayer playbackUrl={live.playback_url} />
               ) : (
-                <LockedPanel live={live} onNavigate={onNavigate} requestLogin={requestLogin} />
+                <LockedPanel
+                  live={live}
+                  onNavigate={onNavigate}
+                  requestLogin={requestLogin}
+                  onBuy={handleBuy}
+                  buying={buying}
+                  buyError={buyError}
+                />
               )}
             </div>
             <div className="flex items-center gap-2">

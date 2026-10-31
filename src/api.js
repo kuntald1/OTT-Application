@@ -949,6 +949,30 @@ export function searchVideos(q, section) {
 
 // Live streaming — creator/organiser side (requires can_live_stream)
 // and public viewing side. See routers/live_streams.py.
+// Pay Per Streaming checkout — same two-step Razorpay shape as the
+// pay-per-video pair above (create order, then verify the signature
+// server-side). No subscription prerequisite: a ticketed show is sold
+// to anyone signed in.
+export function createLiveStreamPurchaseOrder(liveStreamId) {
+  return request(`/videos/live/${liveStreamId}/purchase/razorpay/create-order`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export function verifyLiveStreamPurchasePayment({ purchaseId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
+  return request(`/videos/live/purchase/razorpay/verify`, {
+    method: "POST",
+    auth: true,
+    body: {
+      purchase_id: purchaseId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
+}
+
 export function createMyLiveStream(title, description, extra = {}) {
   // `extra` carries the scheduling/monetization half of the form — see
   // shared/LiveEventFields.jsx's liveEventPayload(), which builds it.

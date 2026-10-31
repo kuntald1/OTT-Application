@@ -1686,6 +1686,37 @@ class VerifyVideoPaymentRequest(BaseModel):
     razorpay_signature: str
 
 
+class CreateLiveStreamOrderResponse(BaseModel):
+    """Pay Per Streaming checkout — the same shape as
+    CreateVideoOrderResponse, with the event's title in place of the
+    video's, so the web/app can reuse their Razorpay handler.
+    """
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    live_stream_title: str
+
+
+class VerifyLiveStreamPaymentRequest(BaseModel):
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class LiveStreamPurchaseOut(BaseModel):
+    id: uuid.UUID
+    live_stream_id: uuid.UUID
+    amount: Decimal
+    currency: str
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AdminVideoRejectRequest(BaseModel):
     admin_note: str = Field(min_length=1, max_length=500)
 
