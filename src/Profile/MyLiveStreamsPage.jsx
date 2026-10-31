@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff, Trash2, Play } from "lucide-react";
+import { ArrowLeft, Radio, Plus, Copy, Check, Square, Eye, EyeOff, Trash2, Play, Pencil, X } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream, deleteMyLiveStream, simulateStartMyLiveStream } from "../api";
+import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream, deleteMyLiveStream, updateMyLiveStream, simulateStartMyLiveStream } from "../api";
 import { useApp } from "../context/AppContext";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import LiveEventFields, {
-  emptyLiveEventForm, liveEventPayload, liveEventFormError,
+  emptyLiveEventForm, liveEventFormFrom, liveEventPayload, liveEventFormError,
 } from "../shared/LiveEventFields";
 
 // ---------------------------------------------------------------------------
@@ -126,6 +126,41 @@ export default function MyLiveStreamsPage({ onBack }) {
   };
 
   const [confirmDeleteStream, setConfirmDeleteStream] = useState(null);
+
+  const [editingStream, setEditingStream] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editForm, setEditForm] = useState(emptyLiveEventForm);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEdit = (stream) => {
+    setEditingStream(stream);
+    setEditTitle(stream.title);
+    setEditDescription(stream.description || "");
+    setEditForm(liveEventFormFrom(stream));
+    setError("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim()) return;
+    const formError = liveEventFormError(editForm);
+    if (formError) { setError(formError); return; }
+    setSavingEdit(true);
+    setError("");
+    try {
+      await updateMyLiveStream(editingStream.id, {
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+        ...liveEventPayload(editForm),
+      });
+      setEditingStream(null);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't save changes.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleEndConfirmed = async () => {
     const stream = confirmEndStream;
@@ -262,7 +297,15 @@ export default function MyLiveStreamsPage({ onBack }) {
                     </>
                   )}
 
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(s)}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
+                      style={{ background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
                     {s.status === "active" && (
                       <button
                         type="button"
@@ -301,6 +344,58 @@ export default function MyLiveStreamsPage({ onBack }) {
         onCancel={() => setConfirmEndStream(null)}
         onConfirm={handleEndConfirmed}
       />
+
+      {editingStream && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setEditingStream(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl p-5"
+            style={{ background: COLORS.black, border: "1px solid rgba(212,175,55,0.25)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold" style={{ color: COLORS.cream }}>Edit live event</h3>
+              <button type="button" onClick={() => setEditingStream(null)} style={{ color: "rgba(245,235,221,0.5)" }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Title"
+              className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              placeholder="Description (optional)"
+              rows={2}
+              className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
+            <LiveEventFields values={editForm} onChange={setEditForm} dropdownBg={COLORS.black} />
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setEditingStream(null)} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.6)" }}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={savingEdit || !editTitle.trim()}
+                className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
+              >
+                {savingEdit ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={!!confirmDeleteStream}

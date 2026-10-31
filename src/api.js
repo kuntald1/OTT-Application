@@ -987,6 +987,16 @@ export function fetchMyLiveStreams() {
   return request(`/videos/live/mine`, { auth: true });
 }
 
+export function updateMyLiveStream(liveStreamId, updates) {
+  // Organiser edits their OWN event — same shape the admin PUT takes,
+  // scoped server-side by uploaded_by_user_id.
+  return request(`/videos/live/${liveStreamId}`, {
+    method: "PUT",
+    auth: true,
+    body: updates,
+  });
+}
+
 export function endMyLiveStream(liveStreamId) {
   return request(`/videos/live/${liveStreamId}/end`, { method: "POST", auth: true });
 }

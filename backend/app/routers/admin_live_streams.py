@@ -11,7 +11,7 @@ from app.models import (
 from app.mux_services import create_mux_live_stream, delete_mux_live_stream, MuxServiceError
 from app.routers.live_streams import (
     _effective_section, _to_broadcast_info, _validate_monetization, _validate_section,
-    MUX_RTMP_URL,
+    apply_live_stream_update, MUX_RTMP_URL,
 )
 from app.schemas import LiveStreamCreate, LiveStreamUpdate, LiveStreamBroadcastInfoOut
 
@@ -85,48 +85,15 @@ def update_live_stream(
     status (idle/active/ended), since correcting a typo in the title
     of an already-ended event is a legitimate use case too.
 
-    Monetization is re-validated against the resulting row, not the
-    payload alone: switching an event to Pay Per Streaming without
-    sending prices, or clearing the price of one that's already
-    ticketed, both have to fail rather than leave a Pay button with
-    nothing behind it.
+    The editing rules themselves live in live_streams.py's
+    apply_live_stream_update, shared with the organiser's own-events
+    route so an admin and an organiser are held to the same rules.
     """
     live_stream = db.query(LiveStream).filter(LiveStream.id == live_stream_id).first()
     if not live_stream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Live stream not found")
 
-    if payload.title is not None:
-        live_stream.title = payload.title
-    if payload.description is not None:
-        live_stream.description = payload.description
-    if payload.section is not None:
-        live_stream.section = _validate_section(payload.section)
-    if payload.scheduled_start_at is not None:
-        live_stream.scheduled_start_at = payload.scheduled_start_at
-    if payload.promo_from is not None:
-        live_stream.promo_from = payload.promo_from
-    if payload.is_disabled is not None:
-        live_stream.is_disabled = payload.is_disabled
-
-    if payload.monetization_type is not None or payload.price_inr is not None or payload.price_usd is not None:
-        monetization = _validate_monetization(
-            payload.monetization_type or live_stream.monetization_type.value,
-            payload.price_inr if payload.price_inr is not None else live_stream.price_inr,
-            payload.price_usd if payload.price_usd is not None else live_stream.price_usd,
-        )
-        live_stream.monetization_type = monetization
-        if monetization == LiveStreamMonetization.pay_per_stream:
-            if payload.price_inr is not None:
-                live_stream.price_inr = payload.price_inr
-            if payload.price_usd is not None:
-                live_stream.price_usd = payload.price_usd
-        else:
-            live_stream.price_inr = None
-            live_stream.price_usd = None
-
-    # Last word on section, after both it and monetization have settled:
-    # a paid show is listed in both sections regardless of what was sent.
-    live_stream.section = _effective_section(live_stream.section, live_stream.monetization_type)
+    apply_live_stream_update(live_stream, payload)
 
     db.commit()
     db.refresh(live_stream)
