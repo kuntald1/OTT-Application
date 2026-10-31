@@ -5,9 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_admin
-from app.models import AdminUser, LiveStream, LiveStreamStatus, VideoSection
+from app.models import (
+    AdminUser, LiveStream, LiveStreamStatus, LiveStreamMonetization, VideoSection,
+)
 from app.mux_services import create_mux_live_stream, delete_mux_live_stream, MuxServiceError
-from app.routers.live_streams import _to_broadcast_info, MUX_RTMP_URL
+from app.routers.live_streams import (
+    _to_broadcast_info, _validate_monetization, _validate_section, MUX_RTMP_URL,
+)
 from app.schemas import LiveStreamCreate, LiveStreamUpdate, LiveStreamBroadcastInfoOut
 
 router = APIRouter(prefix="/admin/videos/live", tags=["admin-live-streaming"])
@@ -23,18 +27,26 @@ def create_live_stream_as_admin(
     permission check (that flag only gates Creator/Organiser accounts,
     see User model), since admins are theomy staff.
     """
-    if payload.section not in ("play", "archive", "both"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play', 'archive', or 'both'.")
+    section = _validate_section(payload.section)
+    monetization = _validate_monetization(
+        payload.monetization_type, payload.price_inr, payload.price_usd
+    )
 
     try:
         mux_data = create_mux_live_stream(payload.title)
     except MuxServiceError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
+    is_ppv = monetization == LiveStreamMonetization.pay_per_stream
     live_stream = LiveStream(
         title=payload.title,
         description=payload.description,
-        section=VideoSection(payload.section),
+        section=section,
+        monetization_type=monetization,
+        price_inr=payload.price_inr if is_ppv else None,
+        price_usd=payload.price_usd if is_ppv else None,
+        scheduled_start_at=payload.scheduled_start_at,
+        promo_from=payload.promo_from,
         uploaded_by_admin_id=current_admin.id,
         mux_live_stream_id=mux_data["id"],
         mux_playback_id=mux_data["playback_ids"][0]["id"],
@@ -66,11 +78,17 @@ def update_live_stream(
     current_admin: AdminUser = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Edits title/description/section only — see LiveStreamUpdate's
+    """Edits theomy-side metadata only — see LiveStreamUpdate's
     docstring for why the Mux-linked fields (RTMP key, playback id)
     are never editable here. Works regardless of the stream's current
     status (idle/active/ended), since correcting a typo in the title
     of an already-ended event is a legitimate use case too.
+
+    Monetization is re-validated against the resulting row, not the
+    payload alone: switching an event to Pay Per Streaming without
+    sending prices, or clearing the price of one that's already
+    ticketed, both have to fail rather than leave a Pay button with
+    nothing behind it.
     """
     live_stream = db.query(LiveStream).filter(LiveStream.id == live_stream_id).first()
     if not live_stream:
@@ -81,9 +99,29 @@ def update_live_stream(
     if payload.description is not None:
         live_stream.description = payload.description
     if payload.section is not None:
-        if payload.section not in ("play", "archive", "both"):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play', 'archive', or 'both'.")
-        live_stream.section = VideoSection(payload.section)
+        live_stream.section = _validate_section(payload.section)
+    if payload.scheduled_start_at is not None:
+        live_stream.scheduled_start_at = payload.scheduled_start_at
+    if payload.promo_from is not None:
+        live_stream.promo_from = payload.promo_from
+    if payload.is_disabled is not None:
+        live_stream.is_disabled = payload.is_disabled
+
+    if payload.monetization_type is not None or payload.price_inr is not None or payload.price_usd is not None:
+        monetization = _validate_monetization(
+            payload.monetization_type or live_stream.monetization_type.value,
+            payload.price_inr if payload.price_inr is not None else live_stream.price_inr,
+            payload.price_usd if payload.price_usd is not None else live_stream.price_usd,
+        )
+        live_stream.monetization_type = monetization
+        if monetization == LiveStreamMonetization.pay_per_stream:
+            if payload.price_inr is not None:
+                live_stream.price_inr = payload.price_inr
+            if payload.price_usd is not None:
+                live_stream.price_usd = payload.price_usd
+        else:
+            live_stream.price_inr = None
+            live_stream.price_usd = None
 
     db.commit()
     db.refresh(live_stream)

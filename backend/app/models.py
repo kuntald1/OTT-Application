@@ -1522,6 +1522,24 @@ class LiveStreamStatus(str, enum.Enum):
     ended = "ended"        # broadcast finished (or manually ended/deleted)
 
 
+class LiveStreamMonetization(str, enum.Enum):
+    """How a live event is paid for — deliberately SEPARATE from
+    LiveStream.section (which decides WHERE the event is listed: the
+    Play page, the Archive page, or both). The two answer different
+    questions, exactly as Video.monetization_type sits beside
+    Video.section for on-demand content.
+
+    subscription  — unlocked by whichever plan grants the event's
+                    section (see routers/videos.py's
+                    _has_active_subscription_for_section).
+    pay_per_stream — a per-show ticket: unlocked only by a paid
+                    LiveStreamPurchase row for this (user, event),
+                    regardless of any subscription.
+    """
+    subscription = "subscription"
+    pay_per_stream = "pay_per_stream"
+
+
 class SpecialCategory(Base):
     """An admin-curated featured row (e.g. "Sunday Special") that shows
     at the very top of the Play and/or Archive page — above every
@@ -1587,10 +1605,21 @@ class LiveStream(Base):
     but wiring that recording into theomy's own Video catalog is a
     later step, not part of this pass.
 
-    Viewer access is intentionally NOT gated by subscription in this
-    first pass (explicitly deferred) — any logged-in user can watch a
-    live stream that's currently active. Tightening this later doesn't
-    require a schema change, just a check in the read endpoint.
+    Viewer access IS gated — see routers/live_streams.py's
+    _check_live_access, which mirrors videos.py's _check_video_access:
+    a subscription covering this event's section, or a paid
+    LiveStreamPurchase row when monetization_type is pay_per_stream.
+
+    promo_from / scheduled_start_at drive the "announce it before it
+    airs" flow: the event is listed publicly from promo_from onwards
+    showing its scheduled_start_at, but stays unplayable until status
+    actually flips to "active" (i.e. the encoder really connected) —
+    deliberately NOT at the scheduled time, so a show that starts late
+    never leaves viewers staring at an empty player. Both are optional;
+    leaving them null keeps the old behaviour (visible only once live).
+
+    is_disabled is the soft "hide without destroying the Mux resource"
+    toggle, the same End-vs-Delete distinction SpecialCategory uses.
     """
     __tablename__ = "live_streams"
 
@@ -1609,8 +1638,60 @@ class LiveStream(Base):
     mux_playback_id = Column(String(255), nullable=False)
     mux_stream_key = Column(String(255), nullable=False)
 
+    # Scheduling / promotion. scheduled_start_at is the advertised show
+    # time (displayed to viewers); promo_from is the date the event
+    # starts appearing publicly. Null promo_from = don't pre-announce.
+    scheduled_start_at = Column(DateTime(timezone=True), nullable=True)
+    promo_from = Column(Date, nullable=True)
+
+    # Monetization. price_* are only meaningful for pay_per_stream, and
+    # both currencies are set explicitly by the organiser rather than
+    # auto-converted — same reasoning as VideoPricing.
+    monetization_type = Column(
+        Enum(LiveStreamMonetization), nullable=False,
+        default=LiveStreamMonetization.subscription,
+    )
+    price_inr = Column(Numeric(10, 2), nullable=True)
+    price_usd = Column(Numeric(10, 2), nullable=True)
+
+    is_disabled = Column(Boolean, nullable=False, default=False)
+
     started_at = Column(DateTime(timezone=True), nullable=True)
     ended_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class LiveStreamPurchase(Base):
+    """One row per Pay-Per-Streaming ticket. Deliberately mirrors
+    VideoPurchase (same Razorpay order->verify lifecycle, same
+    created/paid/failed statuses) rather than inventing a second
+    payment shape — see routers/video_payments.py for the flow this
+    copies.
+
+    Access granted here is permanent for this event, matching
+    VideoPurchase's buy-once-watch-forever rule: there's no expires_at,
+    so if the broadcast's recording is later published under the same
+    event, the ticket holder keeps access to it.
+    """
+    __tablename__ = "live_stream_purchases"
+    __table_args__ = (
+        UniqueConstraint("user_id", "live_stream_id", name="uq_user_live_stream_purchase"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    live_stream_id = Column(UUID(as_uuid=True), ForeignKey("live_streams.id"), nullable=False, index=True)
+
+    gateway = Column(Enum(PaymentGateway), nullable=False, default=PaymentGateway.razorpay)
+    gateway_order_id = Column(String(255), nullable=True)
+    gateway_payment_id = Column(String(255), nullable=True)
+
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(3), nullable=False, default="INR")
+    status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.created)
+
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

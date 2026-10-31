@@ -422,9 +422,20 @@ class AdminVideoSearchResultOut(BaseModel):
 
 
 class LiveStreamCreate(BaseModel):
+    """section says WHERE the event is listed (play/archive/both);
+    monetization_type says HOW it's paid for. They're separate on
+    purpose — a ticketed show still belongs on the Play or Archive
+    page. price_inr/price_usd are required by the router when
+    monetization_type is "pay_per_stream" and ignored otherwise.
+    """
     title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=2000)
     section: str = Field(default="play")
+    monetization_type: str = Field(default="subscription")
+    price_inr: Optional[Decimal] = Field(default=None, ge=0)
+    price_usd: Optional[Decimal] = Field(default=None, ge=0)
+    scheduled_start_at: Optional[datetime] = None
+    promo_from: Optional[date] = None
 
 
 class LiveStreamUpdate(BaseModel):
@@ -437,12 +448,23 @@ class LiveStreamUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=2000)
     section: Optional[str] = None
+    monetization_type: Optional[str] = None
+    price_inr: Optional[Decimal] = Field(default=None, ge=0)
+    price_usd: Optional[Decimal] = Field(default=None, ge=0)
+    scheduled_start_at: Optional[datetime] = None
+    promo_from: Optional[date] = None
+    is_disabled: Optional[bool] = None
 
 
 class LiveStreamOut(BaseModel):
-    """Public-facing shape — never includes mux_stream_key. Only ever
-    populated when the current viewer is logged in (see the "skip
-    subscription-gating for now" decision in LiveStream's docstring).
+    """Public-facing shape — never includes mux_stream_key.
+
+    has_access / access_reason mirror VideoOut's pair exactly, so the
+    web and app can branch on the same strings they already handle:
+    "login_required", "subscription_required", "purchase_required".
+    playback_url is non-null only when has_access is true AND the
+    broadcast is actually on air — an announced show that hasn't
+    started returns null even for a subscriber.
     """
     id: uuid.UUID
     title: str
@@ -450,6 +472,12 @@ class LiveStreamOut(BaseModel):
     section: str
     poster_image_url: Optional[str] = None
     status: str
+    monetization_type: str = "subscription"
+    price_inr: Optional[Decimal] = None
+    price_usd: Optional[Decimal] = None
+    scheduled_start_at: Optional[datetime] = None
+    has_access: bool = False
+    access_reason: Optional[str] = None
     playback_url: Optional[str] = None
     started_at: Optional[datetime] = None
 
