@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Radio, Plus, Copy, Check, Square, Trash2, Eye, EyeOff, Pencil, X, Play } from "lucide-react";
 import { createAdminLiveStream, fetchAdminLiveStreams, endAdminLiveStream, deleteAdminLiveStream, updateAdminLiveStream, simulateStartAdminLiveStream } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import LiveEventFields, {
+  emptyLiveEventForm, liveEventFormFrom, liveEventPayload, liveEventFormError,
+} from "../shared/LiveEventFields";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -51,14 +54,14 @@ export default function AdminLiveStreamsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [section, setSection] = useState("play");
+  const [form, setForm] = useState(emptyLiveEventForm);
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState(null);
 
   const [editingStream, setEditingStream] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [editSection, setEditSection] = useState("play");
+  const [editForm, setEditForm] = useState(emptyLiveEventForm);
   const [savingEdit, setSavingEdit] = useState(false);
 
   const load = () => {
@@ -73,13 +76,16 @@ export default function AdminLiveStreamsPage() {
 
   const handleCreate = async () => {
     if (!title.trim()) return;
+    const formError = liveEventFormError(form);
+    if (formError) { setError(formError); return; }
     setError("");
     setCreating(true);
     try {
-      const result = await createAdminLiveStream(title.trim(), description.trim(), section);
+      const result = await createAdminLiveStream(title.trim(), description.trim(), liveEventPayload(form));
       setJustCreated(result);
       setTitle("");
       setDescription("");
+      setForm(emptyLiveEventForm());
       setShowCreateForm(false);
       load();
     } catch (err) {
@@ -93,19 +99,21 @@ export default function AdminLiveStreamsPage() {
     setEditingStream(stream);
     setEditTitle(stream.title);
     setEditDescription(stream.description || "");
-    setEditSection(stream.section || "play");
+    setEditForm(liveEventFormFrom(stream));
     setError("");
   };
 
   const handleSaveEdit = async () => {
     if (!editTitle.trim()) return;
+    const formError = liveEventFormError(editForm);
+    if (formError) { setError(formError); return; }
     setSavingEdit(true);
     setError("");
     try {
       await updateAdminLiveStream(editingStream.id, {
         title: editTitle.trim(),
         description: editDescription.trim() || null,
-        section: editSection,
+        ...liveEventPayload(editForm),
       });
       setEditingStream(null);
       load();
@@ -129,6 +137,21 @@ export default function AdminLiveStreamsPage() {
       setError(err.message || "Couldn't simulate start.");
     } finally {
       setSimulatingId(null);
+    }
+  };
+
+  // Soft hide — the Mux resource and its stream key survive, so the
+  // event can be brought back; Delete remains the permanent one.
+  const handleToggleHidden = async (stream) => {
+    setBusyId(stream.id);
+    setError("");
+    try {
+      await updateAdminLiveStream(stream.id, { is_disabled: !stream.is_disabled });
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't update visibility.");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -201,16 +224,7 @@ export default function AdminLiveStreamsPage() {
             className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
           />
-          <select
-            value={section}
-            onChange={(e) => setSection(e.target.value)}
-            className="mb-3 rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-          >
-            <option value="play" style={{ background: COLORS.panel }}>Play</option>
-            <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
-            <option value="both" style={{ background: COLORS.panel }}>Both</option>
-          </select>
+          <LiveEventFields values={form} onChange={setForm} dropdownBg={COLORS.panel} />
           <div>
             <button
               type="button"
@@ -269,7 +283,26 @@ export default function AdminLiveStreamsPage() {
                   </>
                 )}
 
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleHidden(s)}
+                    disabled={busyId === s.id}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                    style={
+                      s.is_disabled
+                        ? { background: "rgba(245,158,11,0.15)", color: "#f59e0b" }
+                        : { background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.6)" }
+                    }
+                    title={
+                      s.is_disabled
+                        ? "Currently hidden from viewers — show it again"
+                        : "Hide from viewers without destroying the Mux stream key"
+                    }
+                  >
+                    {s.is_disabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                    {s.is_disabled ? "Hidden" : "Hide"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => openEdit(s)}
@@ -338,16 +371,7 @@ export default function AdminLiveStreamsPage() {
               className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
             />
-            <select
-              value={editSection}
-              onChange={(e) => setEditSection(e.target.value)}
-              className="mb-3 w-full rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            >
-              <option value="play" style={{ background: COLORS.panel }}>Play</option>
-              <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
-              <option value="both" style={{ background: COLORS.panel }}>Both</option>
-            </select>
+            <LiveEventFields values={editForm} onChange={setEditForm} dropdownBg={COLORS.panel} />
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setEditingStream(null)} className="rounded-full px-4 py-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.6)" }}>
                 Cancel

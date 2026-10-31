@@ -4,6 +4,9 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { createMyLiveStream, fetchMyLiveStreams, endMyLiveStream, deleteMyLiveStream, simulateStartMyLiveStream } from "../api";
 import { useApp } from "../context/AppContext";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import LiveEventFields, {
+  emptyLiveEventForm, liveEventPayload, liveEventFormError,
+} from "../shared/LiveEventFields";
 
 // ---------------------------------------------------------------------------
 // Creator/Organiser's own live streaming — gated by
@@ -58,7 +61,7 @@ export default function MyLiveStreamsPage({ onBack }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [section, setSection] = useState("play");
+  const [form, setForm] = useState(emptyLiveEventForm);
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState(null);
 
@@ -87,13 +90,16 @@ export default function MyLiveStreamsPage({ onBack }) {
 
   const handleCreate = async () => {
     if (!title.trim()) return;
+    const formError = liveEventFormError(form);
+    if (formError) { setError(formError); return; }
     setError("");
     setCreating(true);
     try {
-      const result = await createMyLiveStream(title.trim(), description.trim(), section);
+      const result = await createMyLiveStream(title.trim(), description.trim(), liveEventPayload(form));
       setJustCreated(result);
       setTitle("");
       setDescription("");
+      setForm(emptyLiveEventForm());
       setShowCreateForm(false);
       load();
     } catch (err) {
@@ -195,16 +201,7 @@ export default function MyLiveStreamsPage({ onBack }) {
               className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
             />
-            <select
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-              className="mb-3 rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            >
-              <option value="play" style={{ background: COLORS.black }}>Play</option>
-              <option value="archive" style={{ background: COLORS.black }}>Archive</option>
-              <option value="both" style={{ background: COLORS.black }}>Both</option>
-            </select>
+            <LiveEventFields values={form} onChange={setForm} dropdownBg={COLORS.black} />
             <button
               type="button"
               onClick={handleCreate}

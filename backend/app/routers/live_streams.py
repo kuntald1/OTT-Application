@@ -54,7 +54,12 @@ def _validate_monetization(monetization_type: str, price_inr, price_usd) -> Live
 
 def _to_broadcast_info(ls: LiveStream) -> LiveStreamBroadcastInfoOut:
     return LiveStreamBroadcastInfoOut(
-        id=ls.id, title=ls.title, status=ls.status.value,
+        id=ls.id, title=ls.title, description=ls.description,
+        section=ls.section.value, status=ls.status.value,
+        monetization_type=ls.monetization_type.value,
+        price_inr=ls.price_inr, price_usd=ls.price_usd,
+        scheduled_start_at=ls.scheduled_start_at, promo_from=ls.promo_from,
+        is_disabled=ls.is_disabled,
         rtmp_url=MUX_RTMP_URL, stream_key=ls.mux_stream_key,
         playback_url=_playback_url(ls.mux_playback_id),
     )

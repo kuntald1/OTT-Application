@@ -653,11 +653,13 @@ export function setUserActive(userId, enabled) {
 
 // Live Streaming (admin side) — create as admin, list all (any status),
 // end/delete any stream.
-export function createAdminLiveStream(title, description, section) {
+export function createAdminLiveStream(title, description, extra = {}) {
+  // `extra` carries the scheduling/monetization half of the form — see
+  // shared/LiveEventFields.jsx's liveEventPayload(), which builds it.
   return request(`/admin/videos/live`, {
     method: "POST",
     auth: true,
-    body: { title, description: description || null, section },
+    body: { title, description: description || null, ...extra },
   });
 }
 

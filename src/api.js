@@ -949,11 +949,13 @@ export function searchVideos(q, section) {
 
 // Live streaming — creator/organiser side (requires can_live_stream)
 // and public viewing side. See routers/live_streams.py.
-export function createMyLiveStream(title, description, section) {
+export function createMyLiveStream(title, description, extra = {}) {
+  // `extra` carries the scheduling/monetization half of the form — see
+  // shared/LiveEventFields.jsx's liveEventPayload(), which builds it.
   return request(`/videos/live`, {
     method: "POST",
     auth: true,
-    body: { title, description: description || null, section },
+    body: { title, description: description || null, ...extra },
   });
 }
 

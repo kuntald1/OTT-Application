@@ -486,10 +486,23 @@ class LiveStreamBroadcastInfoOut(BaseModel):
     """The owner-only shape — includes the RTMP details needed to
     actually go live. Never returned to anyone except the stream's own
     creator/admin, or a superadmin looking it up for support purposes.
+
+    Carries the editable metadata too (description, section, schedule,
+    monetization): the admin and organiser Edit forms prefill straight
+    from this list response, and anything missing here silently resets
+    to its default the moment someone opens Edit.
     """
     id: uuid.UUID
     title: str
+    description: Optional[str] = None
+    section: str = "play"
     status: str
+    monetization_type: str = "subscription"
+    price_inr: Optional[Decimal] = None
+    price_usd: Optional[Decimal] = None
+    scheduled_start_at: Optional[datetime] = None
+    promo_from: Optional[date] = None
+    is_disabled: bool = False
     rtmp_url: str
     stream_key: str
     playback_url: str
