@@ -47,9 +47,21 @@ def _validate_monetization(monetization_type: str, price_inr, price_usd) -> Live
     if monetization == LiveStreamMonetization.pay_per_stream and (price_inr is None or price_usd is None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A Pay Per Streaming event needs both an INR and a USD price.",
+            detail="A Pay Per Streaming event needs both an INR and a USD show price.",
         )
     return monetization
+
+
+def _effective_section(section: VideoSection, monetization: LiveStreamMonetization) -> VideoSection:
+    """A Pay Per Streaming show is sold to whoever wants it — no plan is
+    involved, so there's no plan-shaped section to honour. Those are
+    always listed in BOTH sections, whatever the caller asked for. The
+    admin/organiser form locks the control to match, but the rule lives
+    here because the form isn't the only way in.
+    """
+    if monetization == LiveStreamMonetization.pay_per_stream:
+        return VideoSection.both
+    return section
 
 
 def _to_broadcast_info(ls: LiveStream) -> LiveStreamBroadcastInfoOut:
@@ -153,10 +165,10 @@ def create_live_stream(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Live streaming isn't enabled for your account yet — ask an admin to enable it.",
         )
-    section = _validate_section(payload.section)
     monetization = _validate_monetization(
         payload.monetization_type, payload.price_inr, payload.price_usd
     )
+    section = _effective_section(_validate_section(payload.section), monetization)
 
     try:
         mux_data = create_mux_live_stream(payload.title)

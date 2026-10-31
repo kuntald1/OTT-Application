@@ -10,7 +10,8 @@ from app.models import (
 )
 from app.mux_services import create_mux_live_stream, delete_mux_live_stream, MuxServiceError
 from app.routers.live_streams import (
-    _to_broadcast_info, _validate_monetization, _validate_section, MUX_RTMP_URL,
+    _effective_section, _to_broadcast_info, _validate_monetization, _validate_section,
+    MUX_RTMP_URL,
 )
 from app.schemas import LiveStreamCreate, LiveStreamUpdate, LiveStreamBroadcastInfoOut
 
@@ -27,10 +28,10 @@ def create_live_stream_as_admin(
     permission check (that flag only gates Creator/Organiser accounts,
     see User model), since admins are theomy staff.
     """
-    section = _validate_section(payload.section)
     monetization = _validate_monetization(
         payload.monetization_type, payload.price_inr, payload.price_usd
     )
+    section = _effective_section(_validate_section(payload.section), monetization)
 
     try:
         mux_data = create_mux_live_stream(payload.title)
@@ -122,6 +123,10 @@ def update_live_stream(
         else:
             live_stream.price_inr = None
             live_stream.price_usd = None
+
+    # Last word on section, after both it and monetization have settled:
+    # a paid show is listed in both sections regardless of what was sent.
+    live_stream.section = _effective_section(live_stream.section, live_stream.monetization_type)
 
     db.commit()
     db.refresh(live_stream)

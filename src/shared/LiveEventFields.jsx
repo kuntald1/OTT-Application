@@ -7,10 +7,14 @@ import React from "react";
 // each page (they differ in placement); everything below them lives here.
 //
 // `section` says WHERE the event is listed (Play / Archive / Both);
-// `monetization_type` says HOW it's paid for. Two separate questions —
-// a ticketed show still belongs on the Play or Archive page — which is
-// why Pay Per Streaming is its own dropdown rather than a fourth
-// section option.
+// `monetization_type` says HOW it's paid for.
+//
+// They're separate dropdowns rather than one combined list because a
+// SUBSCRIPTION event genuinely needs both answers. A Pay Per Streaming
+// event doesn't: whoever pays gets in, no plan involved, so there's no
+// plan-shaped section to pick. For those the section is forced to
+// "both" (listed everywhere, sold to everyone) and the control is
+// locked — enforced again server-side, never trusted from here.
 // ---------------------------------------------------------------------------
 
 const INPUT_CLASS = "w-full rounded-lg border px-3 py-2 text-sm outline-none";
@@ -69,7 +73,10 @@ export function liveEventFormFrom(stream) {
 export function liveEventPayload(form) {
   const isPaid = form.monetization_type === "pay_per_stream";
   return {
-    section: form.section,
+    // A paid show is sold to everyone, so it's listed everywhere —
+    // see the note at the top of this file. The server forces the
+    // same thing, this just keeps the request honest.
+    section: isPaid ? "both" : form.section,
     monetization_type: form.monetization_type,
     price_inr: isPaid && form.price_inr !== "" ? Number(form.price_inr) : null,
     price_usd: isPaid && form.price_usd !== "" ? Number(form.price_usd) : null,
@@ -86,9 +93,9 @@ export function liveEventFormError(form) {
   const inr = Number(form.price_inr);
   const usd = Number(form.price_usd);
   if (form.price_inr === "" || form.price_usd === "") {
-    return "A Pay Per Streaming event needs both an INR and a USD price.";
+    return "A Pay Per Streaming event needs both a \u20b9 and a $ show price.";
   }
-  if (!(inr > 0) || !(usd > 0)) return "Prices must be greater than zero.";
+  if (!(inr > 0) || !(usd > 0)) return "Show price must be greater than zero.";
   return null;
 }
 
@@ -97,22 +104,45 @@ export default function LiveEventFields({ values, onChange, dropdownBg = "#15030
   const isPaid = values.monetization_type === "pay_per_stream";
   const optionStyle = { background: dropdownBg };
 
+  // Switching to Pay Per Streaming pins the section to "both" in the
+  // same keystroke, so what's on screen always matches what will be
+  // saved — no silent correction on submit.
+  const setMonetization = (e) => {
+    const monetization_type = e.target.value;
+    onChange({
+      ...values,
+      monetization_type,
+      section: monetization_type === "pay_per_stream" ? "both" : values.section,
+    });
+  };
+
   return (
     <div className="mb-3 flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={LABEL_CLASS} style={LABEL_STYLE}>Shows on</label>
-          <select value={values.section} onChange={set("section")} className={INPUT_CLASS} style={INPUT_STYLE}>
+          <select
+            value={isPaid ? "both" : values.section}
+            onChange={set("section")}
+            disabled={isPaid}
+            className={INPUT_CLASS}
+            style={{ ...INPUT_STYLE, ...(isPaid ? { opacity: 0.55, cursor: "not-allowed" } : null) }}
+          >
             <option value="play" style={optionStyle}>Play</option>
             <option value="archive" style={optionStyle}>Archive</option>
             <option value="both" style={optionStyle}>Both</option>
           </select>
+          {isPaid && (
+            <p className="mt-1 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
+              A paid show isn't tied to a plan, so it's listed in both sections.
+            </p>
+          )}
         </div>
         <div>
           <label className={LABEL_CLASS} style={LABEL_STYLE}>Access</label>
           <select
             value={values.monetization_type}
-            onChange={set("monetization_type")}
+            onChange={setMonetization}
             className={INPUT_CLASS}
             style={INPUT_STYLE}
           >
@@ -125,7 +155,7 @@ export default function LiveEventFields({ values, onChange, dropdownBg = "#15030
       {isPaid && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className={LABEL_CLASS} style={LABEL_STYLE}>Ticket price (₹)</label>
+            <label className={LABEL_CLASS} style={LABEL_STYLE}>Show price (₹)</label>
             <input
               type="number" min="0" step="1" inputMode="decimal"
               value={values.price_inr} onChange={set("price_inr")}
@@ -134,7 +164,7 @@ export default function LiveEventFields({ values, onChange, dropdownBg = "#15030
             />
           </div>
           <div>
-            <label className={LABEL_CLASS} style={LABEL_STYLE}>Ticket price ($)</label>
+            <label className={LABEL_CLASS} style={LABEL_STYLE}>Show price ($)</label>
             <input
               type="number" min="0" step="0.01" inputMode="decimal"
               value={values.price_usd} onChange={set("price_usd")}
