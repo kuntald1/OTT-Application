@@ -4,7 +4,7 @@ import { COLORS } from "../theme";
 import { fetchLiveStream, createLiveStreamPurchaseOrder, verifyLiveStreamPurchasePayment } from "../api";
 import { useApp } from "../context/AppContext";
 import LiveVideoPlayer from "./LiveVideoPlayer";
-import { formatShowTime, formatPrice, liveEventAction } from "../shared/liveAccess";
+import { formatPrice, liveEventAction } from "../shared/liveAccess";
 
 // ---------------------------------------------------------------------------
 // One live event: its player when the viewer may watch and it's on air,
@@ -22,32 +22,33 @@ import { formatShowTime, formatPrice, liveEventAction } from "../shared/liveAcce
 // button that does it.
 function LockedPanel({ live, onNavigate, requestLogin, onBuy, buying, buyError }) {
   const action = liveEventAction(live);
-  const when = formatShowTime(live.scheduled_start_at);
   const price = formatPrice(live);
+  const onAir = action.isLive;
 
-  let icon = <CalendarClock className="h-6 w-6" />;
-  let headline = "Not live yet";
-  let detail = when ? `Starts ${when}` : "Come back at show time.";
+  // Two independent facts: whether it's on air, and whether this viewer
+  // may watch. Say both — "Starts Nov 2, 1:15 PM" AND "Buy for ₹125" —
+  // so nobody has to come back at show time just to find out they need
+  // a ticket.
+  let icon = onAir ? <Lock className="h-6 w-6" /> : <CalendarClock className="h-6 w-6" />;
+  let headline = onAir ? "This show is on air now" : "Not live yet";
+  let detail = action.hint;
   let cta = null;
 
   if (action.kind === "ended") {
+    icon = <Radio className="h-6 w-6" />;
     headline = "This broadcast has ended.";
     detail = "";
-    icon = <Radio className="h-6 w-6" />;
   } else if (action.kind === "login") {
-    icon = <Lock className="h-6 w-6" />;
-    headline = "This show is on air now";
-    detail = "Sign in to watch it.";
     cta = { label: "Sign in", onClick: () => requestLogin?.() };
+    detail = onAir ? "Sign in to watch it." : `${action.hint} · Sign in to watch it.`;
   } else if (action.kind === "subscribe") {
-    icon = <Lock className="h-6 w-6" />;
-    headline = "This show is on air now";
-    detail = `${action.label} to watch it.`;
     cta = { label: action.label, onClick: () => onNavigate?.("subscription") };
+    detail = onAir ? `${action.label} to watch it.` : `${action.hint} · ${action.label} to watch it.`;
   } else if (action.kind === "pay") {
-    icon = <Lock className="h-6 w-6" />;
-    headline = "This show is on air now";
-    detail = price ? `Buy this show for ${price} to watch it.` : "Buy this show to watch it.";
+    const buyLine = price
+      ? (onAir ? `Buy this show for ${price} to watch it.` : `Buy it now for ${price} and you're set for show time.`)
+      : "Buy this show to watch it.";
+    detail = onAir ? buyLine : `${action.hint} · ${buyLine}`;
     cta = { label: buying ? "Opening checkout…" : action.label, onClick: buying ? null : onBuy };
   }
 
@@ -58,7 +59,7 @@ function LockedPanel({ live, onNavigate, requestLogin, onBuy, buying, buyError }
     >
       <span style={{ color: "rgba(245,235,221,0.35)" }}>{icon}</span>
       <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{headline}</p>
-      {detail && <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>{detail}</p>}
+      {detail && <p className="max-w-md text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>{detail}</p>}
       {cta && (
         <button
           type="button"

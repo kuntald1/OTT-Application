@@ -36,37 +36,45 @@ export function formatPrice(ev) {
 }
 
 /**
+ * What this viewer can do, as one object.
+ *
  * kind:
- *   "watch"     — play it now
+ *   "watch"     — on air and they may play it
  *   "login"     — sign in first
  *   "subscribe" — needs a plan covering this event's section
- *   "pay"       — Pay Per Streaming, not bought yet
- *   "upcoming"  — announced, not broadcasting yet
+ *   "pay"       — Pay Per Streaming, no ticket yet
+ *   "upcoming"  — announced, they already have access, just not on air
  *   "ended"     — finished
+ *
+ * Access is answered BEFORE "is it on air yet", deliberately: someone
+ * who needs a ticket or a plan should be told so while the show is
+ * still days away, when there's time to act, rather than being shown a
+ * bare countdown and hitting a paywall the moment it starts.
+ *
+ * `isLive` and `hint` come back alongside, so a caller can say both
+ * things at once — "Starts Nov 2, 1:15 PM" and "Buy for ₹125".
  */
 export function liveEventAction(ev) {
-  if (!ev) return { kind: "ended", label: "Unavailable" };
+  if (!ev) return { kind: "ended", label: "Unavailable", isLive: false };
 
-  if (hasEnded(ev)) return { kind: "ended", label: "Ended" };
+  if (hasEnded(ev)) return { kind: "ended", label: "Ended", isLive: false };
 
-  if (!isLiveNow(ev)) {
-    const when = formatShowTime(ev.scheduled_start_at);
-    return {
-      kind: "upcoming",
-      label: "Details",
-      hint: when ? `Starts ${when}` : "Starting soon",
-    };
+  const isLive = isLiveNow(ev);
+  const when = formatShowTime(ev.scheduled_start_at);
+  const hint = isLive ? "On air now" : when ? `Starts ${when}` : "Starting soon";
+
+  if (!ev.has_access) {
+    if (ev.access_reason === "login_required") {
+      return { kind: "login", label: "Sign in to watch", hint, isLive };
+    }
+    if (ev.access_reason === "purchase_required") {
+      const price = formatPrice(ev);
+      return { kind: "pay", label: price ? `Buy for ${price}` : "Buy to watch", hint, isLive };
+    }
+    const where = SECTION_LABELS[ev.section] || "theomy";
+    return { kind: "subscribe", label: `Subscribe to ${where}`, hint, isLive };
   }
 
-  if (ev.has_access) return { kind: "watch", label: "Watch now" };
-
-  if (ev.access_reason === "login_required") {
-    return { kind: "login", label: "Sign in to watch" };
-  }
-  if (ev.access_reason === "purchase_required") {
-    const price = formatPrice(ev);
-    return { kind: "pay", label: price ? `Buy for ${price}` : "Buy to watch" };
-  }
-  const where = SECTION_LABELS[ev.section] || "theomy";
-  return { kind: "subscribe", label: `Subscribe to ${where}` };
+  if (!isLive) return { kind: "upcoming", label: "Details", hint, isLive: false };
+  return { kind: "watch", label: "Watch now", hint, isLive: true };
 }

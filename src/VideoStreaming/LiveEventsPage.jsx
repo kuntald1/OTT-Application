@@ -3,9 +3,7 @@ import { ArrowLeft, Radio, CalendarClock } from "lucide-react";
 import { COLORS } from "../theme";
 import { fetchActiveLiveStreams } from "../api";
 import { useApp } from "../context/AppContext";
-import {
-  formatShowTime, formatPrice, isLiveNow, liveEventAction,
-} from "../shared/liveAccess";
+import { formatShowTime, isLiveNow, liveEventAction } from "../shared/liveAccess";
 
 // ---------------------------------------------------------------------------
 // Live & Upcoming — every announced event in one place, on air or not.
@@ -37,7 +35,6 @@ function EventCard({ event, onAct }) {
   const action = liveEventAction(event);
   const live = isLiveNow(event);
   const when = formatShowTime(event.scheduled_start_at);
-  const price = formatPrice(event);
 
   return (
     <div
@@ -76,8 +73,10 @@ function EventCard({ event, onAct }) {
         )}
 
         <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+          {/* Always the when, never the price — the price is already on
+              the button, and show time is what's missing from it. */}
           <span className="text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
-            {live ? (action.kind === "watch" ? "On air now" : price || "On air now") : action.hint}
+            {action.hint}
           </span>
           <button
             type="button"
