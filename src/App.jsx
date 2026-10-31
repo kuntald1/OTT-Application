@@ -8,6 +8,7 @@ import AllVideosPage from './VideoStreaming/AllVideosPage'
 import WhosWatching from './shared/WhosWatching'
 import CompleteProfileModal from './shared/CompleteProfileModal'
 import LiveWatchPage from './VideoStreaming/LiveWatchPage'
+import LiveEventsPage from './VideoStreaming/LiveEventsPage'
 import LiveFloatingBadge from './shared/LiveFloatingBadge'
 import MovixGenreAccordion from './Movies/MovixGenreAccordion'
 import MovixBrowsePage from './MovixBrowsePage'
@@ -66,6 +67,9 @@ function getInitialRoute() {
     const params = new URLSearchParams(window.location.search)
     const sessionId = params.get('session_id')
     return { view: 'stripeSuccess', params: { sessionId } }
+  }
+  if (window.location.pathname === '/live') {
+    return { view: 'liveEvents', params: {} }
   }
   if (window.location.pathname.startsWith('/blog/')) {
     const postId = window.location.pathname.split('/blog/')[1]?.split(/[/?#]/)[0]
@@ -188,7 +192,9 @@ export default function App() {
         ) : route.view === 'allVideos' ? (
           <AllVideosPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'liveWatch' ? (
-          <LiveWatchPage liveStreamId={route.params.liveStreamId} onBack={goBack} />
+          <LiveWatchPage liveStreamId={route.params.liveStreamId} onBack={goBack} onNavigate={navigate} />
+        ) : route.view === 'liveEvents' ? (
+          <LiveEventsPage onBack={goBack} onNavigate={navigate} />
         ) : route.view === 'accordion' ? (
           <div>
             <AdBannerCarousel pageKey="archive" />

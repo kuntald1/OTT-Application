@@ -981,8 +981,17 @@ export function deleteMyLiveStream(liveStreamId) {
 // Public — currently-active live streams. auth:true attaches the
 // token only when one exists, same pattern as fetchVideoById: a
 // logged-out visitor still sees the list, just without a playback_url.
-export function fetchActiveLiveStreams(section) {
-  return request(`/videos/live${section ? `?section=${section}` : ""}`, { auth: true });
+export function fetchActiveLiveStreams(section, includeUpcoming = false) {
+  // Without includeUpcoming this stays exactly what it always was —
+  // currently-broadcasting events only. Pass it to also get announced
+  // shows whose promote-from date has arrived (Live & Upcoming page,
+  // floating badge). auth is optional server-side: a signed-out
+  // visitor gets the listing, just never a playback_url.
+  const params = new URLSearchParams();
+  if (section) params.set("section", section);
+  if (includeUpcoming) params.set("include_upcoming", "true");
+  const qs = params.toString();
+  return request(`/videos/live${qs ? `?${qs}` : ""}`, { auth: true });
 }
 
 export function fetchSpecialCategories(section) {

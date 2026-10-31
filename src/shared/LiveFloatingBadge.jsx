@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Radio, ChevronUp, ChevronDown } from "lucide-react";
+import { Radio, ChevronUp, ChevronDown, CalendarClock } from "lucide-react";
 import { fetchActiveLiveStreams } from "../api";
 import { useApp } from "../context/AppContext";
+import { formatShowTime, isLiveNow } from "./liveAccess";
 
 // ---------------------------------------------------------------------------
-// LiveFloatingBadge — a persistent, fixed bottom-right indicator that
-// shows whenever ANY live stream (either section) is currently active.
+// LiveFloatingBadge — a persistent, fixed bottom-right indicator for
+// live streaming: whatever is on air now, plus anything announced whose
+// promote-from date has arrived.
 // Meant to be rendered once at the App level so it's visible on every
 // page, not tied to any specific browse page's own "Live Now" row.
 //
@@ -17,6 +19,8 @@ import { useApp } from "../context/AppContext";
 // ---------------------------------------------------------------------------
 
 function LiveCard({ stream, onClick, compact }) {
+  const live = isLiveNow(stream);
+  const when = formatShowTime(stream.scheduled_start_at);
   return (
     <button
       type="button"
@@ -28,19 +32,31 @@ function LiveCard({ stream, onClick, compact }) {
         {stream.poster_image_url && (
           <img src={stream.poster_image_url} alt="" className="h-full w-full object-cover" />
         )}
-        <span className="absolute left-1 top-1 flex items-center gap-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+        {live ? (
+          <span className="absolute left-1 top-1 flex items-center gap-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+            </span>
+            LIVE
           </span>
-          LIVE
-        </span>
+        ) : (
+          <span className="absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold" style={{ background: "rgba(10,1,4,0.8)", color: "#D4AF37" }}>
+            SOON
+          </span>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         {!compact && (
-          <p className="mb-0.5 flex items-center gap-1 text-xs font-bold uppercase tracking-wide" style={{ color: "#f87171" }}>
-            <Radio className="h-3.5 w-3.5" /> Live Now
-          </p>
+          live ? (
+            <p className="mb-0.5 flex items-center gap-1 text-xs font-bold uppercase tracking-wide" style={{ color: "#f87171" }}>
+              <Radio className="h-3.5 w-3.5" /> Live Now
+            </p>
+          ) : (
+            <p className="mb-0.5 flex items-center gap-1 text-xs font-bold uppercase tracking-wide" style={{ color: "#D4AF37" }}>
+              <CalendarClock className="h-3.5 w-3.5" /> {when || "Upcoming"}
+            </p>
+          )
         )}
         <p className="truncate text-sm font-semibold" style={{ color: "#f5ebdd" }}>{stream.title}</p>
       </div>
@@ -49,26 +65,26 @@ function LiveCard({ stream, onClick, compact }) {
 }
 
 export default function LiveFloatingBadge({ onNavigate }) {
-  const { isLoggedIn } = useApp();
   const [liveStreams, setLiveStreams] = useState([]);
   const [expanded, setExpanded] = useState(false);
 
+  // No login gate: an announced show is a promotion, and the people
+  // most worth reaching with it are the ones who haven't signed up.
+  // The server still withholds every playback_url from them.
   useEffect(() => {
-    if (!isLoggedIn) {
-      setLiveStreams([]);
-      return;
-    }
     const load = () => {
-      fetchActiveLiveStreams() // no section filter — any active stream, either section
-        .then(setLiveStreams)
+      fetchActiveLiveStreams(undefined, true) // either section, live + announced
+        .then((rows) => setLiveStreams(Array.isArray(rows) ? rows : []))
         .catch(() => setLiveStreams([]));
     };
     load();
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
-  }, [isLoggedIn]);
+  }, []);
 
   if (liveStreams.length === 0) return null;
+
+  const liveCount = liveStreams.filter(isLiveNow).length;
 
   const goTo = (stream) => {
     setExpanded(false);
@@ -83,9 +99,10 @@ export default function LiveFloatingBadge({ onNavigate }) {
     );
   }
 
-  // Multiple active streams — the badge itself just shows a count and
-  // toggles an expanded stacked list above it, so every stream stays
-  // reachable (not just whichever started most recently).
+  // More than one — the badge shows a count and toggles a stacked list
+  // above it, so every event stays reachable. The pill goes red only
+  // when something is genuinely on air; an announced-only list gets the
+  // calmer gold treatment so "LIVE" never overstates what's happening.
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
       {expanded && (
@@ -93,20 +110,32 @@ export default function LiveFloatingBadge({ onNavigate }) {
           {liveStreams.map((s) => (
             <LiveCard key={s.id} stream={s} onClick={() => goTo(s)} compact />
           ))}
+          <button
+            type="button"
+            onClick={() => { setExpanded(false); onNavigate?.("liveEvents", {}); }}
+            className="rounded-xl px-3 py-2 text-xs font-semibold"
+            style={{ background: "#150307", border: "1px solid rgba(212,175,55,0.35)", color: "#D4AF37" }}
+          >
+            See all live &amp; upcoming
+          </button>
         </div>
       )}
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
         className="flex items-center gap-2 rounded-full px-4 py-3 shadow-2xl transition-transform hover:scale-105"
-        style={{ background: "#f87171", color: "#0a0104" }}
+        style={{ background: liveCount > 0 ? "#f87171" : "#D4AF37", color: "#0a0104" }}
       >
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+        {liveCount > 0 && (
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+          </span>
+        )}
+        {liveCount > 0 ? <Radio className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
+        <span className="text-sm font-bold">
+          {liveCount > 0 ? `LIVE NOW (${liveCount})` : `UPCOMING (${liveStreams.length})`}
         </span>
-        <Radio className="h-4 w-4" />
-        <span className="text-sm font-bold">LIVE NOW ({liveStreams.length})</span>
         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
       </button>
     </div>
