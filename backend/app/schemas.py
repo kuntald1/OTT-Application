@@ -823,6 +823,22 @@ class OrganiserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OrganiserDonationDetailsOut(BaseModel):
+    """Where to send a donation, for one approved organiser.
+
+    document_url is deliberately absent: that is the identity document
+    the organiser uploaded for the admin to check, and it is nobody
+    else's business. Only the group name, the account details and the
+    QR image belong here.
+    """
+    organiser_user_id: uuid.UUID
+    organiser_name: str
+    group_name: str
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    qr_code_url: Optional[str] = None
+
+
 class DonationCreateOrderRequest(BaseModel):
     organiser_user_id: uuid.UUID
     amount: Decimal = Field(gt=0)

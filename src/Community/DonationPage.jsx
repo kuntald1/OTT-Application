@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, HandCoins, CheckCircle2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchOrganisers, createDonationOrder, verifyDonationPayment, fetchMyDonationRegistrationStatus, deactivateMyDonationRegistration, deleteMyDonationRegistration } from "../api";
+import { fetchOrganisers, fetchOrganiserDonationDetails, fetchMyDonationRegistrationStatus, deactivateMyDonationRegistration, deleteMyDonationRegistration } from "../api";
 import DonationRegistrationModal from "./DonationRegistrationModal";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
@@ -10,9 +10,12 @@ import ConfirmDialog from "../shared/ConfirmDialog";
 // Donation — the directory lists Plays Organisers who both hold that
 // role AND have an admin-approved DonationRegistration (via GET
 // /api/organisers) — role alone used to be enough, but payout details
-// now need admin review first. Donating opens a real Razorpay checkout
-// (test mode), same signature-verification pattern as subscription
-// checkout.
+// now need admin review first.
+//
+// Donating does NOT take a payment. theomy shows the organiser's own QR
+// code and bank details and steps out of the way, so the money goes
+// straight to them. The account number sits behind a login even though
+// the directory itself is public.
 // ---------------------------------------------------------------------------
 
 export default function DonationPage({ onBack }) {
@@ -20,7 +23,6 @@ export default function DonationPage({ onBack }) {
   const [organisers, setOrganisers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
-  const [confirmed, setConfirmed] = useState(null);
 
   const [showRegisterLink, setShowRegisterLink] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -55,23 +57,12 @@ export default function DonationPage({ onBack }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Razorpay's checkout widget, loaded once lazily.
-  useEffect(() => {
-    if (document.getElementById("razorpay-checkout-js")) return;
-    const script = document.createElement("script");
-    script.id = "razorpay-checkout-js";
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
-
   const handleSelect = (organiser) => {
     if (!isLoggedIn) {
       requestLogin();
       return;
     }
     setSelected(organiser);
-    setConfirmed(null);
   };
 
   const handleDeactivateRegistration = async () => {
@@ -174,13 +165,6 @@ export default function DonationPage({ onBack }) {
           </div>
         )}
 
-        {confirmed && (
-          <div className="mb-6 flex items-center gap-2 rounded-xl p-4" style={{ background: "rgba(111,207,151,0.1)", border: "1px solid rgba(111,207,151,0.35)" }}>
-            <CheckCircle2 className="h-5 w-5" style={{ color: "#6FCF97" }} />
-            <p className="text-sm" style={{ color: "#6FCF97" }}>Thank you — your ₹{confirmed} donation was successful.</p>
-          </div>
-        )}
-
         {loading ? (
           <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading organisers…</p>
         ) : organisers.length === 0 ? (
@@ -202,14 +186,22 @@ export default function DonationPage({ onBack }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{org.name}</p>
                   <p className="mt-0.5 text-xs" style={{ color: COLORS.gold }}>Plays Organiser</p>
-                  <button
-                    type="button"
-                    onClick={() => handleSelect(org)}
-                    className="mt-3 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
-                    style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
-                  >
-                    <HandCoins className="h-3.5 w-3.5" /> Donate
-                  </button>
+                  {/* Nobody donates to themselves — an organiser looking at
+                      their own card gets a note instead of a button. */}
+                  {org.id === profile?.id ? (
+                    <p className="mt-3 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+                      This is you — supporters see a Donate button here.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(org)}
+                      className="mt-3 flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
+                      style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+                    >
+                      <HandCoins className="h-3.5 w-3.5" /> Donate
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -218,16 +210,7 @@ export default function DonationPage({ onBack }) {
       </main>
 
       {selected && (
-        <DonateModal
-          organiser={selected}
-          userEmail={profile.email}
-          userPhone={profile.phone}
-          onClose={() => setSelected(null)}
-          onSuccess={(amount) => {
-            setSelected(null);
-            setConfirmed(amount);
-          }}
-        />
+        <DonateModal organiser={selected} onClose={() => setSelected(null)} />
       )}
 
       {showRegisterModal && (
@@ -267,94 +250,120 @@ export default function DonationPage({ onBack }) {
   );
 }
 
-function DonateModal({ organiser, userEmail, userPhone, onClose, onSuccess }) {
-  const [amount, setAmount] = useState("500");
-  const [paying, setPaying] = useState(false);
+function DonateModal({ organiser, onClose }) {
+  const [details, setDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState("");
 
-  const handleDonate = async () => {
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return;
+  // Nothing is charged here. theomy shows where to send the money and
+  // steps out of the way — the donation goes straight to the organiser,
+  // so there is no order to create and no payment to verify.
+  useEffect(() => {
+    fetchOrganiserDonationDetails(organiser.id)
+      .then(setDetails)
+      .catch((e) => setError(e.message || "Couldn't load this organiser's details."))
+      .finally(() => setLoading(false));
+  }, [organiser.id]);
 
-    setError("");
-    setPaying(true);
+  const copy = async (label, value) => {
     try {
-      const order = await createDonationOrder({ organiserUserId: organiser.id, amount: amt });
-
-      if (!window.Razorpay) {
-        throw new Error("Payment widget failed to load. Please refresh and try again.");
-      }
-
-      const rzp = new window.Razorpay({
-        key: order.razorpay_key_id,
-        amount: Math.round(Number(order.amount) * 100),
-        currency: order.currency,
-        name: "theomy",
-        description: `Donation to ${order.organiser_name}`,
-        order_id: order.razorpay_order_id,
-        prefill: { email: userEmail, contact: userPhone || undefined },
-        theme: { color: "#D4AF37" },
-        handler: async (response) => {
-          try {
-            await verifyDonationPayment({
-              donationId: order.donation_id,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpaySignature: response.razorpay_signature,
-            });
-            onSuccess(Number(order.amount));
-          } catch (err) {
-            setError(err.message || "Payment verification failed. If money was deducted, contact support.");
-          } finally {
-            setPaying(false);
-          }
-        },
-        modal: { ondismiss: () => setPaying(false) },
-      });
-      rzp.on("payment.failed", () => {
-        setError("Payment failed. Please try again.");
-        setPaying(false);
-      });
-      rzp.open();
-    } catch (err) {
-      setError(err.message || "Couldn't start checkout. Please try again.");
-      setPaying(false);
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(""), 1800);
+    } catch {
+      // Clipboard can be blocked; the value is on screen to read anyway.
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={paying ? undefined : onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-2xl p-6"
-        style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
+        className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl p-6"
+        style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.2)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>Donate to {organiser.name}</h2>
-        <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Plays Organiser</p>
-        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>Amount (₹)</label>
-        <input
-          type="number"
-          min="1"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
-          style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-        />
-        {error && (
-          <p className="mt-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
+        <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>
+          Donate to {organiser.name}
+        </h2>
+        <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+          {details?.group_name || "Plays Organiser"}
+        </p>
+
+        {loading && <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>}
+        {!!error && <p className="text-sm" style={{ color: "#f87171" }}>{error}</p>}
+
+        {details && (
+          <>
+            {details.qr_code_url && (
+              <div className="mb-5">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Scan to pay
+                </p>
+                <img
+                  src={details.qr_code_url}
+                  alt={`Payment QR code for ${organiser.name}`}
+                  className="mx-auto w-48 rounded-lg"
+                  style={{ background: "#fff", padding: 8 }}
+                />
+              </div>
+            )}
+
+            {(details.account_number || details.ifsc_code) && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  Bank transfer
+                </p>
+                {details.account_number && (
+                  <Row label="Account number" value={details.account_number} copied={copied} onCopy={copy} />
+                )}
+                {details.ifsc_code && (
+                  <Row label="IFSC" value={details.ifsc_code} copied={copied} onCopy={copy} />
+                )}
+              </div>
+            )}
+
+            {!details.qr_code_url && !details.account_number && !details.ifsc_code && (
+              <p className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+                This organiser hasn't added payment details yet.
+              </p>
+            )}
+
+            <p className="mt-4 text-xs leading-relaxed" style={{ color: "rgba(245,235,221,0.45)" }}>
+              Payment goes directly to the organiser. theomy doesn't handle the
+              money and can't confirm or refund it, so keep your own receipt.
+            </p>
+          </>
         )}
-        <div className="mt-4 flex items-center justify-between">
-          <button onClick={onClose} disabled={paying} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
-          <button
-            onClick={handleDonate}
-            disabled={!Number(amount) || Number(amount) <= 0 || paying}
-            className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-          >
-            {paying ? "Processing…" : `Donate ₹${amount || 0}`}
+
+        <div className="mt-5 text-right">
+          <button onClick={onClose} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Close
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value, copied, onCopy }) {
+  return (
+    <div
+      className="mb-1.5 flex items-center justify-between rounded-lg px-3 py-2"
+      style={{ background: "rgba(245,235,221,0.05)" }}
+    >
+      <span className="min-w-0">
+        <span className="block text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>{label}</span>
+        <span className="block truncate text-sm" style={{ color: COLORS.cream }}>{value}</span>
+      </span>
+      <button
+        type="button"
+        onClick={() => onCopy(label, value)}
+        className="ml-3 shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold"
+        style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+      >
+        {copied === label ? "Copied" : "Copy"}
+      </button>
     </div>
   );
 }

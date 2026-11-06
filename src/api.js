@@ -855,6 +855,13 @@ export async function fetchTicketQrObjectUrl(bookingId) {
   return URL.createObjectURL(await res.blob());
 }
 
+// Where to send a donation: the organiser's QR and bank details.
+// Login-only on the server — the directory is public, the account
+// number is not.
+export function fetchOrganiserDonationDetails(organiserUserId) {
+  return request(`/organisers/${organiserUserId}/donation-details`, { auth: true });
+}
+
 export function createDonationOrder({ organiserUserId, amount }) {
   return request("/donations/razorpay/create-order", {
     method: "POST",

@@ -1,0 +1,2171 @@
+import re
+import uuid
+from datetime import datetime, date
+from decimal import Decimal
+from typing import Annotated, List, Optional
+
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, field_validator
+
+from app.identity_utils import normalize_email, normalize_phone
+from app.models import UserRole, TicketStatus, PaymentStatus, PaymentGateway
+
+# Identity fields on INPUT schemas for `users` accounts (see
+# identity_utils.py for why): an email is stored/compared lowercase, a phone
+# without spaces/dashes/dots/brackets. Output schemas keep plain EmailStr —
+# they must serialise whatever is already stored.
+NormEmail = Annotated[EmailStr, AfterValidator(normalize_email)]
+
+
+def _required_phone(v: str) -> str:
+    cleaned = normalize_phone(v)
+    if cleaned is None:
+        raise ValueError("Phone number is required")
+    return cleaned
+
+
+class UserRegister(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: NormEmail
+    password: str = Field(min_length=8, max_length=128)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    country: str = Field(default="India", max_length=100)
+    otp: Optional[str] = Field(default=None, max_length=6)
+    role: UserRole = UserRole.user
+    # Required for every main-account registration (Admin decision, Sept
+    # 2026) — used for city/age-group revenue reporting. See
+    # auth.MIN_REGISTRATION_AGE for the under-18 rule enforced server-side.
+    date_of_birth: date
+    # India-only at launch; a value outside the India city list is still
+    # accepted as free text (an "Other" entry from the picker).
+    city: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        # Blank (or only formatting characters) means "not provided"
+        return normalize_phone(v)
+
+    @field_validator("city")
+    @classmethod
+    def empty_city_to_none(cls, v):
+        if v is not None and v.strip() == "":
+            return None
+        return v
+
+
+class UserLogin(BaseModel):
+    email: NormEmail
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: NormEmail
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Self-service, from an already-logged-in session (Manage Profile) —
+    distinct from ResetPasswordRequest above (forgot-password email
+    link, no active session) and from AdminUserSetPasswordRequest (an
+    admin resetting someone ELSE's password, no old_password needed
+    since the admin already has elevated trust). This one requires the
+    current password precisely because the person IS logged in and
+    could otherwise silently take over the account from an unattended
+    session.
+    """
+    old_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    email: Optional[NormEmail] = None
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        # Unlike registration, blank here is kept as "" (rather than None):
+        # None means "field not sent", "" means "clear my phone" — the
+        # endpoint turns "" into NULL. (Previously a blank was stored as an
+        # empty string, which the unique index turns into a 500 for the
+        # second person to clear theirs.)
+        if v is None:
+            return None
+        return normalize_phone(v) or ""
+
+
+# This is the ONLY shape a user is ever returned in. There is no
+# hashed_password field here at all, so it can never leak into a
+# response payload no matter which endpoint returns a User.
+class UserOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    country: str
+    role: UserRole
+    auth_provider: str
+    profile_photo_url: Optional[str] = None
+    reward_points_balance: int
+    can_live_stream: bool
+    created_at: datetime
+    # Set only for a family sub-account (its parent's id). Lets the apps know
+    # right at login that this account can't buy a plan (see deps.ensure_can_buy_plan).
+    parent_id: Optional[uuid.UUID] = None
+
+    model_config = {"from_attributes": True}
+
+
+class DemographicsStatusOut(BaseModel):
+    """GET /auth/me/demographics-status — whether this account should be
+    shown the one-time "Complete your profile" prompt (date of birth +
+    city), and its current values if any. A declared-minor sub-account is
+    NEVER prompted (needs_profile is always False for it) — see
+    UserDemographics' docstring in models.py.
+    """
+    needs_profile: bool
+    is_declared_minor: bool
+    date_of_birth: Optional[date] = None
+    city: Optional[str] = None
+
+
+class DemographicsUpdate(BaseModel):
+    date_of_birth: date
+    city: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("city")
+    @classmethod
+    def empty_city_to_none(cls, v):
+        if v is not None and v.strip() == "":
+            return None
+        return v
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class TicketCreate(BaseModel):
+    subject: str = Field(min_length=1, max_length=255)
+    description: Optional[str] = None
+    source: str = Field(default="complaint")  # "message" | "complaint" — see TicketSource
+
+
+class TicketOut(BaseModel):
+    id: uuid.UUID
+    ticket_number: str
+    subject: str
+    description: Optional[str] = None
+    status: TicketStatus
+    source: str
+    image_url: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdminTicketOut(BaseModel):
+    """Same as TicketOut, plus who filed it — powers Admin > Help Center."""
+    id: uuid.UUID
+    ticket_number: str
+    customer_name: str
+    customer_email: str
+    subject: str
+    description: Optional[str] = None
+    status: TicketStatus
+    source: str
+    image_url: Optional[str] = None
+    created_at: datetime
+
+
+class AdminTicketStatusUpdate(BaseModel):
+    status: TicketStatus
+
+
+class SubscriptionCreate(BaseModel):
+    plan_name: str = Field(min_length=1, max_length=50)
+    duration_label: str = Field(min_length=1, max_length=50)
+    screens: int = Field(default=1, ge=1, le=10)
+    price: Decimal = Field(gt=0)
+
+
+class SubscriptionOut(BaseModel):
+    id: uuid.UUID
+    plan_name: str
+    duration_label: str
+    screens: int
+    price: Decimal
+    currency: str
+    is_active: bool
+    started_at: datetime
+    expires_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MenuOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    view: Optional[str] = None
+    category_param: Optional[str] = None
+    parent_menu_id: Optional[uuid.UUID] = None
+    requires_auth: bool
+    display_order: int
+    is_active: bool = True
+
+    model_config = {"from_attributes": True}
+
+
+class AdOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    vast_tag_url: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AdCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    vast_tag_url: str = Field(min_length=1, max_length=2000)
+
+
+class AdUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    vast_tag_url: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    is_active: Optional[bool] = None
+
+
+class AdCuePointOut(BaseModel):
+    id: uuid.UUID
+    ad_id: uuid.UUID
+    ad_name: str
+    offset_seconds: int
+
+
+class AdCuePointCreate(BaseModel):
+    ad_id: uuid.UUID
+    offset_seconds: int = Field(ge=0)
+
+
+# Minimal shape exposed to the PLAYER on a video it's actually loading —
+# just enough to schedule Google IMA SDK ad requests (offset + VAST tag),
+# nothing about the underlying Ad's internal id/name.
+class PlayerAdCuePointOut(BaseModel):
+    offset_seconds: int
+    vast_tag_url: str
+
+
+class AIMetadataSuggestRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+
+
+class AIMetadataSuggestResponse(BaseModel):
+    suggested_title: str
+    suggested_description: str
+    suggested_categories: list[str]
+    reasoning: str
+
+
+class AIInsightsResponse(BaseModel):
+    insights: str
+    generated_at: datetime
+    cached: bool
+
+
+class AIConfigOut(BaseModel):
+    insight_cache_hours: int
+
+    model_config = {"from_attributes": True}
+
+
+class AIConfigUpdate(BaseModel):
+    insight_cache_hours: int = Field(ge=1, le=168)  # 1 hour to 1 week
+
+
+class AdminUserAccountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+    is_active: bool
+    can_live_stream: bool
+    created_at: datetime
+    parent_id: Optional[uuid.UUID] = None
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None
+    # Whether this (parent) account has set a Family PIN — drives the
+    # "Reset PIN" button on Admin > Users (routers/family.py).
+    has_family_pin: bool = False
+    # plays_organiser only: an admin_users login is linked to this account
+    # (User Management > "Give admin access" / Create organiser checkbox).
+    has_admin_access: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class AdminUserSetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class AdminCreateOrganiserRequest(BaseModel):
+    """POST /admin/users/organiser — a superadmin creates a Plays
+    Organiser directly (Admin decision, Sept 2026), instead of waiting for
+    a normal user to request the role. The result is an ordinary `users`
+    row with role = plays_organiser, NOT an Admin Account: organisers own
+    videos, revenue, withdrawals and donations, all of which are foreign
+    keys to users.id, and they must never be able to reach the admin
+    portal. No OTP — the admin types the email and a starting password,
+    and the organiser logs in on the main site and is prompted for date
+    of birth/city (and the 18+ check) on their own first login, exactly
+    like any other account without them.
+    """
+    name: str = Field(min_length=1, max_length=255)
+    email: NormEmail
+    password: str = Field(min_length=8, max_length=128)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    country: str = Field(default="India", max_length=100)
+    # "Give access to Admin Portal": also creates an admin_users row (role
+    # plays_organiser, same email and starting password) so the organiser can
+    # log in at /admin too — see admin_roles.py for how that role is confined.
+    give_admin_access: bool = False
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return normalize_phone(v)
+
+
+class AdminUserToggleRequest(BaseModel):
+    enabled: bool
+
+
+class SpecialCategoryCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    # Both optional — leave both unset for a PERMANENT curated row
+    # (no date window at all); set both for a "Sunday Special"-style
+    # temporary one that disappears on its own after visible_to.
+    visible_from: Optional[date] = None
+    visible_to: Optional[date] = None
+    display_order: int = 0
+    section: str = Field(default="play")  # "play" | "archive" | "both"
+    # Optional — lets the create form seed the row with videos in one
+    # call instead of a create-then-N-add-video round trips.
+    video_ids: List[uuid.UUID] = []
+
+
+class SpecialCategoryUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    visible_from: Optional[date] = None
+    visible_to: Optional[date] = None
+    # Explicit clear flags — Optional[date]=None on its own can't tell
+    # "leave unchanged" apart from "clear this date back to permanent",
+    # since both look identical (absent) in a partial-update payload.
+    clear_visible_from: bool = False
+    clear_visible_to: bool = False
+    display_order: Optional[int] = None
+    section: Optional[str] = None
+
+
+class SpecialCategoryVideoCardOut(BaseModel):
+    """Minimal video card shape for rendering inside a special
+    category row — same fields the browse-page card components
+    already expect (id, title, poster, trailer for hover-preview).
+    """
+    id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    trailer_playback_url: Optional[str] = None
+
+
+class SpecialCategoryOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    visible_from: Optional[date] = None
+    visible_to: Optional[date] = None
+    display_order: int = 0
+    section: str
+    is_disabled: bool
+    video_count: int
+    videos: List[SpecialCategoryVideoCardOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class AdminVideoSearchResultOut(BaseModel):
+    """Powers the "search by title, cast, crew, or organiser name"
+    video picker in Special Categories' Manage Videos screen — a
+    single free-text box instead of separate filters, since a curator
+    thinking "that Bohurupee play with the piano" shouldn't need to
+    know in advance whether that's a title, cast, or organiser match.
+    """
+    id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    organiser_name: Optional[str] = None
+    matched_on: str  # "title" | "cast" | "crew" | "organiser" — which field matched, for the picker to show as a hint
+
+    model_config = {"from_attributes": True}
+
+
+class LiveStreamCreate(BaseModel):
+    """section says WHERE the event is listed (play/archive/both);
+    monetization_type says HOW it's paid for. They're separate on
+    purpose — a ticketed show still belongs on the Play or Archive
+    page. price_inr/price_usd are required by the router when
+    monetization_type is "pay_per_stream" and ignored otherwise.
+    """
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    section: str = Field(default="play")
+    monetization_type: str = Field(default="subscription")
+    price_inr: Optional[Decimal] = Field(default=None, ge=0)
+    price_usd: Optional[Decimal] = Field(default=None, ge=0)
+    scheduled_start_at: Optional[datetime] = None
+    promo_from: Optional[date] = None
+
+
+class LiveStreamUpdate(BaseModel):
+    """Only theomy-side metadata is editable — never the Mux-linked
+    fields (mux_live_stream_id/playback_id/stream_key), since those
+    are tied to the actual Mux resource created at broadcast-creation
+    time and can't be changed after the fact without creating a new
+    Mux live stream entirely.
+    """
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    section: Optional[str] = None
+    monetization_type: Optional[str] = None
+    price_inr: Optional[Decimal] = Field(default=None, ge=0)
+    price_usd: Optional[Decimal] = Field(default=None, ge=0)
+    scheduled_start_at: Optional[datetime] = None
+    promo_from: Optional[date] = None
+    is_disabled: Optional[bool] = None
+
+
+class LiveStreamOut(BaseModel):
+    """Public-facing shape — never includes mux_stream_key.
+
+    has_access / access_reason mirror VideoOut's pair exactly, so the
+    web and app can branch on the same strings they already handle:
+    "login_required", "subscription_required", "purchase_required".
+    playback_url is non-null only when has_access is true AND the
+    broadcast is actually on air — an announced show that hasn't
+    started returns null even for a subscriber.
+    """
+    id: uuid.UUID
+    title: str
+    description: Optional[str] = None
+    section: str
+    poster_image_url: Optional[str] = None
+    status: str
+    monetization_type: str = "subscription"
+    price_inr: Optional[Decimal] = None
+    price_usd: Optional[Decimal] = None
+    scheduled_start_at: Optional[datetime] = None
+    has_access: bool = False
+    access_reason: Optional[str] = None
+    playback_url: Optional[str] = None
+    started_at: Optional[datetime] = None
+
+
+class LiveStreamBroadcastInfoOut(BaseModel):
+    """The owner-only shape — includes the RTMP details needed to
+    actually go live. Never returned to anyone except the stream's own
+    creator/admin, or a superadmin looking it up for support purposes.
+
+    Carries the editable metadata too (description, section, schedule,
+    monetization): the admin and organiser Edit forms prefill straight
+    from this list response, and anything missing here silently resets
+    to its default the moment someone opens Edit.
+    """
+    id: uuid.UUID
+    title: str
+    description: Optional[str] = None
+    section: str = "play"
+    status: str
+    monetization_type: str = "subscription"
+    price_inr: Optional[Decimal] = None
+    price_usd: Optional[Decimal] = None
+    scheduled_start_at: Optional[datetime] = None
+    promo_from: Optional[date] = None
+    is_disabled: bool = False
+    rtmp_url: str
+    stream_key: str
+    playback_url: str
+
+
+class AdminCategoryCreate(BaseModel):
+    """Admin creates a new Category sub-menu item. label and
+    category_param are kept in sync (same value) so a category always
+    matches exactly what shows in the nav dropdown AND what's offered
+    as a checkbox on the video upload form.
+    """
+    label: str = Field(min_length=1, max_length=100)
+    display_order: Optional[int] = None
+
+
+class AdminCategoryUpdate(BaseModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class SubscriptionPlanOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    tagline: Optional[str] = None
+    base_price: Decimal
+    per_extra_screen: Decimal
+    base_price_usd: Decimal
+    per_extra_screen_usd: Decimal
+    features: List[str]
+    grants_play: bool
+    grants_archive: bool
+    highlighted: bool
+    display_order: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SubscriptionPlanCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    tagline: Optional[str] = None
+    base_price: Decimal = Field(ge=0)
+    per_extra_screen: Decimal = Field(default=0, ge=0)
+    base_price_usd: Decimal = Field(default=0, ge=0)
+    per_extra_screen_usd: Decimal = Field(default=0, ge=0)
+    features: List[str] = Field(default_factory=list)
+    grants_play: bool = False
+    grants_archive: bool = False
+    highlighted: bool = False
+    display_order: int = 0
+
+
+class SubscriptionPlanUpdate(BaseModel):
+    """All-optional — admin_plans.py only applies fields actually sent."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    tagline: Optional[str] = None
+    base_price: Optional[Decimal] = Field(default=None, ge=0)
+    per_extra_screen: Optional[Decimal] = Field(default=None, ge=0)
+    base_price_usd: Optional[Decimal] = Field(default=None, ge=0)
+    per_extra_screen_usd: Optional[Decimal] = Field(default=None, ge=0)
+    features: Optional[List[str]] = None
+    grants_play: Optional[bool] = None
+    grants_archive: Optional[bool] = None
+    highlighted: Optional[bool] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class SubscriptionDurationOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    months: int
+    discount_percent: Decimal
+    display_order: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SubscriptionDurationCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=50)
+    months: int = Field(ge=1, le=60)
+    discount_percent: Decimal = Field(default=0, ge=0, le=100)
+    display_order: int = 0
+
+
+class SubscriptionDurationUpdate(BaseModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    months: Optional[int] = Field(default=None, ge=1, le=60)
+    discount_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+
+class PaymentOut(BaseModel):
+    id: uuid.UUID
+    subscription_id: Optional[uuid.UUID] = None
+    gateway: PaymentGateway
+    gateway_payment_id: Optional[str] = None
+    plan_name: str
+    duration_label: str
+    screens: int
+    base_amount: Decimal
+    tax_amount: Decimal
+    total_amount: Decimal
+    reward_points_used: int
+    currency: str
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaxConfigOut(BaseModel):
+    gst_percent: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class AdminSubscriptionTransactionOut(BaseModel):
+    """One row per Payment (checkout attempt), joined with the customer
+    and the resulting Subscription's current state — powers Admin >
+    Subscription Management's "active, expired, completed, failed"
+    filters. `bucket` is the friendly, filterable status:
+    - "pending"   Payment.status == created (checkout not finished)
+    - "failed"    Payment.status == failed
+    - "active"    paid AND the linked subscription is currently active + unexpired
+    - "expired"   paid AND the linked subscription has lapsed/been replaced
+    """
+    payment_id: uuid.UUID
+    user_id: uuid.UUID
+    customer_name: str
+    customer_email: str
+    plan_name: str
+    duration_label: str
+    screens: int
+    total_amount: Decimal
+    currency: str
+    gateway: str
+    gateway_order_id: Optional[str] = None
+    gateway_payment_id: Optional[str] = None
+    bucket: str
+    subscription_expires_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaxConfigUpdate(BaseModel):
+    gst_percent: Decimal = Field(ge=0, le=100)
+
+
+class CreateOrderRequest(BaseModel):
+    plan_name: str = Field(min_length=1, max_length=50)
+    duration_label: str = Field(min_length=1, max_length=50)
+    screens: int = Field(default=1, ge=1, le=10)
+    reward_points_requested: int = Field(default=0, ge=0)
+
+
+class CreateOrderResponse(BaseModel):
+    payment_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    base_amount: Decimal
+    reward_points_used: int
+    tax_amount: Decimal
+    total_amount: Decimal
+    currency: str
+    plan_name: str
+    duration_label: str
+    screens: int
+
+
+class VerifyPaymentRequest(BaseModel):
+    payment_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class BlogListItemOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    excerpt: str
+    author_name: str
+    published_at: datetime
+    cover_image_url: Optional[str] = None
+    is_published: bool = True
+    likes_count: int = 0
+    liked_by_me: bool = False
+    comment_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class BlogDetailOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    excerpt: str
+    body: str
+    author_name: str
+    published_at: datetime
+    cover_image_url: Optional[str] = None
+    is_published: bool = True
+    likes_count: int = 0
+    liked_by_me: bool = False
+    comment_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class BlogCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    excerpt: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1)
+    author_name: str = Field(default="theomy Team", max_length=100)
+    is_published: bool = True
+
+
+class BlogUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    excerpt: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    body: Optional[str] = None
+    author_name: Optional[str] = Field(default=None, max_length=100)
+    is_published: Optional[bool] = None
+
+
+class BlogCommentCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class BlogCommentUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class BlogCommentOut(BaseModel):
+    id: uuid.UUID
+    blog_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    user_name: str
+    is_admin: bool = False
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BlogLikeToggleOut(BaseModel):
+    liked: bool
+    likes_count: int
+
+
+class ReplyOut(BaseModel):
+    id: uuid.UUID
+    author_user_id: uuid.UUID
+    author_name: str
+    text: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PostOut(BaseModel):
+    id: uuid.UUID
+    author_user_id: Optional[uuid.UUID] = None
+    author_name: str
+    is_admin: bool = False
+    text: str
+    image_url: Optional[str] = None
+    likes_count: int
+    liked_by_me: bool
+    replies: List[ReplyOut]
+    created_at: datetime
+
+
+class RoomSummaryOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    created_by_name: str
+    is_admin_created: bool = False
+    post_count: int
+    created_at: datetime
+
+
+class RoomDetailOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    created_by_name: str
+    is_admin_created: bool = False
+    posts: List[PostOut]
+    created_at: datetime
+
+
+class RoomCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
+class PostCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ReplyCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class LikeToggleOut(BaseModel):
+    liked: bool
+    likes_count: int
+
+
+class OrganiserOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    profile_photo_url: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class OrganiserDonationDetailsOut(BaseModel):
+    """Where to send a donation, for one approved organiser.
+
+    document_url is deliberately absent: that is the identity document
+    the organiser uploaded for the admin to check, and it is nobody
+    else's business. Only the group name, the account details and the
+    QR image belong here.
+    """
+    organiser_user_id: uuid.UUID
+    organiser_name: str
+    group_name: str
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    qr_code_url: Optional[str] = None
+
+
+class DonationCreateOrderRequest(BaseModel):
+    organiser_user_id: uuid.UUID
+    amount: Decimal = Field(gt=0)
+
+
+class DonationCreateOrderResponse(BaseModel):
+    donation_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    organiser_name: str
+
+
+class DonationVerifyRequest(BaseModel):
+    donation_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class DonationOut(BaseModel):
+    id: uuid.UUID
+    organiser_name: str
+    amount: Decimal
+    gateway: PaymentGateway
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RevenueRateOut(BaseModel):
+    rate_paisa_per_minute: int
+    rate_rupees_per_minute: Decimal
+    rate_display: str
+    platform_commission_percent: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class RevenueSummaryOut(BaseModel):
+    total_earned_rupees: Decimal
+    available_balance_rupees: Decimal
+    pending_withdrawals_rupees: Decimal
+
+
+class WithdrawalRequestCreate(BaseModel):
+    amount_rupees: Decimal = Field(gt=0)
+
+
+class WithdrawalRequestOut(BaseModel):
+    id: uuid.UUID
+    amount_rupees: Decimal
+    status: str
+    admin_note: Optional[str] = None
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+
+class EventEnquiryAttachmentOut(BaseModel):
+    id: uuid.UUID
+    file_url: str
+    original_filename: str
+
+    model_config = {"from_attributes": True}
+
+
+class TicketTierIn(BaseModel):
+    tier_name: str = Field(min_length=1, max_length=100)
+    price: Decimal = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class TicketTierOut(BaseModel):
+    id: uuid.UUID
+    tier_name: str
+    price: Decimal
+    quantity: int
+
+    model_config = {"from_attributes": True}
+
+
+class TicketTierAvailabilityOut(BaseModel):
+    """A tier plus how many seats are actually left, which is what the
+    Buy screens need in order to grey out a sold-out row.
+    """
+    id: uuid.UUID
+    tier_name: str
+    price: Decimal
+    quantity: int
+    taken: int
+    available: int
+    sold_out: bool
+
+
+class CreateTicketBookingRequest(BaseModel):
+    tier_id: uuid.UUID
+    quantity: int = Field(ge=1, le=10)
+
+
+class CreateTicketBookingOrderResponse(BaseModel):
+    booking_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    event_title: str
+    tier_name: str
+    quantity: int
+
+
+class VerifyTicketBookingRequest(BaseModel):
+    booking_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class TicketBookingOut(BaseModel):
+    id: uuid.UUID
+    enquiry_id: uuid.UUID
+    event_title: Optional[str] = None
+    event_venue: Optional[str] = None
+    event_date: Optional[datetime] = None
+    event_time: Optional[str] = None
+    tier_name: str
+    unit_price: Decimal
+    quantity: int
+    amount: Decimal
+    currency: str
+    booking_reference: Optional[str] = None
+    qr_token: Optional[str] = None
+    status: str
+    checked_in_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CheckInTicketRequest(BaseModel):
+    qr_token: str = Field(min_length=8, max_length=64)
+
+
+class CheckInTicketResponse(BaseModel):
+    """What the person on the door sees. `admitted` is false both for a
+    ticket that was never valid and for one already used, with `reason`
+    saying which — those two need different responses at the door.
+    """
+    admitted: bool
+    reason: str
+    booking_reference: Optional[str] = None
+    event_title: Optional[str] = None
+    tier_name: Optional[str] = None
+    quantity: Optional[int] = None
+    attendee_name: Optional[str] = None
+    checked_in_at: Optional[datetime] = None
+
+
+class DonationRegistrationOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    user_name: str
+    group_name: str
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    qr_code_url: Optional[str] = None
+    document_url: Optional[str] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MyDonationRegistrationStatusOut(BaseModel):
+    """What the "Register for Donation" link checks before showing
+    itself — same hide-on-pending-or-approved rule as
+    MyOrganiserRequestStatusOut. Also backs the status card shown on
+    the Donation page itself, so an applied user can see where their
+    registration stands without visiting the admin panel.
+    """
+    has_pending_or_approved: bool
+    latest_status: Optional[str] = None
+    rejection_reason: Optional[str] = None
+
+
+class DonationRegistrationRejectRequest(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+class OrganiserRequestCreate(BaseModel):
+    subject: str = Field(min_length=1, max_length=255)
+    group_name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=1, max_length=20)
+    email: str = Field(min_length=1, max_length=255)
+    remarks: Optional[str] = None
+
+
+class OrganiserRequestRejectRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class OrganiserRequestOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    user_name: str
+    subject: str
+    group_name: str
+    phone: str
+    email: str
+    remarks: Optional[str] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MyOrganiserRequestStatusOut(BaseModel):
+    """What the profile dropdown checks to decide whether to show
+    "Request as Organiser" at all — has_pending_or_approved covers
+    both cases the link should hide for (a decision already approved,
+    or one still awaiting review); it stays visible only when the
+    latest request was rejected or none exists yet.
+    """
+    has_pending_or_approved: bool
+    latest_status: Optional[str] = None
+
+
+class EventEnquiryOut(BaseModel):
+    id: uuid.UUID
+    org_name: str
+    org_about: Optional[str] = None
+    contact_person: str
+    contact_email: str
+    contact_phone: str
+    event_title: str
+    event_category: str
+    event_description: Optional[str] = None
+    proposed_date: datetime
+    proposed_time: Optional[str] = None
+    venue: str
+    poster_image_url: Optional[str] = None
+    remarks: Optional[str] = None
+    status: str
+    admin_note: Optional[str] = None
+    ticket_tiers: List[TicketTierOut]
+    attachments: List[EventEnquiryAttachmentOut]
+    created_at: datetime
+
+
+class PublicEventListingOut(BaseModel):
+    """The public-facing shape — deliberately excludes internal fields
+    (submitted_by_user_id, admin_note, attachments, remarks, contact
+    details) that aren't anyone else's business once an event is public.
+    Used both for the shareable single-event link and the Ticketing
+    page's listing.
+    """
+    id: uuid.UUID
+    event_title: str
+    event_category: str
+    event_description: Optional[str] = None
+    proposed_date: datetime
+    proposed_time: Optional[str] = None
+    venue: str
+    poster_image_url: Optional[str] = None
+    org_name: str
+    ticket_tiers: List[TicketTierOut]
+
+
+class SendOtpRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+    purpose: str = Field(pattern="^(registration|login)$")
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return _required_phone(v)
+
+
+class SendEmailOtpRequest(BaseModel):
+    """POST /auth/otp/send-email — email-based OTP, currently used only for
+    India registration (replaces the old WhatsApp/phone OTP there; see
+    EmailOtpVerification's docstring in models.py). Purpose is restricted to
+    "registration" — OTP LOGIN still uses phone/WhatsApp (SendOtpRequest
+    above), untouched.
+
+    phone is optional here (only India registration collects it, and only
+    at this point does the form already have it) — when given, it's
+    duplicate-checked alongside email BEFORE a code is sent (Admin
+    decision, Sept 2026), so a taken phone number is caught here instead
+    of only after the person has already gone through receiving and
+    typing the email code.
+
+    date_of_birth is likewise optional (the form has it by the time "Send
+    verification code" is clicked) — when given, the under-18 rule is
+    checked here too, before sending anything, for the same reason: no
+    point making someone verify an email for an account that can never be
+    created (Admin decision, Sept 2026 — see auth.MIN_REGISTRATION_AGE).
+    """
+    email: NormEmail
+    purpose: str = Field(pattern="^(registration)$")
+    phone: Optional[str] = Field(default=None, max_length=20)
+    date_of_birth: Optional[date] = None
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return normalize_phone(v)
+
+
+class VerifyOtpLoginRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+    otp: str = Field(min_length=4, max_length=6)
+
+    @field_validator("phone")
+    @classmethod
+    def normalise_phone(cls, v):
+        return _required_phone(v)
+
+
+class ExchangeRateOut(BaseModel):
+    inr_per_usd: Decimal
+
+
+class StripeCreateSessionRequest(BaseModel):
+    plan_name: str = Field(min_length=1, max_length=50)
+    duration_label: str = Field(min_length=1, max_length=50)
+    screens: int = Field(default=1, ge=1, le=10)
+    reward_points_requested: int = Field(default=0, ge=0)
+
+
+class StripeCreateSessionResponse(BaseModel):
+    payment_id: uuid.UUID
+    checkout_url: str
+    amount_usd: Decimal
+    plan_name: str
+    duration_label: str
+    screens: int
+
+
+class StripeConfirmRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=255)
+
+
+class RewardConfigOut(BaseModel):
+    subscription_reward_percent: Decimal
+    ticket_reward_percent: Decimal
+
+
+class WatchProgressUpdate(BaseModel):
+    position_seconds: int = Field(ge=0)
+
+
+class ContinueWatchingOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    trailer_playback_url: Optional[str] = None
+    position_seconds: int
+    duration_seconds: Optional[int] = None
+    progress_percent: Optional[int] = None
+    updated_at: datetime
+
+
+class WatchHistoryOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    poster_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    position_seconds: int
+    duration_seconds: Optional[int] = None
+    finished: bool
+    updated_at: datetime
+
+
+class WatchHeartbeatRequest(BaseModel):
+    # The current continuously-watched stretch of the video's own
+    # timeline (in seconds from video start) — NOT cumulative session
+    # time. segment_start is where this uninterrupted stretch began
+    # (resets on every seek/drag the player detects); segment_end is
+    # the player's current position. The backend merges [segment_start,
+    # segment_end] into the viewer's running union of watched ranges
+    # for this video (see VideoWatchRecord.watched_ranges) and credits
+    # only whatever portion of that stretch wasn't already covered —
+    # so re-watching an already-seen range, or a seek/drag jump, never
+    # inflates revenue, but resuming a video across days/sessions
+    # correctly picks up from real coverage rather than resetting.
+    segment_start_seconds: Decimal = Field(ge=0)
+    segment_end_seconds: Decimal = Field(ge=0)
+    # Optional — when present, also refreshes this device's
+    # PlaybackSession.last_heartbeat_at so the screens-limit check keeps
+    # counting this device as active for as long as it keeps watching.
+    playback_session_token: Optional[str] = Field(default=None, max_length=100)
+
+
+class PlaybackSessionStartRequest(BaseModel):
+    session_token: str = Field(min_length=1, max_length=100)
+
+
+class PlaybackSessionStartResponse(BaseModel):
+    allowed: bool
+    active_screens: int
+    max_screens: int
+    reason: Optional[str] = None
+
+
+class PlaybackSessionEndRequest(BaseModel):
+    session_token: str = Field(min_length=1, max_length=100)
+
+
+class WatchHeartbeatResponse(BaseModel):
+    total_watched_minutes: Decimal
+    credited_this_call_rupees: Decimal
+    total_creator_credited_rupees: Decimal
+
+
+class ContentPerformanceOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    unique_viewers: int
+    total_watch_minutes: Decimal
+    gross_revenue_rupees: Decimal
+    creator_earned_rupees: Decimal
+
+
+class ContentPerformanceTierBreakdownOut(BaseModel):
+    range_label: str
+    minutes_in_tier: Decimal
+    creator_earned_rupees: Decimal
+    # The tier's own ₹/minute rate. Optional so any endpoint that doesn't
+    # fill it in (or an older client) keeps working unchanged.
+    rate_per_minute_rupees: Optional[Decimal] = None
+
+
+class ContentPerformanceViewerBreakdownOut(BaseModel):
+    viewer_label: str
+    watch_minutes: Decimal
+    creator_earned_rupees: Decimal
+    tier_breakdown: List[ContentPerformanceTierBreakdownOut]
+
+
+class AdminRevenueConfigUpdate(BaseModel):
+    rate_paisa_per_minute: int = Field(ge=0)
+    platform_commission_percent: Decimal = Field(ge=0, le=100)
+
+
+class RevenueByDayOut(BaseModel):
+    date: str  # YYYY-MM-DD
+    creator_earned_rupees: Decimal
+    gross_revenue_rupees: Decimal
+
+
+class RevenueByCountryOut(BaseModel):
+    country: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class RevenueByCityOut(BaseModel):
+    """India-only, since city is only collected there (Admin decision,
+    Sept 2026) — a viewer from any other country always falls under
+    "Unknown" here, same as one who hasn't completed their profile yet.
+    """
+    city: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class RevenueByAgeGroupOut(BaseModel):
+    # age_group is one of demographics_utils.AGE_GROUPS, or "Unknown" for a
+    # viewer with no date of birth on file yet (or a declared-minor
+    # sub-account, which never has one).
+    age_group: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class GeoAgeGroupOut(BaseModel):
+    age_group: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+
+
+class GeoCityOut(BaseModel):
+    city: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+    age_groups: List[GeoAgeGroupOut]
+
+
+class GeoCountryOut(BaseModel):
+    """One node of the Country > City > Age group tree (Admin decision,
+    Sept 2026) — see demographics_utils.geo_breakdown's docstring for why
+    this exists alongside the three separate by-country/by-city/
+    by-age-group breakdowns: those can't answer "of this country's
+    viewers, which city and age group watch most", which was the actual
+    goal (understanding a video's — or the whole catalog's — audience to
+    inform what to upload next).
+    """
+    country: str
+    viewer_count: int
+    creator_earned_rupees: Decimal
+    cities: List[GeoCityOut]
+
+
+class AdminRevenueSummaryOut(BaseModel):
+    """Platform-wide KPI cards — the theomy equivalent of a "Revenue
+    Summary" dashboard, built from real data (VideoWatchRecord,
+    published Video count), not YouTube-style ad metrics that don't
+    apply here (theomy hosts its own video, not on YouTube).
+    """
+    gross_revenue_rupees: Decimal
+    platform_share_rupees: Decimal
+    creator_share_rupees: Decimal
+    total_watch_minutes: Decimal
+    total_viewer_records: int  # count of distinct (viewer, video) pairs with any watch time
+    total_published_videos: int
+    avg_revenue_per_1000_minutes_rupees: Decimal  # theomy's RPM-equivalent
+
+
+class AdminRevenueByCreatorOut(BaseModel):
+    """One row per creator — the "Revenue Share Report": gross revenue
+    their content generated, theomy's cut, their cut, what's actually
+    been paid out (WithdrawalRequest status='paid'), and what's earned
+    but not yet paid.
+    """
+    creator_user_id: uuid.UUID
+    creator_name: str
+    creator_email: EmailStr
+    gross_revenue_rupees: Decimal
+    platform_share_rupees: Decimal
+    creator_share_rupees: Decimal
+    paid_rupees: Decimal
+    pending_rupees: Decimal
+
+
+class AdminContentPerformanceOut(BaseModel):
+    video_id: uuid.UUID
+    title: str
+    creator_name: str
+    unique_viewers: int
+    total_watch_minutes: Decimal
+    gross_revenue_rupees: Decimal
+    creator_earned_rupees: Decimal
+
+
+class AdminWithdrawalOut(BaseModel):
+    id: uuid.UUID
+    creator_user_id: uuid.UUID
+    creator_name: str
+    creator_email: EmailStr
+    amount_rupees: Decimal
+    status: str
+    admin_note: Optional[str] = None
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+
+
+class AdminWithdrawalActionRequest(BaseModel):
+    admin_note: Optional[str] = Field(default=None, max_length=500)
+
+
+class AdminLoginRequest(BaseModel):
+    email: NormEmail
+    password: str = Field(min_length=1)
+
+
+class AdminOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+    is_active: bool
+    created_at: datetime
+    allowed_menu_keys: Optional[List[str]] = None
+    # True when this admin login is linked to a site (`users`) account — the
+    # organiser pages need one (videos/revenue/enquiries belong to users.id).
+    has_site_account: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class AdminRoleMenuOption(BaseModel):
+    key: str
+    label: str
+
+
+class AdminRolePermissionsOut(BaseModel):
+    """Role-based admin menu permission (Admin Accounts > Role permissions)."""
+    role: str
+    role_label: str
+    menu_keys: List[str]
+    available: List[AdminRoleMenuOption]
+
+
+class AdminRolePermissionsUpdate(BaseModel):
+    menu_keys: List[str]
+
+
+class AdminMenuPermissionsUpdate(BaseModel):
+    # None clears the restriction (back to "unrestricted" — sees
+    # everything an ordinary admin can); an empty list locks the
+    # account out of every menu.
+    allowed_menu_keys: Optional[List[str]] = None
+
+
+class AdminToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    admin: AdminOut
+
+
+class AdminSetPasswordRequest(BaseModel):
+    """Superadmin setting another admin_users account's password."""
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class AdminCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: NormEmail
+    password: str = Field(min_length=8, max_length=128)
+    role: str = Field(pattern="^(superadmin|admin|plays_organiser)$", default="admin")
+
+
+class MyListItemIn(BaseModel):
+    item_id: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=255)
+    image_url: Optional[str] = Field(default=None, max_length=1000)
+    meta: Optional[str] = Field(default=None, max_length=255)
+    section: Optional[str] = Field(default=None, max_length=100)
+
+
+class MyListItemOut(BaseModel):
+    id: uuid.UUID
+    item_id: str
+    title: str
+    image_url: Optional[str] = None
+    meta: Optional[str] = None
+    section: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MyListToggleResponse(BaseModel):
+    saved: bool
+
+
+class VideoLikeToggleResponse(BaseModel):
+    liked: bool
+    likes_count: int
+
+
+class VideoRevenueTierIn(BaseModel):
+    min_minutes: int = Field(ge=1)
+    max_minutes: Optional[int] = Field(default=None, ge=1)
+    rate_per_minute_inr: Decimal = Field(gt=0)
+
+
+class VideoRevenueTierOut(BaseModel):
+    id: uuid.UUID
+    min_minutes: int
+    max_minutes: Optional[int] = None
+    rate_per_minute_inr: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class VideoSubtitleOut(BaseModel):
+    id: uuid.UUID
+    language_code: str
+    language_label: str
+    url: str  # GET /videos/{video_id}/subtitles/{language_code}.vtt
+
+    model_config = {"from_attributes": True}
+
+
+class PersonOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    photo_url: Optional[str] = None
+    occupation: Optional[str] = None
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = None
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PersonCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+
+
+class VideoCastIn(BaseModel):
+    # person_id, when provided and matching an existing cast member on
+    # this same video, tells the backend to UPDATE that Person's fields
+    # in place rather than delete-and-recreate — critical for edits,
+    # since recreating would wipe photo_url every time, even for an edit
+    # that never touched cast/crew at all. Creation always sends None
+    # here (there's nothing existing yet to match against).
+    person_id: Optional[uuid.UUID] = None
+    name: str = Field(min_length=1, max_length=255)
+    character_role: Optional[str] = Field(default=None, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+
+
+class VideoCastOut(BaseModel):
+    id: uuid.UUID
+    person: PersonOut
+    character_role: Optional[str] = None
+
+
+class VideoCrewIn(BaseModel):
+    person_id: Optional[uuid.UUID] = None
+    role: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=255)
+    occupation: Optional[str] = Field(default=None, max_length=255)
+    date_of_birth: Optional[datetime] = None
+    birthplace: Optional[str] = Field(default=None, max_length=255)
+    about: Optional[str] = None
+    early_life: Optional[str] = None
+    personal_life: Optional[str] = None
+    debut_initial_years: Optional[str] = None
+    breakthrough_beyond: Optional[str] = None
+    recent_projects: Optional[str] = None
+
+
+class VideoCrewOut(BaseModel):
+    id: uuid.UUID
+    role: str
+    person: PersonOut
+
+
+class VideoCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: Optional[str] = None
+    section: str = Field(pattern="^(play|archive)$")
+    # No min_length — a Creator/Organiser no longer picks categories at
+    # upload time (see MyVideoListPage.jsx); Admin assigns them during
+    # review instead, and approve/schedule are blocked until at least
+    # one is set (see admin_videos.py's _require_categories_before_publish).
+    categories: List[str] = Field(default=[], max_length=3)
+    release_year: int = Field(ge=1900, le=2100)
+    age_rating: str = Field(pattern="^(U|UA7\\+|UA13\\+|UA16\\+|A)$")
+    languages: Optional[List[str]] = None
+    has_ads: bool = True
+    monetization_type: str = Field(pattern="^(subscription_only|pay_per_video)$", default="subscription_only")
+    price_inr: Optional[Decimal] = Field(default=None, gt=0)
+    price_usd: Optional[Decimal] = Field(default=None, gt=0)
+    revenue_tiers: List[VideoRevenueTierIn] = Field(min_length=1, max_length=5)
+    cast: List[VideoCastIn] = Field(default=[], max_length=10)
+    crew: List[VideoCrewIn] = Field(default=[], max_length=5)
+
+
+class TusUploadCredentialsOut(BaseModel):
+    video_id: str
+    library_id: str
+    expiration_time: int
+    signature: str
+
+
+class VideoPricingOut(BaseModel):
+    price_inr: Decimal
+    price_usd: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class VideoOut(BaseModel):
+    id: uuid.UUID
+    uploaded_by_name: str
+    # Only set for a real organiser/creator's own upload (never for an
+    # admin-uploaded video) — powers the "Studio" link on the video
+    # detail page, since there's no user account to click through to
+    # for an admin upload.
+    uploaded_by_user_id: Optional[uuid.UUID] = None
+    title: str
+    description: Optional[str] = None
+    section: str
+    categories: List[str]
+    release_year: int
+    age_rating: str
+    languages: List[str]
+    poster_image_url: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    has_ads: bool
+    monetization_type: str
+    status: str
+    admin_note: Optional[str] = None
+    scheduled_publish_at: Optional[datetime] = None
+    pricing: Optional[VideoPricingOut] = None
+    revenue_tiers: List[VideoRevenueTierOut]
+    cast: List[VideoCastOut]
+    crew: List[VideoCrewOut]
+    has_file: bool
+    playback_url: Optional[str] = None
+    embed_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    # Never access-gated (unlike playback_url/embed_url above) — a
+    # trailer is meant to be freely watchable to entice a subscription/
+    # purchase, so this populates regardless of has_access.
+    trailer_playback_url: Optional[str] = None
+    # One entry per uploaded language — see VideoSubtitle model.
+    subtitles: List[VideoSubtitleOut] = []
+    created_at: datetime
+    published_at: Optional[datetime] = None
+
+    # Real, server-computed access gate — see routers/videos.py's
+    # _check_video_access(). playback_url/embed_url above are only ever
+    # populated when has_access is True; a viewer without access gets
+    # every other field (poster, cast, description, etc.) so the detail
+    # page still works as a preview, just with no way to actually stream.
+    # access_reason lets the frontend show the right CTA without
+    # re-deriving the logic: "login_required" | "subscription_required"
+    # | "purchase_required" | None (None means access is already granted).
+    has_access: bool = False
+    access_reason: Optional[str] = None
+
+    # Real, persisted engagement — see VideoLike/MyListItem models.
+    # liked_by_me/in_my_list are only ever true for a logged-in viewer;
+    # both default False for a logged-out or unauthenticated view.
+    # in_my_list is looked up against the general MyListItem table
+    # (item_id == this video's id), the same table every other section
+    # of the site's "+" button already saves to.
+    likes_count: int = 0
+    liked_by_me: bool = False
+    in_my_list: bool = False
+
+    # The resume offset baked into embed_url's t= param above (0 if no
+    # resume point, or the video is essentially finished). The frontend
+    # needs this as a base to ADD to its own elapsed-since-play-pressed
+    # counter when saving progress — otherwise a resumed session's
+    # first heartbeat would overwrite position_seconds back down to a
+    # small number instead of correctly continuing forward from where
+    # playback actually resumed.
+    resume_position_seconds: int = 0
+
+    # Only populated when has_access is True AND the video's own
+    # has_ads is True — empty otherwise (ad-free video, no access yet,
+    # or logged out). The player's Google IMA SDK integration schedules
+    # one ad request per entry: offset_seconds=0 is pre-roll, anything
+    # higher is a mid-roll at that point in the content.
+    ad_cue_points: list[PlayerAdCuePointOut] = []
+
+
+class VideoPurchaseOut(BaseModel):
+    id: uuid.UUID
+    video_id: uuid.UUID
+    amount: Decimal
+    currency: str
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VideoPurchaseDetailOut(BaseModel):
+    """Same as VideoPurchaseOut but with the video's title/poster joined
+    in — what the account page's "Pay-Per-Video" history tab actually
+    needs to render a real entry per purchase, not just raw IDs.
+    """
+    id: uuid.UUID
+    video_id: uuid.UUID
+    video_title: str
+    video_poster_url: Optional[str] = None
+    amount: Decimal
+    currency: str
+    gateway: PaymentGateway
+    gateway_payment_id: Optional[str] = None
+    status: PaymentStatus
+    created_at: datetime
+
+
+class CreateVideoOrderResponse(BaseModel):
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    video_title: str
+
+
+class VerifyVideoPaymentRequest(BaseModel):
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class CreateLiveStreamOrderResponse(BaseModel):
+    """Pay Per Streaming checkout — the same shape as
+    CreateVideoOrderResponse, with the event's title in place of the
+    video's, so the web/app can reuse their Razorpay handler.
+    """
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    live_stream_title: str
+
+
+class VerifyLiveStreamPaymentRequest(BaseModel):
+    purchase_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class LiveStreamPurchaseOut(BaseModel):
+    id: uuid.UUID
+    live_stream_id: uuid.UUID
+    amount: Decimal
+    currency: str
+    status: PaymentStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdminVideoRejectRequest(BaseModel):
+    admin_note: str = Field(min_length=1, max_length=500)
+
+
+class AdminVideoScheduleRequest(BaseModel):
+    # An absolute UTC instant — the frontend's datetime-local picker
+    # value is converted to a UTC ISO string (via JS Date, which reads
+    # the browser's own local timezone) before being sent here, so
+    # this is never ambiguous regardless of where the server runs.
+    scheduled_publish_at: datetime
+
+
+class CreatorAccountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+
+    model_config = {"from_attributes": True}
+
+
+class AdminVideoCreate(VideoCreate):
+    # If set, the video is attributed to this existing Content Creator or
+    # Plays Organiser account instead of the admin who's adding it — for
+    # cases like migrating a creator's back-catalog or helping a
+    # less tech-savvy creator upload on their behalf. Must reference an
+    # account with role content_creator or plays_organiser; validated
+    # server-side, not just trusted from the request.
+    attributed_user_id: Optional[uuid.UUID] = None
+
+
+class EventEnquiryEdit(BaseModel):
+    """Admin edit — same fields as submission, minus file attachments
+    (attachment editing isn't built in this pass; still viewable/
+    deletable, just not re-uploadable from the edit form).
+    """
+    org_name: str = Field(min_length=1, max_length=255)
+    org_about: Optional[str] = None
+    contact_person: str = Field(min_length=1, max_length=255)
+    contact_email: str = Field(min_length=1, max_length=255)
+    contact_phone: str = Field(min_length=1, max_length=20)
+    event_title: str = Field(min_length=1, max_length=255)
+    event_category: str = Field(min_length=1, max_length=100)
+    event_description: Optional[str] = None
+    proposed_date: datetime
+    proposed_time: Optional[str] = None
+    venue: str = Field(min_length=1, max_length=255)
+    remarks: Optional[str] = None
+    ticket_tiers: List[TicketTierIn] = Field(min_length=1)
+
+
+class SubAccountCreate(BaseModel):
+    """Created by an already-logged-in parent from Manage Profile — no
+    OTP/phone step, unlike the main UserRegister flow, since the parent
+    is already a verified account vouching for this one.
+    """
+    name: str = Field(min_length=1, max_length=255)
+    email: NormEmail
+    password: str = Field(min_length=8, max_length=128)
+    # The parent declares this — required, no default — so creating a
+    # sub-account always makes a conscious choice rather than silently
+    # defaulting one way. True: never asked for date of birth/city, ever.
+    # False: this sub-account will be prompted to add them on its own first
+    # login (see users.complete_demographics in routers/users.py).
+    is_minor: bool
+
+
+class SubAccountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    is_active: bool
+    created_at: datetime
+    is_minor: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class MySubAccountsOut(BaseModel):
+    """Powers the parent's Manage Profile "Family Accounts" section —
+    max_allowed is (their active subscription's screens - 1); 0 for a
+    sub-account itself (no nested chains) or a parent with no
+    multi-screen plan.
+    """
+    max_allowed: int
+    sub_accounts: List[SubAccountOut]
+
+
+class MyParentOut(BaseModel):
+    """What a sub-account's OWN Manage Profile checks to show "Managed
+    by <parent>" instead of the family-accounts section.
+    """
+    has_parent: bool
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None
+
+
+# --- Family account switching ("Who's watching?") — routers/family.py ---
+
+class FamilyAccountOut(BaseModel):
+    """One tile on the "Who's watching?" screen. Only display-safe fields —
+    the email is masked (k***1@gmail.com), never the full address.
+    """
+    id: uuid.UUID
+    name: str
+    photo_url: Optional[str] = None
+    masked_email: str
+    is_parent: bool
+    is_current: bool
+    # True only for a sub-account looking at its PARENT's tile: getting
+    # into the parent needs the Family PIN. A parent entering its own
+    # sub-accounts (or continuing as itself) never does.
+    requires_pin: bool
+
+
+class FamilyAccountsOut(BaseModel):
+    # Every account this person can pick, the current one first. Length 1
+    # means "no family" — the client skips the picker in that case.
+    accounts: List[FamilyAccountOut]
+    # Whether the family's parent has set a Family PIN yet.
+    pin_set: bool
+
+
+class FamilySwitchRequest(BaseModel):
+    target_id: uuid.UUID
+    # PIN patterns below use [0-9], NOT \d: in Python's regex \d also matches
+    # Bengali/Arabic-Indic digits, so a PIN typed on a Bengali keyboard
+    # ("৪৮২৯") would be accepted and then never match "4829".
+    # Required only when going from a sub-account to its parent.
+    pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4}$")
+
+
+class FamilyPinSetRequest(BaseModel):
+    new_pin: str = Field(pattern=r"^[0-9]{4}$")
+    # Required when changing an existing PIN, ignored for the first one.
+    current_pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4}$")
+
+
+class FamilyPinStatusOut(BaseModel):
+    pin_set: bool
+
+
+class AdminDashboardOut(BaseModel):
+    """Admin's landing page KPI cards. "Bookings/ticket sales" aren't
+    included — there's no purchase-tracking model for event tickets
+    yet (only EventTicketTier, which defines prices, not actual
+    purchases), same gap flagged for Customer Management earlier.
+    """
+    total_users: int
+    total_organisers: int
+    active_customers: int
+    active_subscriptions: int
+    expired_subscriptions: int
+    published_videos: int
+    pending_review_videos: int
+    approved_events: int
+    pending_enquiries: int
+    total_revenue_rupees: Decimal
+    video_purchase_revenue_rupees: Decimal
+    total_reward_points: int
+    revenue_pending_pay_rupees: Decimal
+
+
+class PageHeroMediaOut(BaseModel):
+    id: uuid.UUID
+    media_url: str
+    display_order: int
+    eyebrow: Optional[str] = None
+    headline: Optional[str] = None
+    subtext: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PageHeroMediaTextUpdate(BaseModel):
+    eyebrow: Optional[str] = None
+    headline: Optional[str] = None
+    subtext: Optional[str] = None
+
+
+class PageHeroOut(BaseModel):
+    page_key: str
+    content_type: str
+    media: List[PageHeroMediaOut] = []
+    eyebrow: Optional[str] = None
+    headline: str
+    subtext: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class TheaterHeroSlideOut(BaseModel):
+    id: uuid.UUID
+    image_url: str
+    category: Optional[str] = None
+    venue: Optional[str] = None
+    title: str
+    synopsis: Optional[str] = None
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class TheaterHeroSlideTextUpdate(BaseModel):
+    category: Optional[str] = None
+    venue: Optional[str] = None
+    title: str = Field(min_length=1, max_length=255)
+    synopsis: Optional[str] = None
+
+
+class ArchiveHeroSlideOut(BaseModel):
+    id: uuid.UUID
+    image_url: str
+    eyebrow: Optional[str] = None
+    headline: str
+    subtext: Optional[str] = None
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class ArchiveHeroSlideTextUpdate(BaseModel):
+    eyebrow: Optional[str] = None
+    headline: str = Field(min_length=1, max_length=255)
+    subtext: Optional[str] = None
+
+
+class SitePageOut(BaseModel):
+    slug: str
+    title: str
+    content: str
+
+    model_config = {"from_attributes": True}
+
+
+class SitePageUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content: str = ""
+
+
+class FaqItemOut(BaseModel):
+    id: uuid.UUID
+    question: str
+    answer: str
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class FaqItemCreate(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1)
+
+
+class FaqItemUpdate(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1)
+
+
+class AdBannerOut(BaseModel):
+    id: uuid.UUID
+    image_url: str
+    redirect_url: str
+    start_date: date
+    end_date: date
+    is_active: bool
+    display_order: int
+    pages: List[str] = []
+
+    model_config = {"from_attributes": True}
+
+
+class AdBannerTextUpdate(BaseModel):
+    redirect_url: str = Field(min_length=1, max_length=2000)
+    start_date: date
+    end_date: date
+    pages: List[str] = Field(min_length=1)
+
+
+class OrganiserProfileSectionOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    content_html: str
+    display_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class OrganiserProfileSectionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content_html: str = ""
+
+    @field_validator("content_html")
+    @classmethod
+    def limit_words(cls, v):
+        # Same 500-word ceiling the frontend's RichTextEditor enforces
+        # live — checked again here since a client-side limit alone is
+        # never real enforcement (a direct API call could skip it).
+        word_count = len(re.sub(r"<[^>]*>", " ", v or "").split())
+        if word_count > 500:
+            raise ValueError(f"Content must be 500 words or fewer (currently {word_count}).")
+        return v
+
+
+class OrganiserProfileSectionUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content_html: str = ""
+
+    @field_validator("content_html")
+    @classmethod
+    def limit_words(cls, v):
+        word_count = len(re.sub(r"<[^>]*>", " ", v or "").split())
+        if word_count > 500:
+            raise ValueError(f"Content must be 500 words or fewer (currently {word_count}).")
+        return v
+
+
+class VideoLanguageOut(BaseModel):
+    language: str
+    poster_image_url: Optional[str] = None
+    video_count: int
+
+
+class VideoStudioOut(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    poster_image_url: Optional[str] = None
+    video_count: int
+
+
+class DiscoveryItemOut(BaseModel):
+    key: str
+    label: str
+    hidden: bool
+
+
+class DiscoveryRowOut(BaseModel):
+    is_visible: bool
+    all_items: List[DiscoveryItemOut]
+
+
+class DiscoverySettingsOut(BaseModel):
+    languages: DiscoveryRowOut
+    studios: DiscoveryRowOut
+
+
+class DiscoveryVisibilityUpdate(BaseModel):
+    is_visible: bool
+
+
+class DiscoveryHideItemRequest(BaseModel):
+    item_key: str
+
+
+class AdminPartnerOut(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    email: EmailStr
+    joined: datetime
+    category: str  # "registered" | "active" | "inactive" | "deactivated"
