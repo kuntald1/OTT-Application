@@ -7,6 +7,7 @@ import {
   fetchAdminVideos, fetchAdminUsers, searchAdminVideosForSpecialCategory,
 } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import { sectionLabel } from "../shared/sectionLabels";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -306,7 +307,7 @@ function SpecialCategoriesTab({ categories, loading, onChanged }) {
                 <div>
                   <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{c.title}</p>
                   <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                    {c.visible_from} → {c.visible_to} · {c.section} · {c.video_count} video{c.video_count === 1 ? "" : "s"}
+                    {c.visible_from} → {c.visible_to} · {sectionLabel(c.section)} · {c.video_count} video{c.video_count === 1 ? "" : "s"}
                     {c.is_disabled && <span style={{ color: "#f87171" }}> · Disabled</span>}
                   </p>
                 </div>
@@ -583,7 +584,7 @@ function SectionWiseTab({ categories, loading, onChanged }) {
                 <div>
                   <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{c.title}</p>
                   <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
-                    Order {c.display_order} · {c.section} · {c.video_count} video{c.video_count === 1 ? "" : "s"}
+                    Order {c.display_order} · {sectionLabel(c.section)} · {c.video_count} video{c.video_count === 1 ? "" : "s"}
                     {c.is_disabled && <span style={{ color: "#f87171" }}> · Disabled</span>}
                   </p>
                 </div>
@@ -754,7 +755,7 @@ function VideoPicker({ category, onChanged }) {
 
       {category.section !== "both" && (
         <p className="mb-2 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>
-          Showing {category.section} videos only — this row is set to "{category.section}" under Visible In.
+          Showing {sectionLabel(category.section)} videos only — this row is set to "{sectionLabel(category.section)}" under Visible In.
         </p>
       )}
 
@@ -813,7 +814,7 @@ function VideoPicker({ category, onChanged }) {
                   <span className="text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>— {v.uploaded_by_name}</span>
                   {category.section !== "both" && v.section !== category.section && (
                     <span className="text-[11px]" style={{ color: "#f87171" }}>
-                      · {v.section} video, added before this row was scoped to {category.section}
+                      · {sectionLabel(v.section)} video, added before this row was scoped to {sectionLabel(category.section)}
                     </span>
                   )}
                 </label>

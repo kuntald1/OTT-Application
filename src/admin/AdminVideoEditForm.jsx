@@ -7,6 +7,7 @@ import { fetchCategoryOptions } from "../api";
 import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
+import { SECTION_LABELS, sectionLabel } from "../shared/sectionLabels";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -25,7 +26,8 @@ const labelStyle = {
   textTransform: "uppercase", letterSpacing: "0.03em", color: "rgba(245,235,221,0.5)",
 };
 
-function Dropdown({ label, value, options, onChange, capitalizeOptions }) {
+function Dropdown({ label, value, options, onChange, capitalizeOptions, labels }) {
+  const show = (v) => (labels && labels[v]) || v;
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -36,7 +38,7 @@ function Dropdown({ label, value, options, onChange, capitalizeOptions }) {
           className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${capitalizeOptions ? "capitalize" : ""}`}
           style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
         >
-          {value}
+          {show(value)}
           <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
         {open && (
@@ -45,7 +47,7 @@ function Dropdown({ label, value, options, onChange, capitalizeOptions }) {
             <div className={`absolute left-0 top-full z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg ${capitalizeOptions ? "capitalize" : ""}`} style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.25)" }}>
               {options.map((opt) => (
                 <button key={opt} type="button" onClick={() => { onChange(opt); setOpen(false); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-white/10" style={{ color: value === opt ? COLORS.gold : "rgba(245,235,221,0.85)" }}>
-                  {opt}
+                  {show(opt)}
                 </button>
               ))}
             </div>
@@ -144,7 +146,7 @@ function SectionRowsPicker({ video, pendingSection }) {
         <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>Loading…</p>
       ) : shown.length === 0 ? (
         <p className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-          No {video.section} rows yet — create one under Special Categories &gt; Section Wise Video.
+          No {sectionLabel(video.section)} rows yet — create one under Special Categories &gt; Section Wise Video.
         </p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
@@ -418,7 +420,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
           <label style={labelStyle}>Title</label>
           <input type="text" value={form.title} onChange={update("title")} style={inputStyle} />
         </div>
-        <Dropdown label="Section" value={form.section} options={["play", "archive"]} onChange={(v) => setForm((f) => ({ ...f, section: v }))} capitalizeOptions />
+        <Dropdown label="Section" value={form.section} options={["play", "archive"]} onChange={(v) => setForm((f) => ({ ...f, section: v }))} labels={SECTION_LABELS} />
       </div>
       <div>
         <label style={labelStyle}>Description</label>

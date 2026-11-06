@@ -2,6 +2,7 @@ import React from "react";
 import { Bookmark, ArrowRight, X } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
+import { sectionLabel } from "../shared/sectionLabels";
 
 // ---------------------------------------------------------------------------
 // My List — reached from the nav once logged in.
@@ -68,7 +69,7 @@ export default function MyListPage({ onNavigate }) {
                       <X className="h-3.5 w-3.5" />
                     </button>
                     <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: COLORS.gold }}>
-                      {item.section}
+                      {sectionLabel(item.section)}
                     </span>
                   </div>
                   <p className="mt-2.5 truncate text-sm font-medium" style={{ color: COLORS.cream }}>{item.title}</p>

@@ -131,7 +131,7 @@ export default function AdminReportsPage({ initialTab }) {
   const renderRow = (row, i) => (
     <tr key={i} style={{ borderTop: "1px solid rgba(245,235,221,0.06)" }}>
       {row.map((cell, j) => (
-        <td key={j} className="px-3 py-2 align-top" style={{ color: COLORS.cream }}>
+        <td key={j} className="px-3 py-2 align-top break-words" style={{ color: COLORS.cream }}>
           {renderCell(report.headers[j], cell)}
         </td>
       ))}
@@ -215,7 +215,7 @@ export default function AdminReportsPage({ initialTab }) {
                     <tr key={i} style={{ borderTop: "1px solid rgba(245,235,221,0.06)" }}>
                       {row.map((cell, j) => (
                         j === groupByIndex ? null : (
-                          <td key={j} className="px-3 py-2 align-top" style={{ color: COLORS.cream }}>
+                          <td key={j} className="px-3 py-2 align-top break-words" style={{ color: COLORS.cream }}>
                             {renderCell(report.headers[j], cell)}
                           </td>
                         )

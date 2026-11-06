@@ -8,6 +8,7 @@ import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
 import PersonFormFields, { EMPTY_PERSON_FORM } from "../shared/PersonFormFields";
+import { SECTION_LABELS, sectionLabel } from "../shared/sectionLabels";
 
 const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
@@ -53,7 +54,8 @@ function makeEmptyCrew() {
   return { key: Math.random().toString(36).slice(2), person_id: null, role: "", name: "" };
 }
 
-function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions }) {
+function Dropdown({ label, value, options, onChange, placeholder, capitalizeOptions, labels }) {
+  const show = (v) => (labels && labels[v]) || v;
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -65,7 +67,7 @@ function Dropdown({ label, value, options, onChange, placeholder, capitalizeOpti
           className={`flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm ${capitalizeOptions ? "capitalize" : ""}`}
           style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: value ? COLORS.cream : "rgba(245,235,221,0.4)" }}
         >
-          {value || placeholder}
+          {value ? show(value) : placeholder}
           <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
         {open && (
@@ -80,7 +82,7 @@ function Dropdown({ label, value, options, onChange, placeholder, capitalizeOpti
                   className="block w-full px-4 py-2.5 text-left text-sm hover:bg-white/10"
                   style={{ color: value === opt ? COLORS.gold : "rgba(245,235,221,0.85)" }}
                 >
-                  {opt}
+                  {show(opt)}
                 </button>
               ))}
             </div>
@@ -372,7 +374,7 @@ export default function MyVideoListPage({ onBack }) {
             <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
             <div className="grid gap-4 sm:grid-cols-3">
-              <Dropdown label="Section *" value={form.section} options={["play", "archive"]} onChange={(v) => setForm((f) => ({ ...f, section: v }))} capitalizeOptions />
+              <Dropdown label="Section *" value={form.section} options={["play", "archive"]} onChange={(v) => setForm((f) => ({ ...f, section: v }))} labels={SECTION_LABELS} />
               <div>
                 <label style={labelStyle}>Release Year *</label>
                 <input type="number" min="1900" max="2100" placeholder="2026" value={form.release_year} onChange={update("release_year")} style={inputStyle} />
@@ -634,7 +636,7 @@ export default function MyVideoListPage({ onBack }) {
                       {v.release_year}{v.duration_seconds > 0 ? ` · ${Math.floor(v.duration_seconds / 3600)}h ${String(Math.round((v.duration_seconds % 3600) / 60)).padStart(2, "0")}m` : ""} · {v.age_rating}{v.languages.length > 0 ? ` · ${v.languages.join(", ")}` : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium capitalize" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{v.section}</span>
+                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{sectionLabel(v.section)}</span>
                       {v.categories.map((cat) => (
                         <span key={cat} className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{cat}</span>
                       ))}
