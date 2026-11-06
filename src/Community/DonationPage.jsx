@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, HandCoins, CheckCircle2 } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchOrganisers, fetchOrganiserDonationDetails, fetchMyDonationRegistrationStatus, deactivateMyDonationRegistration, deleteMyDonationRegistration } from "../api";
+import { fetchOrganisers, fetchOrganiserDonationDetails, fetchMyDonationRegistrationStatus, fetchMyDonationRegistrationDetails, updateMyPaymentDetails, deactivateMyDonationRegistration, deleteMyDonationRegistration } from "../api";
 import DonationRegistrationModal from "./DonationRegistrationModal";
 import ConfirmDialog from "../shared/ConfirmDialog";
 
@@ -32,6 +32,7 @@ export default function DonationPage({ onBack }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [registrationActionBusy, setRegistrationActionBusy] = useState(false);
   const [registrationActionError, setRegistrationActionError] = useState("");
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
 
   const loadMyRegistrationStatus = () => {
     if (!isLoggedIn || !profile || profile.role !== "plays_organiser") {
@@ -134,6 +135,17 @@ export default function DonationPage({ onBack }) {
             {registrationActionError && (
               <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{registrationActionError}</p>
             )}
+            {(myRegistration.latest_status === "approved" ||
+              myRegistration.latest_status === "pending") && (
+              <button
+                type="button"
+                onClick={() => setShowPaymentDetails(true)}
+                className="mt-3 rounded-full px-4 py-1.5 text-xs font-semibold"
+                style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+              >
+                Payment details — QR &amp; bank account
+              </button>
+            )}
             {myRegistration.latest_status === "approved" && (
               <div className="mt-3 flex gap-2">
                 <button
@@ -211,6 +223,10 @@ export default function DonationPage({ onBack }) {
 
       {selected && (
         <DonateModal organiser={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {showPaymentDetails && (
+        <PaymentDetailsModal onClose={() => setShowPaymentDetails(false)} />
       )}
 
       {showRegisterModal && (
@@ -364,6 +380,163 @@ function Row({ label, value, copied, onCopy }) {
       >
         {copied === label ? "Copied" : "Copy"}
       </button>
+    </div>
+  );
+}
+// Where an organiser sets, or later changes, how supporters pay them.
+// Saving takes effect immediately — see the endpoint's docstring for why
+// a new bank account does not go back for approval.
+function PaymentDetailsModal({ onClose }) {
+  const [accountNumber, setAccountNumber] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [qrFile, setQrFile] = useState(null);
+  const [currentQrUrl, setCurrentQrUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetchMyDonationRegistrationDetails()
+      .then((r) => {
+        setAccountNumber(r.account_number || "");
+        setIfscCode(r.ifsc_code || "");
+        setCurrentQrUrl(r.qr_code_url || "");
+      })
+      .catch((e) => setError(e.message || "Couldn't load your details."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const updated = await updateMyPaymentDetails({ accountNumber, ifscCode, qrCodeFile: qrFile });
+      setCurrentQrUrl(updated.qr_code_url || "");
+      setQrFile(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setError(e.message || "Couldn't save your payment details.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    borderRadius: 8,
+    border: "1px solid rgba(245,235,221,0.15)",
+    background: "rgba(245,235,221,0.05)",
+    color: COLORS.cream,
+    padding: "10px 14px",
+    fontSize: 14,
+    outline: "none",
+  };
+  const labelStyle = {
+    display: "block",
+    marginBottom: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    color: "rgba(245,235,221,0.5)",
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+      onClick={saving ? undefined : onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl p-6"
+        style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.2)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>Payment details</h2>
+        <p className="mb-5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+          This is what supporters see when they tap Donate. Changes show up straight away.
+        </p>
+
+        {loading ? (
+          <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>Loading…</p>
+        ) : (
+          <>
+            <div className="mb-4">
+              <label style={labelStyle}>Account Number</label>
+              <input
+                type="text"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
+            <div className="mb-4">
+              <label style={labelStyle}>IFSC Code</label>
+              <input
+                type="text"
+                value={ifscCode}
+                onChange={(e) => setIfscCode(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
+            <div className="mb-2">
+              <label style={labelStyle}>QR Code</label>
+              {currentQrUrl && !qrFile && (
+                <img
+                  src={currentQrUrl}
+                  alt="Your current payment QR code"
+                  className="mb-2 w-32 rounded-lg"
+                  style={{ background: "#fff", padding: 6 }}
+                />
+              )}
+              <label
+                className="flex cursor-pointer items-center rounded-lg border px-4 py-2.5 text-sm"
+                style={{
+                  borderColor: "rgba(245,235,221,0.15)",
+                  color: qrFile ? COLORS.cream : "rgba(245,235,221,0.5)",
+                }}
+              >
+                {qrFile ? qrFile.name : currentQrUrl ? "Replace image…" : "Choose image…"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => setQrFile(e.target.files?.[0] || null)}
+                />
+              </label>
+            </div>
+
+            <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+              Keep at least one: bank details (both fields) or a QR code.
+            </p>
+
+            {!!error && <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}
+            {saved && <p className="mb-3 text-xs font-medium" style={{ color: "#6FCF97" }}>Saved.</p>}
+
+            <div className="flex items-center justify-between">
+              <button
+                onClick={onClose}
+                disabled={saving}
+                className="text-xs hover:opacity-80"
+                style={{ color: "rgba(245,235,221,0.5)" }}
+              >
+                Close
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-full px-6 py-2.5 text-sm font-semibold"
+                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR, opacity: saving ? 0.6 : 1 }}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

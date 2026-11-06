@@ -119,6 +119,77 @@ def my_donation_registration_status(
     )
 
 
+@router.get("/mine/details", response_model=DonationRegistrationOut)
+def my_donation_registration_details(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The organiser's own registration, values and all.
+
+    /mine above answers only "do you have one, and what state is it in",
+    which is what the Register link needs. This one is for the organiser
+    editing their own payment details, so it hands back what is actually
+    stored.
+    """
+    return _to_out(_get_my_latest(current_user, db), current_user.name)
+
+
+@router.patch("/mine/payment-details", response_model=DonationRegistrationOut)
+async def update_my_payment_details(
+    account_number: str = Form(""),
+    ifsc_code: str = Form(""),
+    qr_code: UploadFile | None = File(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change where donations should be sent.
+
+    This takes effect immediately and does NOT send the registration
+    back for approval. What the admin approved is the organiser — that
+    this person may collect donations through theomy at all — and that
+    judgement does not change because they switched bank. Holding a new
+    account number for review would only mean donations going to an
+    account they have closed.
+
+    The identity document is deliberately not editable here: it is the
+    evidence the admin's decision rests on. Replacing it needs a new
+    registration.
+
+    Leaving a field empty clears it; omitting the QR file keeps the
+    current image. A registration must always keep at least one way to
+    be paid, so clearing everything is refused.
+    """
+    registration = _get_my_latest(current_user, db)
+    if registration.status not in (
+        DonationRegistrationStatus.pending,
+        DonationRegistrationStatus.approved,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only a pending or approved registration can be updated.",
+        )
+
+    account = account_number.strip()
+    ifsc = ifsc_code.strip()
+    qr_url = registration.qr_code_url
+    if qr_code is not None and qr_code.filename:
+        qr_url = await _save_upload(qr_code, QR_UPLOAD_DIR, ALLOWED_QR_TYPES, "donation_qr_codes")
+
+    has_bank = bool(account and ifsc)
+    if not has_bank and not qr_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Keep either bank details (account number and IFSC) or a QR code.",
+        )
+
+    registration.account_number = account or None
+    registration.ifsc_code = ifsc or None
+    registration.qr_code_url = qr_url
+    db.commit()
+    db.refresh(registration)
+    return _to_out(registration, current_user.name)
+
+
 @router.patch("/mine/deactivate", response_model=DonationRegistrationOut)
 def deactivate_my_donation_registration(
     current_user: User = Depends(get_current_user),

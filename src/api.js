@@ -1104,6 +1104,33 @@ export function fetchMyDonationRegistrationStatus() {
   return request("/donation-registrations/mine", { auth: true });
 }
 
+// The organiser's own registration, values included — what the Edit
+// form pre-fills from. (fetchMyDonationRegistrationStatus only answers
+// "do you have one and what state is it in".)
+export function fetchMyDonationRegistrationDetails() {
+  return request("/donation-registrations/mine/details", { auth: true });
+}
+
+// Changing where donations go takes effect immediately; it does not send
+// the registration back for approval. See the endpoint's docstring.
+export async function updateMyPaymentDetails({ accountNumber, ifscCode, qrCodeFile }) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("account_number", accountNumber || "");
+  formData.append("ifsc_code", ifscCode || "");
+  if (qrCodeFile) formData.append("qr_code", qrCodeFile);
+  const res = await fetch(`${BASE_URL}/donation-registrations/mine/payment-details`, {
+    method: "PATCH",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't save your payment details.");
+  }
+  return data;
+}
+
 export async function submitDonationRegistration({ groupName, accountNumber, ifscCode, qrCodeFile, documentFile }) {
   const token = getToken();
   const formData = new FormData();
