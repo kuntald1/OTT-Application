@@ -36,6 +36,7 @@ import ResetPasswordPage from './Auth/ResetPasswordPage'
 import StripeSuccessPage from './Subscription/StripeSuccessPage'
 import MyVideoListPage from './Profile/MyVideoListPage'
 import MyLiveStreamsPage from './Profile/MyLiveStreamsPage'
+import MyBookingsPage from './Profile/MyBookingsPage'
 import RevenuePage from './Profile/RevenuePage'
 import HistoryPage from './Profile/HistoryPage'
 import EventEnquiryPage from './Profile/EventEnquiryPage'
@@ -262,6 +263,8 @@ export default function App() {
           <MyVideoListPage onBack={goBack} />
         ) : route.view === 'myLiveStreams' ? (
           <MyLiveStreamsPage onBack={goBack} />
+        ) : route.view === 'myBookings' ? (
+          <MyBookingsPage onBack={goBack} />
         ) : route.view === 'revenue' ? (
           <RevenuePage onBack={goBack} />
         ) : route.view === 'history' ? (

@@ -504,6 +504,14 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                     My Video List
                   </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => { onNavigate?.("myBookings"); setMenuOpen(false); }}
+                    className="rounded-full px-4 py-2.5 text-sm font-medium"
+                    style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                  >
+                    My Bookings
+                  </button>
                   {profile.can_live_stream && (
                     <button
                       type="button"
@@ -1117,6 +1125,14 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
               My Video List
             </button>
             )}
+            <button
+              type="button"
+              onClick={() => { onNavigate?.("myBookings"); onClose(); }}
+              className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+              style={{ color: COLORS.gold }}
+            >
+              My Bookings
+            </button>
             {profile.can_live_stream && (
               <button
                 type="button"

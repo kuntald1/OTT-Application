@@ -947,6 +947,63 @@ class EventTicketTier(Base):
     quantity = Column(Integer, nullable=False)
 
 
+class EventTicketBooking(Base):
+    """One paid booking of one tier for one approved event.
+
+    This is a ticket to a show people physically attend, which is why
+    it is sold through Razorpay inside the mobile app as well as on the
+    site: Google Play's billing requirement covers things consumed
+    inside the app, not a seat in a hall.
+
+    The tier's name and price are COPIED onto the booking rather than
+    read through the foreign key, so changing a tier's price later, or
+    deleting it, never rewrites what somebody already paid or what
+    their ticket says.
+
+    quantity is how many seats this one booking covers. Availability is
+    tier.quantity minus the seats already taken — see
+    routers/event_tickets.py, which counts paid bookings plus the very
+    recent unpaid ones so two people can't both buy the last seat while
+    one of them is still in the Razorpay window.
+
+    booking_reference is what a person reads out ("THM-7Q4K2M"), and
+    qr_token is the long random string behind the QR code shown at the
+    door. They are separate on purpose: the reference may be shared
+    over the phone, while the token is the thing that admits someone,
+    and only the token is accepted at check-in.
+    """
+    __tablename__ = "event_ticket_bookings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    enquiry_id = Column(UUID(as_uuid=True), ForeignKey("event_enquiries.id"), nullable=False, index=True)
+    tier_id = Column(UUID(as_uuid=True), ForeignKey("event_ticket_tiers.id"), nullable=False, index=True)
+
+    tier_name = Column(String(100), nullable=False)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(10), nullable=False, default="INR")
+
+    booking_reference = Column(String(24), unique=True, nullable=True, index=True)
+    qr_token = Column(String(64), unique=True, nullable=True, index=True)
+
+    gateway = Column(Enum(PaymentGateway), nullable=False, default=PaymentGateway.razorpay)
+    gateway_order_id = Column(String(255), nullable=True, index=True)
+    gateway_payment_id = Column(String(255), nullable=True)
+    status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.created, index=True)
+
+    checked_in_at = Column(DateTime(timezone=True), nullable=True)
+    checked_in_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class EventEnquiryAttachment(Base):
     __tablename__ = "event_enquiry_attachments"
 

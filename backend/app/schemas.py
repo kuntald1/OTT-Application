@@ -909,6 +909,82 @@ class TicketTierOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TicketTierAvailabilityOut(BaseModel):
+    """A tier plus how many seats are actually left, which is what the
+    Buy screens need in order to grey out a sold-out row.
+    """
+    id: uuid.UUID
+    tier_name: str
+    price: Decimal
+    quantity: int
+    taken: int
+    available: int
+    sold_out: bool
+
+
+class CreateTicketBookingRequest(BaseModel):
+    tier_id: uuid.UUID
+    quantity: int = Field(ge=1, le=10)
+
+
+class CreateTicketBookingOrderResponse(BaseModel):
+    booking_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_key_id: str
+    amount: Decimal
+    currency: str
+    event_title: str
+    tier_name: str
+    quantity: int
+
+
+class VerifyTicketBookingRequest(BaseModel):
+    booking_id: uuid.UUID
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+class TicketBookingOut(BaseModel):
+    id: uuid.UUID
+    enquiry_id: uuid.UUID
+    event_title: Optional[str] = None
+    event_venue: Optional[str] = None
+    event_date: Optional[datetime] = None
+    event_time: Optional[str] = None
+    tier_name: str
+    unit_price: Decimal
+    quantity: int
+    amount: Decimal
+    currency: str
+    booking_reference: Optional[str] = None
+    qr_token: Optional[str] = None
+    status: str
+    checked_in_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CheckInTicketRequest(BaseModel):
+    qr_token: str = Field(min_length=8, max_length=64)
+
+
+class CheckInTicketResponse(BaseModel):
+    """What the person on the door sees. `admitted` is false both for a
+    ticket that was never valid and for one already used, with `reason`
+    saying which — those two need different responses at the door.
+    """
+    admitted: bool
+    reason: str
+    booking_reference: Optional[str] = None
+    event_title: Optional[str] = None
+    tier_name: Optional[str] = None
+    quantity: Optional[int] = None
+    attendee_name: Optional[str] = None
+    checked_in_at: Optional[datetime] = None
+
+
 class DonationRegistrationOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

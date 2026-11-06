@@ -718,3 +718,112 @@ def send_live_streaming_enabled_email(to_email: str, name: str) -> None:
         _send_email(to_email, subject, text_body, html_body)
     except Exception:
         pass
+
+
+def send_ticket_booking_whatsapp(
+    to_phone: str, event_title: str, tier_name: str, quantity: int, amount, reference: str
+) -> None:
+    """Confirmation for a ticket to a show people physically attend —
+    same non-fatal, Twilio-optional pattern as the others above.
+
+    The booking reference goes in the message on purpose: it is what
+    someone reads out at the door if their phone is flat and they can't
+    show the QR code.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    seats = f"{quantity} ticket" + ("" if quantity == 1 else "s")
+    body = (
+        f"theomy: Booking confirmed for \"{event_title}\". "
+        f"{seats}, {tier_name}, ₹{amount}. "
+        f"Your booking number is {reference}. "
+        f"Show the QR code in the app or on theomy.com at the venue. See you there!"
+    )
+    try:
+        client.messages.create(
+            from_=settings.TWILIO_FROM_NUMBER,
+            to=f"whatsapp:{to_number}",
+            body=body,
+        )
+    except Exception:
+        pass
+
+
+def send_ticket_booking_email(
+    to_email: str,
+    event_title: str,
+    tier_name: str,
+    quantity: int,
+    amount,
+    reference: str,
+    venue: str = "",
+    when: str = "",
+) -> None:
+    """Emailed booking confirmation. Non-fatal on failure, like every
+    other notification here — the payment has already gone through.
+    """
+    subject = f"Your theomy booking for {event_title}"
+    seats = f"{quantity} ticket" + ("" if quantity == 1 else "s")
+    where_when = "\n".join(filter(None, [f"Venue: {venue}" if venue else "", f"When: {when}" if when else ""]))
+
+    text_body = f"""Hi,
+
+Your booking is confirmed.
+
+Event: {event_title}
+{where_when}
+Tickets: {seats} ({tier_name})
+Paid: ₹{amount}
+
+Booking number: {reference}
+
+Show the QR code from My Bookings — in the theomy app or on
+theomy.com — at the venue. If your phone is flat, the booking number
+above is enough.
+
+See you at the show.
+theomy
+"""
+
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">Booking confirmed</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              {event_title}
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8);">
+              <tr><td style="padding:6px 0;">Venue</td><td style="padding:6px 0; text-align:right; font-weight:600;">{venue or "—"}</td></tr>
+              <tr><td style="padding:6px 0;">When</td><td style="padding:6px 0; text-align:right;">{when or "—"}</td></tr>
+              <tr><td style="padding:6px 0;">Tickets</td><td style="padding:6px 0; text-align:right;">{seats} ({tier_name})</td></tr>
+              <tr><td style="padding:6px 0;">Paid</td><td style="padding:6px 0; text-align:right; font-weight:600;">&#8377;{amount}</td></tr>
+            </table>
+            <p style="margin:24px 0 0 0; padding:16px; background:rgba(212,175,55,0.08); border:1px solid rgba(212,175,55,0.25); border-radius:10px; font-size:18px; letter-spacing:2px; text-align:center; color:#d4af37; font-weight:700;">
+              {reference}
+            </p>
+            <p style="margin:16px 0 0 0; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.6);">
+              Show the QR code from My Bookings, in the theomy app or on theomy.com, at the venue.
+              If your phone is flat, the booking number above is enough.
+            </p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    _send_email(to_email, subject, text_body, html_body)

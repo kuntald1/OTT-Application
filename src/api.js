@@ -806,6 +806,55 @@ export function fetchPublicEvent(id) {
   return request(`/event-enquiries/${id}/public`);
 }
 
+// --- Event ticket booking (a show people physically attend) ---
+//
+// Unlike a subscription or a pay-per-view stream, this is a real-world
+// service, so it is sold in the mobile app as well as here — see
+// backend/app/routers/event_tickets.py.
+
+// Open to everyone: the page shows "Sold out" before asking anyone to
+// sign in.
+export function fetchTicketAvailability(enquiryId) {
+  return request(`/event-tickets/events/${enquiryId}/availability`);
+}
+
+export function createTicketBookingOrder({ enquiryId, tierId, quantity }) {
+  return request(`/event-tickets/events/${enquiryId}/razorpay/create-order`, {
+    method: "POST",
+    auth: true,
+    body: { tier_id: tierId, quantity },
+  });
+}
+
+export function verifyTicketBookingPayment({ bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
+  return request("/event-tickets/razorpay/verify", {
+    method: "POST",
+    auth: true,
+    body: {
+      booking_id: bookingId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
+}
+
+export function fetchMyTicketBookings() {
+  return request("/event-tickets/mine", { auth: true });
+}
+
+// The QR is drawn server-side. An <img> can't send an Authorization
+// header, and putting the token in the query string would leak it into
+// server logs and Referer headers — so fetch the PNG properly and hand
+// back a blob URL for the <img> to use. Revoke it when the page unmounts.
+export async function fetchTicketQrObjectUrl(bookingId) {
+  const res = await fetch(`${BASE_URL}/event-tickets/${bookingId}/qr.png`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error("Couldn't load the QR code.");
+  return URL.createObjectURL(await res.blob());
+}
+
 export function createDonationOrder({ organiserUserId, amount }) {
   return request("/donations/razorpay/create-order", {
     method: "POST",
