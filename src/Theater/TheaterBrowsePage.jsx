@@ -4,6 +4,7 @@ import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../th
 import { fetchApprovedEvents } from "../api";
 import { useApp } from "../context/AppContext";
 import { useAnimatedModal } from "../shared/useAnimatedModal";
+import TicketBookingPanel from "../shared/TicketBookingPanel";
 
 // ---------------------------------------------------------------------------
 // Theater Browse ("Ticketing") — real, admin-approved events (from the
@@ -405,16 +406,14 @@ function ShowModal({ show, closing, onClose }) {
           {show.synopsis && <p className="mb-4 text-sm leading-relaxed" style={{ color: T.textMuted }}>{show.synopsis}</p>}
           <p className="text-xs" style={{ color: T.textFaint }}>Presented by {show.orgName}</p>
 
-          {show.ticketTiers.length > 0 && (
-            <div className="mt-4 flex flex-col gap-1.5">
-              {show.ticketTiers.map((t) => (
-                <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <span style={{ color: T.text }}>{t.tier_name}</span>
-                  <span style={{ color: COLORS.gold }}>₹{Number(t.price).toLocaleString("en-IN")}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* The tiers, how many seats are left and the checkout all
+              live in one shared component, so this modal and the
+              shareable event link cannot drift apart again. */}
+          <TicketBookingPanel
+            enquiryId={show.id}
+            isLoggedIn={isLoggedIn}
+            onRequestLogin={requestLogin}
+          />
         </div>
       </div>
     </div>
