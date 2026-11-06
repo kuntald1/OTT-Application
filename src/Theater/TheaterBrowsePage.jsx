@@ -317,6 +317,9 @@ function ShowModal({ show, closing, onClose }) {
   const { isLoggedIn, requestLogin, isInList, toggleListItem } = useApp();
   const saved = isInList(show.id);
   const [entered, setEntered] = useState(false);
+  // Bumping this tells the booking panel below to pick the cheapest tier
+  // that still has seats — this button used to do nothing at all.
+  const [selectSignal, setSelectSignal] = useState(0);
 
   React.useEffect(() => {
     const raf = requestAnimationFrame(() => setEntered(true));
@@ -376,6 +379,7 @@ function ShowModal({ show, closing, onClose }) {
         <div className="px-6 py-6">
           <div className="mb-4 flex items-center gap-3">
             <button
+              onClick={() => setSelectSignal((n) => n + 1)}
               type="button"
               className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
               style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
@@ -413,6 +417,7 @@ function ShowModal({ show, closing, onClose }) {
             enquiryId={show.id}
             isLoggedIn={isLoggedIn}
             onRequestLogin={requestLogin}
+            selectSignal={selectSignal}
           />
         </div>
       </div>

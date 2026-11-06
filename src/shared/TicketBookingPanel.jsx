@@ -22,7 +22,46 @@ import {
 // filling up.
 // ---------------------------------------------------------------------------
 
-export default function TicketBookingPanel({ enquiryId, isLoggedIn, onRequestLogin }) {
+// Razorpay's widget is loaded per page across this app (SubscriptionPage,
+// LiveWatchPage, VideoBrowsePage, DonationPage all do their own copy of
+// this), so the panel has to bring its own — it can be the first thing a
+// visitor opens. ensureRazorpay also WAITS for a script that is still in
+// flight, instead of failing on a fast click.
+function ensureRazorpay() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve(window.Razorpay);
+
+    let script = document.getElementById("razorpay-checkout-js");
+    if (!script) {
+      script = document.createElement("script");
+      script.id = "razorpay-checkout-js";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    const done = () => (window.Razorpay ? resolve(window.Razorpay) : fail());
+    const fail = () =>
+      reject(new Error("Payment widget failed to load. Please check your connection and try again."));
+
+    script.addEventListener("load", done, { once: true });
+    script.addEventListener("error", fail, { once: true });
+    // A script tag already on the page may have finished before we
+    // attached the listener, so poll briefly as a backstop.
+    const started = Date.now();
+    const poll = setInterval(() => {
+      if (window.Razorpay) {
+        clearInterval(poll);
+        resolve(window.Razorpay);
+      } else if (Date.now() - started > 10000) {
+        clearInterval(poll);
+        fail();
+      }
+    }, 150);
+  });
+}
+
+export default function TicketBookingPanel({ enquiryId, isLoggedIn, onRequestLogin, selectSignal }) {
   const [availability, setAvailability] = useState([]);
   const [selectedTierId, setSelectedTierId] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -41,6 +80,24 @@ export default function TicketBookingPanel({ enquiryId, isLoggedIn, onRequestLog
   }, [enquiryId]);
 
   useEffect(loadAvailability, [loadAvailability]);
+
+  // Warm the widget up while the person is still choosing, so Pay opens
+  // straight away.
+  useEffect(() => {
+    ensureRazorpay().catch(() => {});
+  }, []);
+
+  // The caller's "Book Tickets" button bumps selectSignal; that picks the
+  // cheapest tier with seats left, so the button finally does something.
+  useEffect(() => {
+    if (!selectSignal) return;
+    const first = availability.find((t) => !t.sold_out);
+    if (first) {
+      setBookError("");
+      setSelectedTierId(first.id);
+      setQuantity(1);
+    }
+  }, [selectSignal]);          // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedTier = availability.find((t) => t.id === selectedTierId) || null;
   const maxForTier = selectedTier ? Math.min(10, selectedTier.available) : 1;
@@ -67,10 +124,8 @@ export default function TicketBookingPanel({ enquiryId, isLoggedIn, onRequestLog
         tierId: selectedTier.id,
         quantity,
       });
-      if (!window.Razorpay) {
-        throw new Error("Payment widget failed to load. Please refresh and try again.");
-      }
-      const rzp = new window.Razorpay({
+      const Razorpay = await ensureRazorpay();
+      const rzp = new Razorpay({
         key: order.razorpay_key_id,
         amount: Math.round(Number(order.amount) * 100),
         currency: order.currency,
