@@ -36,7 +36,7 @@ export default function MyListPage({ onNavigate }) {
             <div>
               <p className="text-lg font-semibold" style={{ color: COLORS.cream }}>Nothing saved yet</p>
               <p className="mt-1 max-w-sm text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
-                Browse Video Streaming, Movies, Theater, or Archive and tap the + on any title to add it here.
+                Browse Video Streaming, Movies, Theater, or Heritage and tap the + on any title to add it here.
               </p>
             </div>
             <button
@@ -87,7 +87,7 @@ export default function MyListPage({ onNavigate }) {
           <div>
             <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>Want unlimited access?</p>
             <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.6)" }}>
-              See our Play, Archive, and Both plans.
+              See our Contemporary, Heritage, and Both plans.
             </p>
           </div>
           <button

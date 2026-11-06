@@ -27,7 +27,7 @@ const ASSIGNABLE_MENUS = [
   { key: "help-center", label: "Help Center" },
   { key: "page-heroes", label: "Page Heroes" },
   { key: "theater-hero-slides", label: "Ticketing Hero Slides" },
-  { key: "archive-hero-slides", label: "Archive Hero Slides" },
+  { key: "archive-hero-slides", label: "Heritage Hero Slides" },
   { key: "content-policy", label: "Content & Policy" },
   { key: "ad-banners", label: "Ad Banners" },
   { key: "discovery-settings", label: "Discovery Rows" },

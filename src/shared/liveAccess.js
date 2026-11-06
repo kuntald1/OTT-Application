@@ -9,7 +9,7 @@
 // a destination.
 // ---------------------------------------------------------------------------
 
-export const SECTION_LABELS = { play: "Plays", archive: "Archive", both: "theomy" };
+export const SECTION_LABELS = { play: "Contemporary", archive: "Heritage", both: "theomy" };
 
 export function isLiveNow(ev) {
   return ev?.status === "active";

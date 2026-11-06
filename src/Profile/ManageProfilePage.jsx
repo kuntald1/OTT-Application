@@ -383,7 +383,7 @@ export default function ManageProfilePage({ onBack }) {
                 />
               </label>
               <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
-                Shown at the top of your video list (e.g. "{profile.name} — Plays"). Recommended: a wide banner image, at least 1600px across.
+                Shown at the top of your video list (e.g. "{profile.name} — Contemporary"). Recommended: a wide banner image, at least 1600px across.
               </p>
             </div>
 

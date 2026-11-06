@@ -14,8 +14,8 @@ const labelStyle = {
 };
 
 const PAGE_OPTIONS = [
-  { key: "plays", label: "Plays" },
-  { key: "archive", label: "Archive" },
+  { key: "plays", label: "Contemporary" },
+  { key: "archive", label: "Heritage" },
   { key: "mylist", label: "My List" },
   { key: "community", label: "Community" },
   { key: "ticketing", label: "Ticketing" },
@@ -156,7 +156,7 @@ export default function AdminAdBannersPage() {
         <Megaphone className="h-6 w-6" style={{ color: COLORS.gold }} /> Ad Banners
       </h1>
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-        The auto-sliding promo banner at the top of Plays, Archive, My List, Community, and Ticketing — image, redirect link (opens in a new tab), an active date range, and which page(s) it shows on.
+        The auto-sliding promo banner at the top of Contemporary, Heritage, My List, Community, and Ticketing — image, redirect link (opens in a new tab), an active date range, and which page(s) it shows on.
       </p>
 
       {error && <p className="mb-4 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}

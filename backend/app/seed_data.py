@@ -24,8 +24,8 @@ def seed_menus(db):
     # it's purely a dropdown trigger; its children below carry the actual
     # navigable destinations.
     top_level = [
-        {"label": "Plays", "view": "hero", "display_order": 0},
-        {"label": "Archive", "view": "accordion", "display_order": 1},
+        {"label": "Contemporary", "view": "hero", "display_order": 0},
+        {"label": "Heritage", "view": "accordion", "display_order": 1},
         {"label": "My List", "view": "mylist", "requires_auth": True, "display_order": 2},
         {"label": "Community", "view": "community", "display_order": 3},
         {"label": "Category", "view": None, "display_order": 4},
@@ -79,21 +79,21 @@ def seed_subscription_plans(db):
 
     plans = [
         {
-            "name": "Play",
+            "name": "Contemporary",
             "tagline": "Unlimited Video Streaming",
             "base_price": 100,
             "per_extra_screen": 60,
             "base_price_usd": 2.99,
             "per_extra_screen_usd": 1.49,
-            "features": ["Unlimited access to all Play content", "New titles added weekly"],
+            "features": ["Unlimited access to all Contemporary content", "New titles added weekly"],
             "grants_play": True,
             "grants_archive": False,
             "highlighted": False,
             "display_order": 0,
         },
         {
-            "name": "Archive",
-            "tagline": "Unlimited Archive access",
+            "name": "Heritage",
+            "tagline": "Unlimited Heritage access",
             "base_price": 100,
             "per_extra_screen": 60,
             "base_price_usd": 2.99,
@@ -106,12 +106,12 @@ def seed_subscription_plans(db):
         },
         {
             "name": "Both",
-            "tagline": "Play + Archive, unlimited",
+            "tagline": "Contemporary + Heritage, unlimited",
             "base_price": 150,
             "per_extra_screen": 90,
             "base_price_usd": 4.49,
             "per_extra_screen_usd": 2.29,
-            "features": ["Everything in Play", "Everything in Archive", "Best value vs buying separately"],
+            "features": ["Everything in Contemporary", "Everything in Heritage", "Best value vs buying separately"],
             "grants_play": True,
             "grants_archive": True,
             "highlighted": True,
@@ -341,7 +341,7 @@ def seed_site_content(db):
     if db.query(FaqItem).count() == 0:
         faqs = [
             {"question": "What is theomy?", "answer": "theomy is a platform for streaming Bengali theatre — new plays, an archive of past performances, and ticketing for live shows.", "display_order": 0},
-            {"question": "How do I subscribe?", "answer": "Go to any plan page and choose Play, Archive, or Both, then pick a duration. Payment is handled securely through our payment gateway.", "display_order": 1},
+            {"question": "How do I subscribe?", "answer": "Go to any plan page and choose Contemporary, Heritage, or Both, then pick a duration. Payment is handled securely through our payment gateway.", "display_order": 1},
             {"question": "Can I watch on multiple devices?", "answer": "Yes — your plan includes a set number of screens, and you can add family sub-accounts from Manage Profile.", "display_order": 2},
         ]
         for f in faqs:

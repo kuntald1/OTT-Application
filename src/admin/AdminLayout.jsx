@@ -91,7 +91,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "help-center", label: "Help Center", icon: LifeBuoy, visible: canSeeMenu("help-center") },
     { id: "page-heroes", label: "Page Heroes", icon: GalleryHorizontal, visible: canSeeMenu("page-heroes") },
     { id: "theater-hero-slides", label: "Ticketing Hero Slides", icon: Contact2, visible: canSeeMenu("theater-hero-slides") },
-    { id: "archive-hero-slides", label: "Archive Hero Slides", icon: Landmark, visible: canSeeMenu("archive-hero-slides") },
+    { id: "archive-hero-slides", label: "Heritage Hero Slides", icon: Landmark, visible: canSeeMenu("archive-hero-slides") },
     { id: "content-policy", label: "Content & Policy", icon: FileText, visible: canSeeMenu("content-policy") },
     { id: "ad-banners", label: "Ad Banners", icon: Megaphone, visible: canSeeMenu("ad-banners") },
     { id: "discovery-settings", label: "Discovery Rows", icon: Compass, visible: canSeeMenu("discovery-settings") },

@@ -35,7 +35,7 @@ export default function FilteredVideosPage({ section, language, uploadedBy, stud
     fetchStudioCoverImage(uploadedBy).then((r) => setCoverImageUrl(r.cover_image_url)).catch(() => setCoverImageUrl(null));
   }, [uploadedBy]);
 
-  const sectionLabel = section === "archive" ? "Archive" : "Plays";
+  const sectionLabel = section === "archive" ? "Heritage" : "Contemporary";
   const heading = uploadedBy ? (studioName || title) : title;
   const isStudioView = Boolean(uploadedBy);
 

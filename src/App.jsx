@@ -216,7 +216,7 @@ export default function App() {
           <FilteredVideosPage
             section={route.params.section}
             language={route.params.language}
-            title={`${route.params.language} — ${route.params.section === "archive" ? "Archive" : "Plays"}`}
+            title={`${route.params.language} — ${route.params.section === "archive" ? "Heritage" : "Contemporary"}`}
             onBack={goBack}
             onOpenVideo={openVideo}
           />
@@ -225,7 +225,7 @@ export default function App() {
             section={route.params.section}
             uploadedBy={route.params.uploadedBy}
             studioName={route.params.studioName}
-            title={`${route.params.studioName} — ${route.params.section === "archive" ? "Archive" : "Plays"}`}
+            title={`${route.params.studioName} — ${route.params.section === "archive" ? "Heritage" : "Contemporary"}`}
             onBack={goBack}
             onOpenVideo={openVideo}
           />

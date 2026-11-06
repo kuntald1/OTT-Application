@@ -128,8 +128,8 @@ export default function LiveEventFields({ values, onChange, dropdownBg = "#15030
             className={INPUT_CLASS}
             style={{ ...INPUT_STYLE, ...(isPaid ? { opacity: 0.55, cursor: "not-allowed" } : null) }}
           >
-            <option value="play" style={optionStyle}>Play</option>
-            <option value="archive" style={optionStyle}>Archive</option>
+            <option value="play" style={optionStyle}>Contemporary</option>
+            <option value="archive" style={optionStyle}>Heritage</option>
             <option value="both" style={optionStyle}>Both</option>
           </select>
           {isPaid && (

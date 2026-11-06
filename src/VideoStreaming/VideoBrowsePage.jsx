@@ -1347,9 +1347,9 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                       style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
                     >
                       {video.section === "archive"
-                        ? "Subscribe to Archive"
+                        ? "Subscribe to Heritage"
                         : video.section === "play"
-                        ? "Subscribe to Play"
+                        ? "Subscribe to Contemporary"
                         : "Subscribe to Watch"}
                     </button>
                   )}

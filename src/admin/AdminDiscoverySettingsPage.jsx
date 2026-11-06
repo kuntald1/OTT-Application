@@ -25,7 +25,7 @@ function RowCard({ rowKey, row, onToggleRow, onToggleItem, busyKey }) {
 
       {!row.is_visible && (
         <p className="mb-3 text-xs font-medium" style={{ color: "#f87171" }}>
-          The whole row is off — it won't show on Plays or Archive regardless of individual items below.
+          The whole row is off — it won't show on Contemporary or Heritage regardless of individual items below.
         </p>
       )}
 
@@ -110,7 +110,7 @@ export default function AdminDiscoverySettingsPage() {
         <Compass className="h-6 w-6" style={{ color: COLORS.gold }} /> Discovery Row Settings
       </h1>
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-        Show or hide the "Popular Languages" and "Studios" rows on Plays and Archive — the whole row, or just individual items.
+        Show or hide the "Popular Languages" and "Studios" rows on Contemporary and Heritage — the whole row, or just individual items.
       </p>
 
       {error && <p className="mb-4 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}

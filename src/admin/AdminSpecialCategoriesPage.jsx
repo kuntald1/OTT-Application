@@ -193,7 +193,7 @@ function SpecialCategoriesTab({ categories, loading, onChanged }) {
             <Sparkles className="h-5 w-5" style={{ color: COLORS.gold }} /> Special Categories
           </h1>
           <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-            A curated row (e.g. "Sunday Special") that shows above every other row on Play/Archive, only
+            A curated row (e.g. "Sunday Special") that shows above every other row on Contemporary/Heritage, only
             between the dates you set — it disappears on its own after the end date, no cleanup needed.
           </p>
         </div>
@@ -223,8 +223,8 @@ function SpecialCategoriesTab({ categories, loading, onChanged }) {
             <div>
               <label style={labelStyle}>Visible In</label>
               <select value={section} onChange={(e) => setSection(e.target.value)} style={inputStyle}>
-                <option value="play" style={{ background: COLORS.panel }}>Play</option>
-                <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+                <option value="play" style={{ background: COLORS.panel }}>Contemporary</option>
+                <option value="archive" style={{ background: COLORS.panel }}>Heritage</option>
                 <option value="both" style={{ background: COLORS.panel }}>Both</option>
               </select>
             </div>
@@ -267,8 +267,8 @@ function SpecialCategoriesTab({ categories, loading, onChanged }) {
                     <div>
                       <label style={labelStyle}>Visible In</label>
                       <select value={editSection} onChange={(e) => setEditSection(e.target.value)} style={inputStyle}>
-                        <option value="play" style={{ background: COLORS.panel }}>Play</option>
-                        <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+                        <option value="play" style={{ background: COLORS.panel }}>Contemporary</option>
+                        <option value="archive" style={{ background: COLORS.panel }}>Heritage</option>
                         <option value="both" style={{ background: COLORS.panel }}>Both</option>
                       </select>
                     </div>
@@ -477,7 +477,7 @@ function SectionWiseTab({ categories, loading, onChanged }) {
             <ListOrdered className="h-5 w-5" style={{ color: COLORS.gold }} /> Section Wise Video
           </h1>
           <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-            A permanent, hand-curated row on Play/Archive — no expiry date. Set where it sits with Order
+            A permanent, hand-curated row on Contemporary/Heritage — no expiry date. Set where it sits with Order
             (lower shows first). These replace the old auto-generated genre rows (Drama, Popular Shows, etc.)
             with rows you pick and order yourself.
           </p>
@@ -508,8 +508,8 @@ function SectionWiseTab({ categories, loading, onChanged }) {
             <div>
               <label style={labelStyle}>Visible In</label>
               <select value={section} onChange={(e) => setSection(e.target.value)} style={inputStyle}>
-                <option value="play" style={{ background: COLORS.panel }}>Play</option>
-                <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+                <option value="play" style={{ background: COLORS.panel }}>Contemporary</option>
+                <option value="archive" style={{ background: COLORS.panel }}>Heritage</option>
                 <option value="both" style={{ background: COLORS.panel }}>Both</option>
               </select>
             </div>
@@ -548,8 +548,8 @@ function SectionWiseTab({ categories, loading, onChanged }) {
                     <div>
                       <label style={labelStyle}>Visible In</label>
                       <select value={editSection} onChange={(e) => setEditSection(e.target.value)} style={inputStyle}>
-                        <option value="play" style={{ background: COLORS.panel }}>Play</option>
-                        <option value="archive" style={{ background: COLORS.panel }}>Archive</option>
+                        <option value="play" style={{ background: COLORS.panel }}>Contemporary</option>
+                        <option value="archive" style={{ background: COLORS.panel }}>Heritage</option>
                         <option value="both" style={{ background: COLORS.panel }}>Both</option>
                       </select>
                     </div>

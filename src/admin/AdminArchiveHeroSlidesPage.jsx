@@ -94,10 +94,10 @@ export default function AdminArchiveHeroSlidesPage() {
   return (
     <div>
       <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold" style={{ color: COLORS.cream }}>
-        <Landmark className="h-6 w-6" style={{ color: COLORS.gold }} /> Archive Hero Slides
+        <Landmark className="h-6 w-6" style={{ color: COLORS.gold }} /> Heritage Hero Slides
       </h1>
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-        The auto-advancing carousel at the top of Archive — one uploaded photo per slide, shown both as the large background and the small circular thumbnail below it.
+        The auto-advancing carousel at the top of Heritage — one uploaded photo per slide, shown both as the large background and the small circular thumbnail below it.
       </p>
 
       {error && <p className="mb-4 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>}

@@ -14,7 +14,7 @@ const labelStyle = {
 };
 
 const PAGES = [
-  { key: "plays", label: "Plays" },
+  { key: "plays", label: "Contemporary" },
   { key: "community", label: "Community" },
 ];
 
@@ -144,7 +144,7 @@ export default function AdminPageHeroesPage() {
         <Clapperboard className="h-6 w-6" style={{ color: COLORS.gold }} /> Page Heroes
       </h1>
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
-        Manage the banner shown at the top of Plays, Archive, Community, and Ticketing — image, video, or text only.
+        Manage the banner shown at the top of Contemporary, Heritage, Community, and Ticketing — image, video, or text only.
         A hero can hold several images or videos, which rotate automatically like a slideshow.
       </p>
 
@@ -203,7 +203,7 @@ export default function AdminPageHeroesPage() {
                   ? "Add one or more photos — with more than one, they'll cross-fade in a slideshow."
                   : "Add one or more video clips — with more than one, they'll play one after another in a loop."}
                 {" "}Changes here save immediately, no need to click Save below.
-                {hero?.media?.length > 1 && " Give each one its own text below, like Archive Hero Slides — leave a field blank to fall back to the shared text in step 3."}
+                {hero?.media?.length > 1 && " Give each one its own text below, like Heritage Hero Slides — leave a field blank to fall back to the shared text in step 3."}
               </p>
 
               {hero?.media?.length > 0 && (

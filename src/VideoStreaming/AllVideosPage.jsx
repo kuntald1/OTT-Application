@@ -86,7 +86,7 @@ export default function AllVideosPage({ onBack, onNavigate }) {
   const shown = results !== null ? results : videos;
   const waitingForFirstResults = searching && results === null;
 
-  let infoLine = "Plays and Archive together, newest published first.";
+  let infoLine = "Contemporary and Heritage together, newest published first.";
   if (trimmed && !waitingForFirstResults) {
     infoLine = searching
       ? "Searching…"

@@ -97,7 +97,13 @@ def _fetch_and_cache_duration(video: Video, db: Session) -> None:
 # legacy Subscription rows whose plan was later deleted from the
 # catalog — new/renamed plans are read live from SubscriptionPlan
 # instead of this literal-name convention.
-_SECTION_TO_PLAN = {VideoSection.play: "Play", VideoSection.archive: "Archive"}
+# Both the current names (Contemporary / Heritage) and the original ones
+# (Play / Archive) are listed, so a subscription bought before the Nov 2026
+# rename still resolves if its plan was later deleted from the catalog.
+_SECTION_TO_PLAN = {
+    VideoSection.play: ("Contemporary", "Play"),
+    VideoSection.archive: ("Heritage", "Archive"),
+}
 
 
 def _billing_owner(user: User, db: Session) -> User:
@@ -128,8 +134,8 @@ def _subscription_grants_section(sub: Subscription, section: VideoSection, db: S
     plan = db.query(SubscriptionPlan).filter(SubscriptionPlan.name == sub.plan_name).first()
     if plan:
         return plan.grants_play if section == VideoSection.play else plan.grants_archive
-    required_plan = _SECTION_TO_PLAN[section]
-    return sub.plan_name in (required_plan, "Both")
+    required_plans = _SECTION_TO_PLAN[section]
+    return sub.plan_name in required_plans or sub.plan_name == "Both"
 
 
 def _has_active_subscription_for_section(user: User, section: VideoSection, db: Session) -> bool:

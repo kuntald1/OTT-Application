@@ -223,7 +223,7 @@ function PlansTab() {
                     </p>
                     <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
                       ₹{p.base_price}/mo (${p.base_price_usd}) · +₹{p.per_extra_screen}/screen ·{" "}
-                      {[p.grants_play && "Play", p.grants_archive && "Archive"].filter(Boolean).join(" + ") || "No content access set"}
+                      {[p.grants_play && "Contemporary", p.grants_archive && "Heritage"].filter(Boolean).join(" + ") || "No content access set"}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -296,10 +296,10 @@ function PlanFormFields({ form, setForm }) {
         <label style={labelStyle}>Content Access</label>
         <div className="flex gap-4">
           <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "rgba(245,235,221,0.7)" }}>
-            <input type="checkbox" checked={form.grants_play} onChange={setBool("grants_play")} /> Play
+            <input type="checkbox" checked={form.grants_play} onChange={setBool("grants_play")} /> Contemporary
           </label>
           <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "rgba(245,235,221,0.7)" }}>
-            <input type="checkbox" checked={form.grants_archive} onChange={setBool("grants_archive")} /> Archive
+            <input type="checkbox" checked={form.grants_archive} onChange={setBool("grants_archive")} /> Heritage
           </label>
         </div>
       </div>
