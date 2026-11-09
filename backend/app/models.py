@@ -605,6 +605,11 @@ class RevenueRateConfig(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     rate_paisa_per_minute = Column(Integer, nullable=False, default=7)
     platform_commission_percent = Column(Numeric(5, 2), nullable=False, default=20)
+    # Revenue-sharing cap per user per video, as a multiple of the video's
+    # total duration (client decision, Nov 2026: 3). Repeat viewing counts
+    # until total view minutes reach multiplier x duration; after that
+    # further viewing earns nothing. Editable via SQL, no redeploy.
+    max_view_multiplier = Column(Numeric(4, 2), nullable=False, default=3, server_default="3")
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -652,6 +657,11 @@ class VideoWatchRecord(Base):
     # watched_ranges, kept in sync as a convenience column for any
     # legacy display code. See class docstring.
     max_session_seconds = Column(Integer, nullable=False, default=0)
+    # Total seconds this viewer has watched this video INCLUDING repeats,
+    # capped at RevenueRateConfig.max_view_multiplier x video duration.
+    # This is what revenue is calculated on (max_session_seconds is kept
+    # equal to it so existing analytics screens show the same figure).
+    total_watched_seconds = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
     gross_revenue_paisa = Column(Integer, nullable=False, default=0)
     creator_credited_paisa = Column(Integer, nullable=False, default=0)
 

@@ -211,8 +211,33 @@ def watch_heartbeat(
         segment_start = min(segment_start, Decimal(video.duration_seconds))
         segment_end = min(segment_end, Decimal(video.duration_seconds))
 
+    # Revenue is calculated on VIEW MINUTES, repeats included (client
+    # decision, Nov 2026) — watching the same stretch again counts. The only
+    # limit is per user per video: total view minutes are capped at
+    # max_view_multiplier (default 3) x the video's duration; once reached,
+    # further viewing adds nothing.
+    # watched_ranges is still maintained (distinct coverage), but no longer
+    # decides crediting.
     existing_ranges = record.watched_ranges or []
-    merged_ranges, old_total_seconds, new_total_seconds = _merge_watched_range(existing_ranges, segment_start, segment_end)
+    merged_ranges, old_union_seconds, new_union_seconds = _merge_watched_range(existing_ranges, segment_start, segment_end)
+
+    rate_config = db.query(RevenueRateConfig).first()
+    fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
+    commission_percent = rate_config.platform_commission_percent if rate_config else Decimal("20")
+    multiplier = Decimal(rate_config.max_view_multiplier) if (rate_config and rate_config.max_view_multiplier) else Decimal("3")
+
+    # Rows from before this rule have total_watched_seconds = 0 but were
+    # already credited on distinct coverage — start from that so nobody is
+    # credited twice for the same time.
+    old_total_seconds = max(Decimal(record.total_watched_seconds or 0), old_union_seconds)
+    segment_seconds = max(Decimal(0), segment_end - segment_start)
+    if video.duration_seconds:
+        new_total_seconds = min(old_total_seconds + segment_seconds, Decimal(video.duration_seconds) * multiplier)
+    else:
+        # Length unknown, so the cap can't be computed — stay conservative
+        # (distinct coverage only) rather than pay without a limit.
+        new_total_seconds = new_union_seconds
+    new_total_seconds = max(new_total_seconds, old_total_seconds)
 
     if new_total_seconds > old_total_seconds:
         tiers = (
@@ -220,9 +245,6 @@ def watch_heartbeat(
             .filter(VideoRevenueTier.video_id == video.id)
             .all()
         )
-        rate_config = db.query(RevenueRateConfig).first()
-        fallback_rate = rate_config.rate_paisa_per_minute if rate_config else 7
-        commission_percent = rate_config.platform_commission_percent if rate_config else Decimal("20")
 
         new_gross_paisa = _compute_gross_revenue_paisa(new_total_seconds, tiers, fallback_rate)
         delta_gross_paisa = max(0, new_gross_paisa - record.gross_revenue_paisa)
@@ -259,7 +281,10 @@ def watch_heartbeat(
         record.gross_revenue_paisa = max(record.gross_revenue_paisa, new_gross_paisa)
 
     record.watched_ranges = merged_ranges
-    record.max_session_seconds = int(new_total_seconds)  # legacy display column, see model docstring
+    record.total_watched_seconds = new_total_seconds
+    # Kept equal to the credited total so the analytics screens and the
+    # per-tier breakdown (which read this column) match what was paid.
+    record.max_session_seconds = int(new_total_seconds)
 
     # Keeps this device's screens-limit slot alive for as long as it
     # keeps sending heartbeats — a stopped/closed player naturally stops
