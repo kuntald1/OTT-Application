@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
 from app.duration_pricing import get_duration_months_and_discount
+from app.subscription_expiry import end_of_day_ist
 from app.schemas import PaymentOut, CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -192,7 +193,7 @@ def verify_razorpay_payment(
     ).update({"is_active": False})
 
     months, _ = get_duration_months_and_discount(payment.duration_label, db)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=months * 30)
+    expires_at = end_of_day_ist(datetime.now(timezone.utc) + timedelta(days=months * 30))
 
     subscription = Subscription(
         user_id=current_user.id,

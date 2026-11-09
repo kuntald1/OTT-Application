@@ -573,6 +573,8 @@ function SubscriptionPurchasePage({ onBack }) {
                     // matched by the real subscription_id link, not by
                     // eyeballing dates/amounts across two separate lists.
                     const matchingPayment = payments.find((p) => p.subscription_id === sub.id);
+                    // is_active is only a flag; a plan past its expiry date is Expired.
+                    const subLive = sub.is_active && new Date(sub.expires_at) > new Date();
                     return (
                       <div
                         key={sub.id}
@@ -591,11 +593,11 @@ function SubscriptionPurchasePage({ onBack }) {
                           <span
                             className="rounded-full px-2.5 py-0.5 text-xs font-medium"
                             style={{
-                              background: sub.is_active ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
-                              color: sub.is_active ? "#6FCF97" : "rgba(245,235,221,0.5)",
+                              background: subLive ? "rgba(111,207,151,0.15)" : "rgba(255,255,255,0.08)",
+                              color: subLive ? "#6FCF97" : "rgba(245,235,221,0.5)",
                             }}
                           >
-                            {sub.is_active ? "Active" : "Expired"}
+                            {subLive ? "Active" : "Expired"}
                           </span>
                         </div>
 

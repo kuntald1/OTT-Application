@@ -9,6 +9,7 @@ from app.deps import get_current_user, ensure_can_buy_plan
 from app.models import User, Subscription
 from app.routers.videos import _billing_owner
 from app.duration_pricing import get_duration_months_and_discount
+from app.subscription_expiry import end_of_day_ist
 from app.schemas import SubscriptionCreate, SubscriptionOut
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
@@ -35,7 +36,7 @@ def activate_subscription(
     ).update({"is_active": False})
 
     months, _ = get_duration_months_and_discount(payload.duration_label, db)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=_months_to_days(months))
+    expires_at = end_of_day_ist(datetime.now(timezone.utc) + timedelta(days=_months_to_days(months)))
 
     subscription = Subscription(
         user_id=current_user.id,
@@ -66,7 +67,13 @@ def get_my_subscription(
     owner = _billing_owner(current_user, db)
     return (
         db.query(Subscription)
-        .filter(Subscription.user_id == owner.id, Subscription.is_active == True)  # noqa: E712
+        .filter(
+            Subscription.user_id == owner.id,
+            Subscription.is_active == True,  # noqa: E712
+            # A plan past its expiry is no longer "current", even though
+            # nothing flips is_active when the date passes.
+            Subscription.expires_at > datetime.now(timezone.utc),
+        )
         .order_by(Subscription.started_at.desc())
         .first()
     )
