@@ -22,6 +22,9 @@ from app.schemas import (
 
 router = APIRouter(prefix="/videos", tags=["watch"])
 
+# Heartbeats arrive every ~20s; a longer silence means a new viewing.
+SEGMENT_CONTINUITY_SECONDS = 60
+
 
 def _compute_gross_revenue_paisa(session_seconds, tiers: list[VideoRevenueTier], fallback_rate_paisa_per_minute: int) -> int:
     """Graduated/tiered calculation — same logic as a progressive tax
@@ -230,7 +233,31 @@ def watch_heartbeat(
     # already credited on distinct coverage — start from that so nobody is
     # credited twice for the same time.
     old_total_seconds = max(Decimal(record.total_watched_seconds or 0), old_union_seconds)
-    segment_seconds = max(Decimal(0), segment_end - segment_start)
+    # The players resend the CURRENT continuous stretch on every heartbeat
+    # ([start, end] with the same start and a growing end — see
+    # VideoPlayerScreen / watchSegmentTracker), so only the part beyond what
+    # that same stretch already reported counts. A different start (a seek),
+    # a shorter end (a replay), or a long gap since the last heartbeat (a new
+    # viewing) begins a new stretch, which counts from its own start.
+    now = datetime.now(timezone.utc)
+    last_hb = record.last_heartbeat_at
+    if last_hb is not None and last_hb.tzinfo is None:
+        last_hb = last_hb.replace(tzinfo=timezone.utc)
+    same_stretch = (
+        last_hb is not None
+        and (now - last_hb).total_seconds() <= SEGMENT_CONTINUITY_SECONDS
+        and record.last_segment_start is not None
+        and record.last_segment_end is not None
+        and abs(segment_start - Decimal(record.last_segment_start)) <= 1
+        and segment_end >= Decimal(record.last_segment_end)
+    )
+    if same_stretch:
+        segment_seconds = max(Decimal(0), segment_end - Decimal(record.last_segment_end))
+    else:
+        segment_seconds = max(Decimal(0), segment_end - segment_start)
+    record.last_segment_start = segment_start
+    record.last_segment_end = segment_end
+    record.last_heartbeat_at = now
     if video.duration_seconds:
         new_total_seconds = min(old_total_seconds + segment_seconds, Decimal(video.duration_seconds) * multiplier)
     else:

@@ -662,6 +662,11 @@ class VideoWatchRecord(Base):
     # This is what revenue is calculated on (max_session_seconds is kept
     # equal to it so existing analytics screens show the same figure).
     total_watched_seconds = Column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    # The last continuous stretch the player reported, and when. Players resend
+    # the same growing [start, end] each heartbeat, so only the growth counts.
+    last_segment_start = Column(Numeric(12, 2), nullable=True)
+    last_segment_end = Column(Numeric(12, 2), nullable=True)
+    last_heartbeat_at = Column(DateTime(timezone=True), nullable=True)
     gross_revenue_paisa = Column(Integer, nullable=False, default=0)
     creator_credited_paisa = Column(Integer, nullable=False, default=0)
 
