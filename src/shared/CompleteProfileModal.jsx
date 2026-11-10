@@ -73,10 +73,10 @@ export default function CompleteProfileModal() {
           </label>
 
           {isIndia && (
-            <label className="block">
+            <div className="block">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(245,235,221,0.5)" }}>City</span>
               <CityDropdown value={city} onChange={setCity} disabled={busy} />
-            </label>
+            </div>
           )}
 
           <label className="block">
