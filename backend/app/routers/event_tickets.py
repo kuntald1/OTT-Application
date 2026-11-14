@@ -30,9 +30,10 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
     User, EventEnquiry, EnquiryStatus, EventTicketTier, EventTicketBooking,
-    PaymentStatus, PaymentGateway, CreatorEarnings, RevenueRateConfig,
+    PaymentStatus, PaymentGateway, CreatorEarnings, RevenueRateConfig, RewardConfig,
 )
 from app.notifications import send_ticket_booking_whatsapp, send_ticket_booking_email
+from app.rewards import points_for_amount
 from app.schemas import (
     TicketTierAvailabilityOut, CreateTicketBookingRequest, CreateTicketBookingOrderResponse,
     VerifyTicketBookingRequest, TicketBookingOut, CheckInTicketRequest, CheckInTicketResponse,
@@ -310,6 +311,24 @@ def verify_ticket_booking_payment(
     booking.gateway_payment_id = payload.razorpay_payment_id
     booking.booking_reference = _new_booking_reference(db)
     booking.qr_token = secrets.token_urlsafe(32)[:64]
+
+    # Reward points for the buyer, at ticket_reward_percent from
+    # reward_config (Admin > Reward Points). That rate starts at 0, so
+    # this changes nothing until someone sets it — ticket bookings have
+    # never earned points before. Same never-block-a-paid-booking rule
+    # as every other checkout: no config means 0 points and a loud log,
+    # never a failed verification.
+    reward_config = db.query(RewardConfig).first()
+    if reward_config:
+        points_earned = points_for_amount(reward_config, booking.amount, "ticket")
+    else:
+        points_earned = 0
+        print(
+            f"WARNING: reward_config table is empty — ticket booking {booking.id} for user "
+            f"{current_user.id} earned 0 reward points instead of the intended rate. "
+            f"Fix: docker compose exec theomy-backend python -m app.seed_data"
+        )
+    current_user.reward_points_balance = (current_user.reward_points_balance or 0) + points_earned
 
     # The organiser who proposed the show gets the takings, minus
     # theomy's commission, into the same balance they already withdraw

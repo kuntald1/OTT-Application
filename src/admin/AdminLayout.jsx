@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText, Compass, Upload, IndianRupee, CalendarPlus } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText, Compass, Upload, IndianRupee, CalendarPlus, Gift } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -17,6 +17,7 @@ import AdminDonationRegistrationsPage from "./AdminDonationRegistrationsPage";
 import AdminCastCrewPage from "./AdminCastCrewPage";
 import AdminSubscriptionPlansPage from "./AdminSubscriptionPlansPage";
 import AdminSubscriptionsPage from "./AdminSubscriptionsPage";
+import AdminRewardSettingsPage from "./AdminRewardSettingsPage";
 import AdminHelpCenterPage from "./AdminHelpCenterPage";
 import AdminDashboardPage from "./AdminDashboardPage";
 import AdminReportsPage from "./AdminReportsPage";
@@ -88,6 +89,9 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     { id: "donation-registrations", label: "Donation Registrations", icon: HandCoins, visible: canSeeMenu("donation-registrations") },
     { id: "subscription-plans", label: "Subscription Plans", icon: CreditCard, visible: isSuperadmin },
     { id: "subscriptions", label: "Subscriptions", icon: Receipt, visible: canSeeMenu("subscriptions") },
+    // Superadmin-only, like Subscription Plans: these numbers decide how
+    // much money comes back to customers on every sale.
+    { id: "reward-settings", label: "Reward Points", icon: Gift, visible: isSuperadmin },
     { id: "help-center", label: "Help Center", icon: LifeBuoy, visible: canSeeMenu("help-center") },
     { id: "page-heroes", label: "Page Heroes", icon: GalleryHorizontal, visible: canSeeMenu("page-heroes") },
     { id: "theater-hero-slides", label: "Ticketing Hero Slides", icon: Contact2, visible: canSeeMenu("theater-hero-slides") },
@@ -181,6 +185,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "donation-registrations" && <AdminDonationRegistrationsPage />}
           {activePage === "subscription-plans" && isSuperadmin && <AdminSubscriptionPlansPage />}
           {activePage === "subscriptions" && <AdminSubscriptionsPage />}
+          {activePage === "reward-settings" && isSuperadmin && <AdminRewardSettingsPage />}
           {activePage === "help-center" && <AdminHelpCenterPage />}
           {activePage === "page-heroes" && <AdminPageHeroesPage />}
           {activePage === "theater-hero-slides" && <AdminTheaterHeroSlidesPage />}

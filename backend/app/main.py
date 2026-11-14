@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
 from app.scheduler import start_scheduler, stop_scheduler
-from app.routers import auth, oauth, tickets, subscriptions, menus, plans, payments, tax, blogs, community, organisers, donations, revenue, withdrawals, event_enquiries, otp, exchange_rate, stripe_payments, reward_config, admin_auth, videos, admin_videos, people, admin_event_enquiries, video_payments, watch, admin_revenue, admin_menus, my_list, playback_sessions, watch_progress, admin_ads, recommendations, admin_ai, live_streams, live_stream_payments, admin_live_streams, webhooks, admin_users, special_categories, admin_special_categories, admin_blogs, admin_people, organiser_requests, admin_organiser_requests, admin_community, donation_registrations, admin_donation_registrations, sub_accounts, family, admin_plans, admin_subscriptions, admin_tickets, admin_dashboard, admin_reports, page_heroes, admin_page_heroes, theater_hero_slides, admin_theater_hero_slides, archive_hero_slides, admin_archive_hero_slides, site_content, admin_site_content, ad_banners, admin_ad_banners, organiser_profile, admin_organiser_profile, admin_discovery_settings, admin_partners, autopay, event_tickets
+from app.routers import auth, oauth, tickets, subscriptions, menus, plans, payments, tax, blogs, community, organisers, donations, revenue, withdrawals, event_enquiries, otp, exchange_rate, stripe_payments, reward_config, admin_auth, videos, admin_videos, people, admin_event_enquiries, video_payments, watch, admin_revenue, admin_menus, my_list, playback_sessions, watch_progress, admin_ads, recommendations, admin_ai, live_streams, live_stream_payments, admin_live_streams, webhooks, admin_users, special_categories, admin_special_categories, admin_blogs, admin_people, organiser_requests, admin_organiser_requests, admin_community, donation_registrations, admin_donation_registrations, sub_accounts, family, admin_plans, admin_subscriptions, admin_tickets, admin_dashboard, admin_reports, page_heroes, admin_page_heroes, theater_hero_slides, admin_theater_hero_slides, archive_hero_slides, admin_archive_hero_slides, site_content, admin_site_content, ad_banners, admin_ad_banners, organiser_profile, admin_organiser_profile, admin_discovery_settings, admin_partners, autopay, event_tickets, admin_reward_config
 
 # Creates the `users` table on startup if it doesn't already exist.
 # For future schema changes, switch to Alembic migrations instead of
@@ -83,6 +83,7 @@ app.include_router(otp.router, prefix="/api")
 app.include_router(exchange_rate.router, prefix="/api")
 app.include_router(stripe_payments.router, prefix="/api")
 app.include_router(reward_config.router, prefix="/api")
+app.include_router(admin_reward_config.router, prefix="/api")
 app.include_router(admin_auth.router, prefix="/api")
 # live_streams MUST be registered before videos — GET /videos/live is a
 # 2-segment path, same shape as videos.py's GET /{video_id} catch-all,

@@ -14,6 +14,7 @@ from app.models import (
     VideoPurchase, PaymentStatus, PaymentGateway, RewardConfig,
 )
 from app.notifications import send_video_purchase_whatsapp, send_video_purchase_email
+from app.rewards import points_for_amount
 from app.routers.videos import _has_active_subscription_any
 from app.schemas import (
     CreateVideoOrderResponse, VerifyVideoPaymentRequest, VideoPurchaseOut, VideoPurchaseDetailOut,
@@ -132,18 +133,15 @@ def verify_video_purchase_payment(
     purchase.status = PaymentStatus.paid
     purchase.gateway_payment_id = payload.razorpay_payment_id
 
-    # Reward points — reuses the same subscription_reward_percent rate as
-    # regular subscription payments (RewardConfig has no separate
-    # pay-per-video rate; treating a video purchase the same as any other
-    # successful payment is the simplest correct behaviour, and matches
-    # what the person already sees for subscriptions). Same
-    # never-block-a-successful-payment reasoning as payments.py: missing
-    # config means 0 points awarded, logged loudly, never a 500.
+    # Reward points — pay-per-video has its own rate in reward_config
+    # (video_reward_percent), set from Admin > Reward Points; it starts
+    # equal to the subscription rate, which is what this used to borrow.
+    # Same never-block-a-successful-payment reasoning as payments.py:
+    # missing config means 0 points awarded, logged loudly, never a 500.
     video = db.query(Video).filter(Video.id == purchase.video_id).first()
     reward_config = db.query(RewardConfig).first()
     if reward_config:
-        earn_percent = reward_config.subscription_reward_percent
-        points_earned = int((purchase.amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        points_earned = points_for_amount(reward_config, purchase.amount, "video")
     else:
         points_earned = 0
         print(

@@ -41,6 +41,7 @@ from app.models import (
 )
 from app.notifications import send_payment_email, send_payment_whatsapp
 from app.routers.payments import _compute_pricing
+from app.rewards import points_for_amount
 
 router = APIRouter(prefix="/payments", tags=["autopay"])
 
@@ -338,10 +339,7 @@ def _apply_charge(db: Session, autopay_id: uuid.UUID, razorpay_payment_id: str) 
     # (never raise here: the customer has already paid).
     reward_config = db.query(RewardConfig).first()
     if reward_config:
-        points_earned = int(
-            (payment.total_amount * reward_config.subscription_reward_percent / 100)
-            .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        )
+        points_earned = points_for_amount(reward_config, payment.total_amount, "autopay")
     else:
         points_earned = 0
         print(

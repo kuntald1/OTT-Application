@@ -975,6 +975,17 @@ export function updateAdminTaxConfig(gstPercent) {
   return request("/admin/subscription-plans/tax", { method: "PUT", auth: true, body: { gst_percent: gstPercent } });
 }
 
+// --- Reward Points (earn rate per purchase + what one point is worth) ---
+// Superadmin-only to change, same as plans and tax.
+
+export function fetchAdminRewardConfig() {
+  return request("/admin/reward-config", { auth: true });
+}
+
+export function updateAdminRewardConfig(body) {
+  return request("/admin/reward-config", { method: "PUT", auth: true, body });
+}
+
 // --- Customer Management (subscriptions/payments drill-down) ---
 
 export function fetchAdminUserSubscriptions(userId) {

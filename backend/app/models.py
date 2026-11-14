@@ -1107,24 +1107,36 @@ class ExchangeRateConfig(Base):
 
 class RewardConfig(Base):
     """Single-row master table defining how many reward points get
-    earned, as a percentage of the amount paid. 1 point = ₹1.
+    earned, as a percentage of the amount paid, and what one point is
+    worth. Everything here is editable from Admin > Reward Points; see
+    app/rewards.py for the arithmetic that reads it.
 
-    subscription_reward_percent — applied on successful subscription
-    payments (wired up now, Razorpay/India path — the Stripe/non-India
-    path doesn't earn points yet since points are ₹-denominated and
-    Stripe checkout is currently paused).
+    One percentage per kind of purchase — subscription checkout, autopay
+    renewal, pay-per-video, pay-per-stream, event ticket — so a rate can
+    be changed (or set to 0 to stop earning) for one of them without
+    touching the others. They all started life sharing
+    subscription_reward_percent, which is why the migration defaults the
+    new ones to the same 20.
 
-    ticket_reward_percent — intended for ticket booking purchases. NOT
-    wired to anything yet: theomy doesn't have a real ticket
-    booking/payment flow built currently (the Theater/Ticketing section
-    is demo content). This column exists so the rate is ready to use the
-    moment that feature gets built, without another schema change.
+    point_value_rupees — what ONE point is worth: 1 means 1 point = ₹1
+    (how it has always worked), 0.1 means 10 points = ₹1, 0.25 means
+    1 point = ₹0.25. It is the ₹ VALUE handed back that follows the
+    percentage above; the number of points just follows from this.
+
+    The Stripe/non-India path still doesn't earn points — points are
+    ₹-denominated and Stripe checkout is currently paused.
     """
     __tablename__ = "reward_config"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     subscription_reward_percent = Column(Numeric(5, 2), nullable=False, default=20)
-    ticket_reward_percent = Column(Numeric(5, 2), nullable=False, default=5)
+    autopay_reward_percent = Column(Numeric(5, 2), nullable=False, default=20)
+    video_reward_percent = Column(Numeric(5, 2), nullable=False, default=20)
+    live_stream_reward_percent = Column(Numeric(5, 2), nullable=False, default=20)
+    # Ticket bookings never actually awarded points before Nov 2026, so
+    # this starts at 0 now that the code reads it — an admin turns it on.
+    ticket_reward_percent = Column(Numeric(5, 2), nullable=False, default=0)
+    point_value_rupees = Column(Numeric(10, 4), nullable=False, default=1)
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

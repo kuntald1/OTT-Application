@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createAutopaySubscription, verifyAutopayPayment, fetchMyAutopay, cancelMyAutopay, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createAutopaySubscription, verifyAutopayPayment, fetchMyAutopay, cancelMyAutopay, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent, fetchRewardConfig } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -208,9 +208,19 @@ function SubscriptionPurchasePage({ onBack }) {
   // null means the modal is closed.
   const [checkoutPlan, setCheckoutPlan] = useState(null);
   const [taxConfig, setTaxConfig] = useState(null);
+  // What one reward point is worth in ₹ (Admin > Reward Points). Falls
+  // back to 1 — the value it was hardcoded to before this was a setting
+  // — if the config can't be read, so the page still prices correctly.
+  const [pointValue, setPointValue] = useState(1);
 
   useEffect(() => {
     fetchTaxConfig().then(setTaxConfig).catch(() => setTaxConfig({ gst_percent: 18 }));
+    fetchRewardConfig()
+      .then((c) => {
+        const value = Number(c.point_value_rupees);
+        if (Number.isFinite(value) && value > 0) setPointValue(value);
+      })
+      .catch(() => {});
   }, []);
 
   // Razorpay's checkout widget is loaded from their CDN once, lazily —
@@ -236,8 +246,16 @@ function SubscriptionPurchasePage({ onBack }) {
     // INR — always computed from the plan's own INR base price
     const monthly = plan.basePrice + (count - 1) * plan.perExtraScreen;
     const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
-    const pointsUsed = useRewards ? Math.min(profile.rewardPoints, preRewards) : 0;
-    const total = preRewards - pointsUsed;
+    // How many points fit against this price, and what they take off.
+    // A point is worth pointValue rupees (Admin > Reward Points), so
+    // 100 points can be ₹100 off or ₹25 off. Floor, so the discount is
+    // never worth more than the price itself. The server recomputes all
+    // of this in payments._compute_pricing — this is only the display.
+    const pointsUsed = useRewards
+      ? Math.min(profile.rewardPoints, Math.floor(preRewards / pointValue))
+      : 0;
+    const rewardDiscount = Math.round(pointsUsed * pointValue);
+    const total = preRewards - rewardDiscount;
 
     // USD — computed from the plan's own USD base price (set directly by
     // the admin), NOT derived by converting the INR total. Reward points
@@ -247,10 +265,10 @@ function SubscriptionPurchasePage({ onBack }) {
     const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
     const monthlyUsd = plan.basePriceUsd + (count - 1) * plan.perExtraScreenUsd;
     const preRewardsUsd = Math.round(monthlyUsd * duration.months * (1 - duration.discount) * 100) / 100;
-    const pointsUsedUsd = pointsUsed > 0 ? Math.round((pointsUsed / rate) * 100) / 100 : 0;
+    const pointsUsedUsd = rewardDiscount > 0 ? Math.round((rewardDiscount / rate) * 100) / 100 : 0;
     const totalUsd = Math.max(0, Math.round((preRewardsUsd - pointsUsedUsd) * 100) / 100);
 
-    return { monthly, preRewards, pointsUsed, total, preRewardsUsd, pointsUsedUsd, totalUsd };
+    return { monthly, preRewards, pointsUsed, rewardDiscount, total, preRewardsUsd, pointsUsedUsd, totalUsd };
   };
 
   const handleSubscribe = (plan) => {
@@ -373,7 +391,7 @@ function SubscriptionPurchasePage({ onBack }) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>
-                You have {profile.rewardPoints} reward points (₹{profile.rewardPoints})
+                You have {profile.rewardPoints} reward points (₹{Math.round(profile.rewardPoints * pointValue)})
               </p>
               <p className="text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
                 {useRewards ? "Applying to your total below — tap to remove" : "Tap to redeem toward this subscription"}
@@ -403,7 +421,7 @@ function SubscriptionPurchasePage({ onBack }) {
         <div className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-3">
           {plans.map((plan) => {
             const count = screens[plan.name] || 1;
-            const { monthly, preRewards, pointsUsed, total, preRewardsUsd, pointsUsedUsd, totalUsd } = priceFor(plan);
+            const { monthly, preRewards, pointsUsed, rewardDiscount, total, preRewardsUsd, pointsUsedUsd, totalUsd } = priceFor(plan);
             const isCurrent = activePlan === plan.name && activeDuration === duration.label && activeScreens === count;
             return (
               <div
@@ -437,7 +455,7 @@ function SubscriptionPurchasePage({ onBack }) {
                 </div>
                 {pointsUsed > 0 && (
                   <p className="mt-0.5 text-[11px] font-medium" style={{ color: COLORS.gold }}>
-                    − {isIndia ? `₹${pointsUsed}` : `$${pointsUsedUsd}`} reward points applied
+                    − {isIndia ? `₹${rewardDiscount}` : `$${pointsUsedUsd}`} reward points applied
                   </p>
                 )}
                 {duration.months > 1 && (
@@ -793,6 +811,7 @@ function SubscriptionPurchasePage({ onBack }) {
           screens={screens[checkoutPlan.name] || 1}
           taxConfig={taxConfig}
           rewardPoints={profile.rewardPoints}
+          pointValue={pointValue}
           userEmail={profile.email}
           userPhone={profile.phone}
           isIndia={isIndia}
@@ -827,7 +846,7 @@ function SubscriptionPurchasePage({ onBack }) {
 // navigates to Stripe's own payment page, then Stripe redirects back to
 // theomy.com/stripe/success on completion).
 // ---------------------------------------------------------------------------
-function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userEmail, userPhone, isIndia, exchangeRate, onClose, onSuccess }) {
+function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, pointValue = 1, userEmail, userPhone, isIndia, exchangeRate, onClose, onSuccess }) {
   const [useRewards, setUseRewards] = useState(false);
   const [autoRenew, setAutoRenew] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -836,8 +855,12 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
   const monthly = plan.basePrice + (screens - 1) * plan.perExtraScreen;
   const preRewardsInr = Math.round(monthly * duration.months * (1 - duration.discount));
   // Auto-renew has one fixed recurring amount, so reward points can't be redeemed on it.
-  const pointsUsed = useRewards && !autoRenew ? Math.min(rewardPoints, preRewardsInr) : 0;
-  const taxableInr = preRewardsInr - pointsUsed;
+  // A point is worth pointValue rupees (Admin > Reward Points), so the
+  // number of points and the rupees they take off are two numbers now.
+  const maxPointsHere = Math.floor(preRewardsInr / pointValue);
+  const pointsUsed = useRewards && !autoRenew ? Math.min(rewardPoints, maxPointsHere) : 0;
+  const rewardDiscountInr = Math.round(pointsUsed * pointValue);
+  const taxableInr = preRewardsInr - rewardDiscountInr;
 
   const gstPercent = taxConfig ? Number(taxConfig.gst_percent) : 18;
   const taxAmountInr = isIndia ? Math.round((taxableInr * gstPercent) / 100) : 0;
@@ -853,7 +876,7 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
   const rate = exchangeRate ? Number(exchangeRate.inr_per_usd) : 83.5;
   const monthlyUsd = plan.basePriceUsd + (screens - 1) * plan.perExtraScreenUsd;
   const preRewardsUsd = Math.round(monthlyUsd * duration.months * (1 - duration.discount) * 100) / 100;
-  const pointsUsedUsd = pointsUsed > 0 ? Math.round((pointsUsed / rate) * 100) / 100 : 0;
+  const pointsUsedUsd = rewardDiscountInr > 0 ? Math.round((rewardDiscountInr / rate) * 100) / 100 : 0;
   const totalUsd = Math.max(0, Math.round((preRewardsUsd - pointsUsedUsd) * 100) / 100);
 
   const handlePayWithRazorpay = async () => {
@@ -1007,7 +1030,7 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
           >
             <Gift className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
             <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
-              Redeem {Math.min(rewardPoints, preRewardsInr)} reward points (₹{Math.min(rewardPoints, preRewardsInr)} off)
+              Redeem {Math.min(rewardPoints, maxPointsHere)} reward points (₹{Math.round(Math.min(rewardPoints, maxPointsHere) * pointValue)} off)
             </span>
             <div
               className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
@@ -1055,7 +1078,7 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, userE
               </div>
               {pointsUsed > 0 && (
                 <div className="flex justify-between" style={{ color: COLORS.gold }}>
-                  <span>Reward points applied</span><span>− ₹{pointsUsed}</span>
+                  <span>Reward points applied</span><span>− ₹{rewardDiscountInr}</span>
                 </div>
               )}
               <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>

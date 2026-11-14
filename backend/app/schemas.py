@@ -1192,7 +1192,31 @@ class StripeConfirmRequest(BaseModel):
 
 class RewardConfigOut(BaseModel):
     subscription_reward_percent: Decimal
+    autopay_reward_percent: Decimal
+    video_reward_percent: Decimal
+    live_stream_reward_percent: Decimal
     ticket_reward_percent: Decimal
+    # What one point is worth in rupees: 1 = "1 point = ₹1", 0.1 =
+    # "10 points = ₹1". The web and mobile checkout read this instead of
+    # assuming a point is a rupee.
+    point_value_rupees: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class RewardConfigUpdate(BaseModel):
+    """Admin > Reward Points. Every field optional — only what is sent
+    gets changed. Percentages are capped at 100 (handing back more than
+    was paid is never a setting, it's a typo); point_value_rupees must be
+    above zero, since a point worth nothing would make every redemption
+    free money.
+    """
+    subscription_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    autopay_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    video_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    live_stream_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    ticket_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    point_value_rupees: Optional[Decimal] = Field(default=None, gt=0, le=1000)
 
 
 class WatchProgressUpdate(BaseModel):

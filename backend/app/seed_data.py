@@ -286,9 +286,18 @@ def seed_reward_config(db):
     if existing:
         print(f"Reward config already exists (subscription={existing.subscription_reward_percent}%, ticket={existing.ticket_reward_percent}%), skipping.")
         return
-    db.add(RewardConfig(subscription_reward_percent=20, ticket_reward_percent=5))
+    db.add(RewardConfig(
+        subscription_reward_percent=20,
+        autopay_reward_percent=20,
+        video_reward_percent=20,
+        live_stream_reward_percent=20,
+        # Ticket bookings have never earned points; starts off so turning
+        # it on is a deliberate choice in Admin > Reward Points.
+        ticket_reward_percent=0,
+        point_value_rupees=1,
+    ))
     db.commit()
-    print("Seeded reward config: 20% on subscriptions, 5% on ticket bookings.")
+    print("Seeded reward config: 20% on subscriptions/renewals/videos/streams, 0% on tickets, 1 point = Rs 1.")
 
 
 def seed_page_heroes(db):

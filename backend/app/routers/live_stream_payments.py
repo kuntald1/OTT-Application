@@ -14,6 +14,7 @@ from app.models import (
     PaymentStatus, PaymentGateway, RewardConfig,
 )
 from app.notifications import send_video_purchase_whatsapp, send_video_purchase_email
+from app.rewards import points_for_amount
 from app.schemas import (
     CreateLiveStreamOrderResponse, VerifyLiveStreamPaymentRequest, LiveStreamPurchaseOut,
 )
@@ -159,14 +160,14 @@ def verify_live_stream_purchase_payment(
     purchase.status = PaymentStatus.paid
     purchase.gateway_payment_id = payload.razorpay_payment_id
 
-    # Reward points at the same rate as every other successful payment —
-    # see video_payments.py for why there's no separate rate. Missing
-    # config means 0 points and a loud log, never a failed payment.
+    # Reward points at pay-per-stream's own rate in reward_config
+    # (live_stream_reward_percent), set from Admin > Reward Points.
+    # Missing config means 0 points and a loud log, never a failed
+    # payment.
     live_stream = db.query(LiveStream).filter(LiveStream.id == purchase.live_stream_id).first()
     reward_config = db.query(RewardConfig).first()
     if reward_config:
-        earn_percent = reward_config.subscription_reward_percent
-        points_earned = int((purchase.amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        points_earned = points_for_amount(reward_config, purchase.amount, "live_stream")
     else:
         points_earned = 0
         print(

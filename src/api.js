@@ -883,6 +883,13 @@ export function verifyDonationPayment({ donationId, razorpayOrderId, razorpayPay
   });
 }
 
+// Reward points: how many a purchase earns, and what one point is worth
+// (point_value_rupees — 1 means 1 point = ₹1, 0.1 means 10 points = ₹1).
+// Public, no auth: the checkout needs it to show the right discount.
+export function fetchRewardConfig() {
+  return request("/reward-config");
+}
+
 export function createRazorpayOrder({ planName, durationLabel, screens, rewardPointsRequested }) {
   return request("/payments/razorpay/create-order", {
     method: "POST",

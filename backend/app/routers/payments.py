@@ -15,6 +15,7 @@ from app.models import (
     SubscriptionPlan, Subscription, TaxConfig, RewardConfig, AutopaySubscription,
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
+from app.rewards import max_points_redeemable, points_for_amount, rupees_for_points
 from app.duration_pricing import get_duration_months_and_discount
 from app.subscription_expiry import end_of_day_ist
 from app.schemas import PaymentOut, CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest
@@ -26,18 +27,32 @@ def _round(amount: Decimal) -> Decimal:
     return amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def _compute_pricing(plan: SubscriptionPlan, duration_label: str, screens: int, reward_points_requested: int, gst_percent: Decimal, db: Session):
+def _compute_pricing(plan: SubscriptionPlan, duration_label: str, screens: int, reward_points_requested: int, gst_percent: Decimal, db: Session, points_available: int = None):
     """Server-side price recomputation — never trusts a price sent by the
     client. Mirrors SubscriptionPage.jsx's priceFor() logic (screens
     scaling + duration discount), then adds GST on top of the
     reward-discounted amount.
+
+    A point is no longer assumed to be worth ₹1: reward_config's
+    point_value_rupees decides, so the same 100 points can be ₹100 or
+    ₹25 off depending on what the admin set (see app/rewards.py).
     """
     months, discount = get_duration_months_and_discount(duration_label, db)
     monthly = plan.base_price + plan.per_extra_screen * (screens - 1)
     pre_rewards = _round(monthly * months * (1 - discount))
 
-    reward_used = min(max(reward_points_requested, 0), int(pre_rewards))
-    taxable_amount = pre_rewards - reward_used
+    reward_config = db.query(RewardConfig).first()
+    # Cap by three things: what was asked for, what the person actually
+    # has, and what this price can absorb. points_available is passed by
+    # the caller; None means "don't check the balance" so nothing breaks
+    # if some other caller appears without one.
+    reward_used = min(
+        max(reward_points_requested, 0),
+        max_points_redeemable(reward_config, pre_rewards),
+    )
+    if points_available is not None:
+        reward_used = min(reward_used, max(points_available, 0))
+    taxable_amount = pre_rewards - rupees_for_points(reward_config, reward_used)
 
     tax_amount = _round(taxable_amount * gst_percent / 100)
     total = taxable_amount + tax_amount
@@ -98,7 +113,8 @@ def create_razorpay_order(
     gst_percent = tax_row.gst_percent
 
     base_amount, reward_used, tax_amount, total = _compute_pricing(
-        plan, payload.duration_label, payload.screens, payload.reward_points_requested, gst_percent, db
+        plan, payload.duration_label, payload.screens, payload.reward_points_requested, gst_percent, db,
+        points_available=current_user.reward_points_balance or 0,
     )
 
     if total <= 0:
@@ -219,8 +235,7 @@ def verify_razorpay_payment(
     # fixed rather than silently pretending a percentage that isn't real.
     reward_config = db.query(RewardConfig).first()
     if reward_config:
-        earn_percent = reward_config.subscription_reward_percent
-        points_earned = int((payment.total_amount * earn_percent / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        points_earned = points_for_amount(reward_config, payment.total_amount, "subscription")
     else:
         points_earned = 0
         print(
