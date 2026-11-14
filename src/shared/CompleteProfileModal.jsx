@@ -89,10 +89,10 @@ export default function CompleteProfileModal() {
               className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none disabled:opacity-50"
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream, colorScheme: "dark" }}
             >
-              <option value="">Prefer not to say</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
+              <option value="" style={{ background: COLORS.blackSoft, color: COLORS.cream }}>Prefer not to say</option>
+              <option value="male" style={{ background: COLORS.blackSoft, color: COLORS.cream }}>Male</option>
+              <option value="female" style={{ background: COLORS.blackSoft, color: COLORS.cream }}>Female</option>
+              <option value="other" style={{ background: COLORS.blackSoft, color: COLORS.cream }}>Other</option>
             </select>
           </label>
         </div>
