@@ -986,6 +986,14 @@ export function updateAdminRewardConfig(body) {
   return request("/admin/reward-config", { method: "PUT", auth: true, body });
 }
 
+// --- Refer & Earn tracking (read-only; the rates live above) ---
+
+export function fetchAdminReferrals({ status, limit = 100, offset = 0 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (status) params.set("status", status);
+  return request(`/admin/referrals?${params.toString()}`, { auth: true });
+}
+
 // --- Customer Management (subscriptions/payments drill-down) ---
 
 export function fetchAdminUserSubscriptions(userId) {
