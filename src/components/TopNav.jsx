@@ -5,6 +5,9 @@ import { useApp } from "../context/AppContext";
 import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp, sendRegistrationEmailOtp, fetchMyOrganiserRequestStatus } from "../api";
 import { COUNTRIES } from "../shared/countries";
 import CityDropdown from "../shared/CityDropdown";
+import {
+  clearPendingReferralCode, getPendingReferralCode, setPendingReferralCode,
+} from "../shared/referralCode";
 import OrganiserRequestModal from "./OrganiserRequestModal";
 
 // ---------------------------------------------------------------------------
@@ -483,6 +486,16 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
                   Subscription Plans
                 </button>
               )}
+              {!profile.isSubAccount && (
+                <button
+                  type="button"
+                  onClick={() => { onNavigate?.("referEarn"); setMenuOpen(false); }}
+                  className="rounded-full px-4 py-2.5 text-sm font-medium"
+                  style={{ border: "1px solid rgba(212,175,55,0.4)", color: COLORS.gold }}
+                >
+                  Refer &amp; Earn
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { onNavigate?.("help"); setMenuOpen(false); }}
@@ -606,8 +619,11 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
 // OTP-based login option for returning users who'd rather not type a
 // password.
 function LoginModal({ onClose }) {
-  const { login, loginWithOtp, register, authError } = useApp();
-  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot" | "otpLogin"
+  const { login, loginWithOtp, register, authError, authModalMode } = useApp();
+  // Opens on registration when the visitor arrived from a referral
+  // link (see AppContext's authModalMode), on login otherwise.
+  const [mode, setMode] = useState(authModalMode === "register" ? "register" : "login"); // "login" | "register" | "forgot" | "otpLogin"
+  const [inviteCode, setInviteCode] = useState(() => getPendingReferralCode() || "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -964,6 +980,33 @@ function LoginModal({ onClose }) {
               </label>
 
               {isIndia && <CityDropdown value={city} onChange={setCity} />}
+
+              {/* An invite code, for someone who was sent the code itself
+                  rather than the link. A code arriving by link is picked
+                  up from the URL and never shown here (see
+                  shared/referralCode.js), so this starts filled in when
+                  they came that way. Writing it straight to the pending
+                  slot means registration itself needs no new field: the
+                  claim runs on its own once the account exists. */}
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium" style={{ color: "rgba(245,235,221,0.55)" }}>
+                  Invite code <span style={{ color: "rgba(245,235,221,0.35)" }}>(optional)</span>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Got a code from a friend?"
+                  maxLength={16}
+                  value={inviteCode}
+                  onChange={(e) => {
+                    const next = e.target.value.toUpperCase();
+                    setInviteCode(next);
+                    if (next.trim()) setPendingReferralCode(next.trim());
+                    else clearPendingReferralCode();
+                  }}
+                  className="w-full rounded-lg border px-4 py-2.5 text-sm uppercase outline-none"
+                  style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream, letterSpacing: "0.1em" }}
+                />
+              </label>
             </>
           )}
 
@@ -1102,6 +1145,16 @@ function ProfileMenu({ profile, onPhotoChange, onClose, onNavigate, onLogout, ha
             style={{ color: COLORS.gold }}
           >
             Subscription Plans
+          </button>
+        )}
+        {!profile.isSubAccount && (
+          <button
+            type="button"
+            onClick={() => { onNavigate?.("referEarn"); onClose(); }}
+            className="mb-3 block w-full text-left text-sm font-medium hover:opacity-90"
+            style={{ color: COLORS.gold }}
+          >
+            Refer &amp; Earn
           </button>
         )}
         <button

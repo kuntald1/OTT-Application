@@ -1,11 +1,16 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
+  captureReferralCodeFromUrl, clearPendingReferralCode,
+  getPendingReferralCode, isRegisterLanding,
+} from "../shared/referralCode";
+import {
   getToken,
   setToken,
   registerUser,
   loginUser,
   loginWithOtp as apiLoginWithOtp,
   fetchCurrentUser,
+  claimReferral,
   updateCurrentUser,
   uploadProfilePhoto,
   createTicket,
@@ -277,8 +282,40 @@ export function AppProvider({ children }) {
     if (!authLoading && !isLoggedIn) setShowLoginModal(true);
   }, [authLoading, isLoggedIn]);
 
-  const requestLogin = useCallback(() => setShowLoginModal(true), []);
+  // Which step the auth modal opens on. A visitor arriving from a
+  // referral link wants the registration form, not the login form.
+  const [authModalMode, setAuthModalMode] = useState("login");
+  const requestLogin = useCallback(() => { setAuthModalMode("login"); setShowLoginModal(true); }, []);
+  const requestRegister = useCallback(() => { setAuthModalMode("register"); setShowLoginModal(true); }, []);
   const closeLoginModal = useCallback(() => setShowLoginModal(false), []);
+
+  // A shared invite lands on theomy.com/register?ref=CODE. Lift the
+  // code off the URL before anything else can navigate away from it,
+  // and open the modal on the registration step so the visitor sees
+  // the form the invite promised rather than a login box.
+  useEffect(() => {
+    const code = captureReferralCodeFromUrl();
+    if ((code || isRegisterLanding()) && !getToken()) setAuthModalMode("register");
+  }, []);
+
+  // One place that hands a kept referral code to the backend, however
+  // the account came to exist: email signup, OTP login, or a Google /
+  // Facebook round trip that boots the app already logged in. Watching
+  // isLoggedIn covers all of them without touching any of the auth
+  // functions themselves.
+  //
+  // The backend decides whether the code actually applies (not your own,
+  // not a second one, not an account that has already paid) and answers
+  // { claimed: false, reason } rather than failing, so there is nothing
+  // to show the person here either way.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const code = getPendingReferralCode();
+    if (!code) return;
+    claimReferral(code)
+      .catch(() => {})
+      .finally(() => clearPendingReferralCode());
+  }, [isLoggedIn]);
 
   // Real email+password login against the backend. Throws on failure so
   // the modal can show the error inline; caller is responsible for catching.
@@ -479,7 +516,7 @@ export function AppProvider({ children }) {
     isLoggedIn, profile, showLoginModal, authLoading, authError,
     hasFamily, familyPickerOpen, openFamilyPicker, closeFamilyPicker, refreshFamily, applyAccountSwitch,
     needsProfileCompletion, completeDemographics,
-    requestLogin, closeLoginModal, login, loginWithOtp, register, logout, changePhoto, updateProfile,
+    requestLogin, requestRegister, authModalMode, closeLoginModal, login, loginWithOtp, register, logout, changePhoto, updateProfile,
     myList, isInList, toggleListItem, removeFromList,
     tickets, addTicket,
     isSubscribed, activePlan, activeDuration, activeScreens, activePrice, activeCurrency, subscribe, refreshSubscription,

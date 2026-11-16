@@ -13,16 +13,20 @@ Three things the client asked to be able to see:
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_admin
+from app.config import settings
+from app.deps import get_current_admin, get_current_superadmin
+from app.identity_utils import normalize_email, normalize_phone
 from app.models import (
-    AdminUser, Referral, ReferralCode, RewardTransaction, User,
+    AdminUser, Referral, ReferralCode, ReferralInvite, RewardConfig,
+    RewardTransaction, User,
 )
+from app.notifications import send_referral_invite_email, send_referral_invite_whatsapp
 
 router = APIRouter(prefix="/admin/referrals", tags=["admin-referrals"])
 
@@ -63,6 +67,7 @@ class ReferralSummary(BaseModel):
     signed_up: int
     awaiting_subscription: int
     rewarded: int
+    cancelled: int
     points_paid_out: int
 
 
@@ -106,7 +111,7 @@ def referral_report(
 
     # --- referrals ----------------------------------------------------
     base = db.query(Referral)
-    if status_filter in ("registered", "rewarded"):
+    if status_filter in ("registered", "rewarded", "cancelled"):
         base = base.filter(Referral.status == status_filter)
 
     total = base.count()
@@ -159,6 +164,7 @@ def referral_report(
         signed_up=sum(all_counts.values()),
         awaiting_subscription=all_counts.get("registered", 0),
         rewarded=all_counts.get("rewarded", 0),
+        cancelled=all_counts.get("cancelled", 0),
         points_paid_out=int(points_paid),
     )
 
@@ -207,3 +213,233 @@ def referral_report(
     return ReferralReport(
         summary=summary, referrals=referral_rows, total=total, top_earners=top_earners,
     )
+
+
+# ------------------------------------------------------- codes & actions
+
+
+class CodeRow(BaseModel):
+    id: str
+    code: str
+    owner_name: str
+    owner_email: str
+    is_active: bool
+    expired: bool
+    expires_at: Optional[datetime]
+    signups: int
+    invites_sent: int
+
+
+class InviteRow(BaseModel):
+    id: str
+    code: str
+    channel: str
+    destination: str
+    status: str
+    sent_by: str
+    created_at: Optional[datetime]
+
+
+class SendRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=16)
+    channel: str = Field(pattern="^(email|whatsapp)$")
+    to: str = Field(min_length=3, max_length=255)
+
+
+@router.get("/codes", response_model=list[CodeRow])
+def list_codes(
+    only_live: bool = Query(default=True),
+    limit: int = Query(default=200, ge=1, le=500),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Codes that exist, so an admin can send one on or cancel it.
+
+    only_live hides codes that are already dead — the default, since a
+    cancelled or expired code is nothing anyone needs to act on.
+    """
+    now = datetime.now(timezone.utc)
+    rows = db.query(ReferralCode).order_by(ReferralCode.created_at.desc()).limit(limit).all()
+
+    owner_ids = {r.user_id for r in rows}
+    owners = {u.id: u for u in db.query(User).filter(User.id.in_(owner_ids))} if owner_ids else {}
+
+    signups = dict(
+        db.query(Referral.referral_code_id, func.count(Referral.id))
+        .group_by(Referral.referral_code_id).all()
+    )
+    invites = dict(
+        db.query(ReferralInvite.referral_code_id, func.count(ReferralInvite.id))
+        .filter(ReferralInvite.status == "sent")
+        .group_by(ReferralInvite.referral_code_id).all()
+    )
+
+    out = []
+    for r in rows:
+        expired = _aware(r.expires_at) <= now
+        if only_live and (expired or not r.is_active):
+            continue
+        owner = owners.get(r.user_id)
+        out.append(CodeRow(
+            id=str(r.id), code=r.code,
+            owner_name=owner.name if owner else "(deleted user)",
+            owner_email=owner.email if owner else "—",
+            is_active=bool(r.is_active), expired=expired,
+            expires_at=_aware(r.expires_at),
+            signups=signups.get(r.id, 0),
+            invites_sent=invites.get(r.id, 0),
+        ))
+    return out
+
+
+@router.get("/invites", response_model=list[InviteRow])
+def list_invites(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(ReferralInvite)
+        .order_by(ReferralInvite.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    sender_ids = {r.sent_by_user_id for r in rows if r.sent_by_user_id}
+    senders = {u.id: u for u in db.query(User).filter(User.id.in_(sender_ids))} if sender_ids else {}
+    return [
+        InviteRow(
+            id=str(r.id), code=r.code, channel=r.channel,
+            destination=r.destination, status=r.status,
+            sent_by=(senders[r.sent_by_user_id].name
+                     if r.sent_by_user_id in senders else "Admin"),
+            created_at=_aware(r.created_at),
+        )
+        for r in rows
+    ]
+
+
+@router.post("/codes/{code_id}/cancel")
+def cancel_code(
+    code_id: str,
+    current_admin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Kill a code that is already out in the world.
+
+    is_active goes false AND the expiry is pulled back to now: the claim
+    endpoint checks both, and a reader of the row later can see it was
+    stopped rather than having simply run its course.
+
+    Anyone who already signed up with it keeps their referral — that
+    bargain was struck before the code was cancelled. Cancel the referral
+    itself below if that is what's wanted.
+    """
+    record = db.query(ReferralCode).filter(ReferralCode.id == code_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Code not found.")
+
+    record.is_active = False
+    record.expires_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"cancelled": True, "code": record.code}
+
+
+@router.post("/{referral_id}/cancel")
+def cancel_referral(
+    referral_id: str,
+    current_admin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Stop a pending referral from ever paying out.
+
+    Only a referral still waiting on its first subscription can be
+    cancelled. One already rewarded is left alone: the points are in
+    somebody's balance and may already have been spent, so quietly
+    reversing it here would make a balance that no longer adds up.
+    """
+    referral = db.query(Referral).filter(Referral.id == referral_id).first()
+    if not referral:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Referral not found.")
+    if referral.status != "registered":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only a referral that hasn't paid out yet can be cancelled.",
+        )
+
+    referral.status = "cancelled"
+    db.commit()
+    return {"cancelled": True}
+
+
+@router.post("/send")
+def admin_send_invite(
+    payload: SendRequest,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Send an existing customer's code to someone, on their behalf.
+
+    The invite goes out in the code owner's name, because that is whose
+    code it is and whose name the recipient will recognise.
+    """
+    config = db.query(RewardConfig).first()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Reward config is not set up.")
+    if not config.referral_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Refer & Earn is switched off in Admin > Reward Points.")
+
+    now = datetime.now(timezone.utc)
+    record = db.query(ReferralCode).filter(ReferralCode.code == payload.code.strip().upper()).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Code not found.")
+    if not record.is_active or _aware(record.expires_at) <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="That code is cancelled or expired — it wouldn't work.")
+
+    owner = db.query(User).filter(User.id == record.user_id).first()
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="That code's owner no longer exists.")
+
+    destination = payload.to.strip()
+    if payload.channel == "email":
+        if "@" not in destination or " " in destination:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="That doesn't look like an email address.")
+        destination = normalize_email(destination)
+    else:
+        destination = normalize_phone(destination) or ""
+        if not destination:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="That doesn't look like a phone number.")
+
+    share_url = f"{settings.FRONTEND_URL.rstrip('/')}/register?ref={record.code}"
+    expires_on = _aware(record.expires_at).strftime("%d %b %Y")
+    points = int(config.referred_reward_points or 0)
+
+    try:
+        if payload.channel == "email":
+            send_referral_invite_email(destination, owner.name, record.code,
+                                       share_url, points, expires_on)
+        else:
+            send_referral_invite_whatsapp(destination, owner.name, record.code,
+                                          share_url, points)
+    except Exception as exc:  # noqa: BLE001
+        db.add(ReferralInvite(
+            referral_code_id=record.id, code=record.code,
+            sent_by_admin_id=current_admin.id, channel=payload.channel,
+            destination=destination, status="failed",
+        ))
+        db.commit()
+        print(f"WARNING: admin referral invite to {destination} via {payload.channel} failed: {exc}")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Couldn't send it just now. Check the SMTP / Twilio settings.")
+
+    db.add(ReferralInvite(
+        referral_code_id=record.id, code=record.code,
+        sent_by_admin_id=current_admin.id, channel=payload.channel,
+        destination=destination, status="sent",
+    ))
+    db.commit()
+    return {"sent": True, "channel": payload.channel, "to": destination, "on_behalf_of": owner.name}

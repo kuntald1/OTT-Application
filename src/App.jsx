@@ -44,6 +44,7 @@ import EventDetailPage from './Community/EventDetailPage'
 import AdminApp from './admin/AdminApp'
 import VideoDetailPage from './VideoDetailPage'
 import PersonProfilePage from './People/PersonProfilePage'
+import ReferEarnPage from './Refer/ReferEarnPage'
 
 // Route state is { view, params }. navigate(view, params) pushes the
 // CURRENT route onto a history stack before switching, so goBack() can pop
@@ -259,6 +260,8 @@ export default function App() {
           <PersonProfilePage personId={route.params.personId} onBack={goBack} />
         ) : route.view === 'help' ? (
           <HelpCenterPage onBack={goBack} />
+        ) : route.view === 'referEarn' ? (
+          <ReferEarnPage onBack={goBack} />
         ) : route.view === 'myVideos' ? (
           <MyVideoListPage onBack={goBack} />
         ) : route.view === 'myLiveStreams' ? (

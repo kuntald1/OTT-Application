@@ -994,6 +994,33 @@ export function fetchAdminReferrals({ status, limit = 100, offset = 0 } = {}) {
   return request(`/admin/referrals?${params.toString()}`, { auth: true });
 }
 
+// Codes that exist, so one can be sent on or cancelled. only_live=false
+// also returns codes already cancelled or expired.
+export function fetchAdminReferralCodes({ onlyLive = true } = {}) {
+  return request(`/admin/referrals/codes?only_live=${onlyLive ? "true" : "false"}`, { auth: true });
+}
+
+export function fetchAdminReferralInvites() {
+  return request("/admin/referrals/invites", { auth: true });
+}
+
+// Stops a code working from now on. Anyone who already signed up with it
+// keeps their referral.
+export function cancelAdminReferralCode(codeId) {
+  return request(`/admin/referrals/codes/${codeId}/cancel`, { method: "POST", auth: true });
+}
+
+// Stops a referral that hasn't paid out yet from ever doing so. One
+// already rewarded can't be cancelled.
+export function cancelAdminReferral(referralId) {
+  return request(`/admin/referrals/${referralId}/cancel`, { method: "POST", auth: true });
+}
+
+// Sends an existing customer's code to someone, in that customer's name.
+export function sendAdminReferralInvite({ code, channel, to }) {
+  return request("/admin/referrals/send", { method: "POST", auth: true, body: { code, channel, to } });
+}
+
 // --- Customer Management (subscriptions/payments drill-down) ---
 
 export function fetchAdminUserSubscriptions(userId) {

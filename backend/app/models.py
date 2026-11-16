@@ -1210,6 +1210,28 @@ class Referral(Base):
     payment_id = Column(UUID(as_uuid=True), nullable=True)
 
 
+class ReferralInvite(Base):
+    """One invite actually sent — by a customer from their Refer & Earn
+    page, or by an admin from Admin > Referrals.
+
+    It does two jobs: it is what the daily send limit counts (so one
+    account can't use theomy to bulk-message strangers), and it is the
+    record of who was invited, which the admin's referral page shows.
+    """
+    __tablename__ = "referral_invites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    referral_code_id = Column(UUID(as_uuid=True), ForeignKey("referral_codes.id"), nullable=True)
+    code = Column(String(16), nullable=False, index=True)
+    # Exactly one of these is set.
+    sent_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    sent_by_admin_id = Column(UUID(as_uuid=True), nullable=True)
+    channel = Column(String(10), nullable=False)       # email | whatsapp
+    destination = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, default="sent")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class RewardTransaction(Base):
     """A line per movement of reward points, with where it came from.
 

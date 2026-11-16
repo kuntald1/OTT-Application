@@ -28,7 +28,11 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Payment, PaymentStatus, Referral, ReferralCode, RewardConfig, User
+from app.identity_utils import normalize_email, normalize_phone
+from app.models import (
+    Payment, PaymentStatus, Referral, ReferralCode, ReferralInvite, RewardConfig, User,
+)
+from app.notifications import send_referral_invite_email, send_referral_invite_whatsapp
 
 router = APIRouter(prefix="/referrals", tags=["referrals"])
 
@@ -179,7 +183,9 @@ def claim_referral(
     record = db.query(ReferralCode).filter(ReferralCode.code == code).first()
     if not record:
         return {"claimed": False, "reason": "That referral code doesn't exist."}
-    if _aware(record.expires_at) <= now:
+    # is_active goes false both when a code is replaced by a fresh one and
+    # when an admin cancels it, so this covers cancellation too.
+    if not record.is_active or _aware(record.expires_at) <= now:
         return {"claimed": False, "reason": "That referral code has expired."}
 
     # Self-referral, including a second account made by the same person
@@ -233,3 +239,105 @@ def claim_referral(
             "reward points when you buy your first subscription."
         ),
     }
+
+
+# ----------------------------------------------------------- sharing it
+
+# One account can send this many invites a day. High enough that nobody
+# sharing with real friends will ever notice, low enough that theomy
+# can't be turned into a bulk-messaging service by someone with a list.
+_DAILY_INVITE_LIMIT = 20
+
+
+class ShareRequest(BaseModel):
+    channel: str = Field(pattern="^(email|whatsapp)$")
+    to: str = Field(min_length=3, max_length=255)
+
+
+@router.post("/share", status_code=status.HTTP_200_OK)
+def share_referral(
+    payload: ShareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Send this user's invite to one email address or WhatsApp number."""
+    config = _config_or_503(db)
+    if not config.referral_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Refer & Earn is not available right now.",
+        )
+
+    destination = payload.to.strip()
+    if payload.channel == "email":
+        if "@" not in destination or " " in destination:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="That doesn't look like an email address.")
+        destination = normalize_email(destination)
+        if destination == normalize_email(current_user.email):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="That's your own address.")
+    else:
+        destination = normalize_phone(destination) or ""
+        if not destination:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="That doesn't look like a phone number.")
+        if current_user.phone and destination == current_user.phone:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="That's your own number.")
+
+    now = datetime.now(timezone.utc)
+    sent_today = (
+        db.query(ReferralInvite)
+        .filter(ReferralInvite.sent_by_user_id == current_user.id,
+                ReferralInvite.created_at >= now - timedelta(days=1))
+        .count()
+    )
+    if sent_today >= _DAILY_INVITE_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"You've sent {_DAILY_INVITE_LIMIT} invites today. Try again tomorrow.",
+        )
+
+    code = _active_code_for(db, current_user, config)
+    share_url = f"{settings.FRONTEND_URL.rstrip('/')}/register?ref={code.code}"
+    expires_on = _aware(code.expires_at).strftime("%d %b %Y")
+    points = int(config.referred_reward_points or 0)
+
+    try:
+        if payload.channel == "email":
+            send_referral_invite_email(
+                destination, current_user.name, code.code, share_url, points, expires_on,
+            )
+        else:
+            send_referral_invite_whatsapp(
+                destination, current_user.name, code.code, share_url, points,
+            )
+    except Exception as exc:  # noqa: BLE001
+        # Record the attempt before reporting it, so a server that can't
+        # send at all shows up in the admin's invite list as a row of
+        # failures rather than as silence.
+        db.add(ReferralInvite(
+            referral_code_id=code.id, code=code.code,
+            sent_by_user_id=current_user.id, channel=payload.channel,
+            destination=destination, status="failed",
+        ))
+        db.commit()
+        print(f"WARNING: referral invite to {destination} via {payload.channel} failed: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Couldn't send it just now. Copy the link and send it yourself instead."
+                if payload.channel == "email"
+                else "Couldn't send the WhatsApp message. Copy the link and send it yourself instead."
+            ),
+        )
+
+    db.add(ReferralInvite(
+        referral_code_id=code.id, code=code.code,
+        sent_by_user_id=current_user.id, channel=payload.channel,
+        destination=destination, status="sent",
+    ))
+    db.commit()
+
+    return {"sent": True, "channel": payload.channel, "to": destination}

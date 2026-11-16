@@ -827,3 +827,139 @@ theomy
 </html>
 """
     _send_email(to_email, subject, text_body, html_body)
+
+
+# ---------------------------------------------------------------------
+# Refer & Earn invites
+# ---------------------------------------------------------------------
+# Both senders RAISE on failure, unlike every other notification in this
+# file. The others ride along after something that already succeeded (a
+# payment, an approval), so swallowing an SMTP error is the right call
+# there. Here, sending IS the action the person asked for — telling them
+# "Sent" when nothing went out would be a lie they'd only discover when
+# their friend never got it.
+
+
+def send_referral_invite_email(
+    to_email: str, referrer_name: str, code: str, share_url: str,
+    reward_points: int, expires_on: str,
+) -> None:
+    """The invite a customer sends from their Refer & Earn page."""
+    subject = f"{referrer_name} has invited you to theomy"
+
+    text_body = (
+        f"{referrer_name} thinks you'd enjoy theomy — Bengali theatre, streaming at home.\n\n"
+        f"Join with their invite and you'll get {reward_points} reward points "
+        f"once you take your first subscription. Points come straight off what you pay next time.\n\n"
+        f"Sign up here: {share_url}\n\n"
+        f"Or enter this code when you register: {code}\n"
+        f"The invite is good until {expires_on}.\n\n"
+        f"— theomy"
+    )
+
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family:'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding:40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:18px; overflow:hidden;">
+
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:30px 36px;">
+            <span style="font-size:24px; font-weight:600; letter-spacing:0.5px; color:#f5ebdd;">theomy</span>
+            <p style="margin:6px 0 0; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:rgba(245,235,221,0.65);">Bengali theatre, at home</p>
+          </td></tr>
+
+          <tr><td style="padding:36px 36px 8px;">
+            <p style="margin:0 0 6px; font-size:13px; letter-spacing:0.5px; color:#d4af37;">An invitation from {referrer_name}</p>
+            <p style="margin:0 0 18px; font-size:26px; line-height:1.25; font-weight:700; color:#f5ebdd;">
+              Come and watch with us
+            </p>
+            <p style="margin:0 0 22px; font-size:15px; line-height:1.65; color:rgba(245,235,221,0.8);">
+              {referrer_name} thinks you'd enjoy theomy — full-length Bengali plays, recorded live on stage
+              and streamed to your screen, plus tickets to shows you can go and see in person.
+            </p>
+          </td></tr>
+
+          <tr><td style="padding:0 36px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:rgba(212,175,55,0.08); border:1px solid rgba(212,175,55,0.3); border-radius:14px;">
+              <tr><td style="padding:22px; text-align:center;">
+                <p style="margin:0 0 10px; font-size:13px; color:rgba(245,235,221,0.7);">Your invite code</p>
+                <p style="margin:0 0 4px; font-size:30px; letter-spacing:7px; font-weight:700; color:#d4af37;">{code}</p>
+                <p style="margin:12px 0 0; font-size:14px; line-height:1.6; color:#f5ebdd;">
+                  Worth <strong style="color:#d4af37;">{reward_points} reward points</strong> once you take your first subscription
+                </p>
+              </td></tr>
+            </table>
+          </td></tr>
+
+          <tr><td style="padding:26px 36px 8px; text-align:center;">
+            <a href="{share_url}"
+               style="display:inline-block; background:#d4af37; color:#0a0104; text-decoration:none;
+                      font-size:15px; font-weight:700; padding:14px 38px; border-radius:999px;">
+              Create your account
+            </a>
+            <p style="margin:14px 0 0; font-size:12px; line-height:1.6; color:rgba(245,235,221,0.45);">
+              The code is filled in for you when you use the button.<br>
+              This invite is good until {expires_on}.
+            </p>
+          </td></tr>
+
+          <tr><td style="padding:28px 36px 32px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(245,235,221,0.12);">
+              <tr><td style="padding-top:18px;">
+                <p style="margin:0 0 10px; font-size:13px; font-weight:600; color:#f5ebdd;">How the points work</p>
+                <p style="margin:0 0 7px; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.65);">
+                  1 &nbsp;Sign up using the code above.
+                </p>
+                <p style="margin:0 0 7px; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.65);">
+                  2 &nbsp;Take your first subscription.
+                </p>
+                <p style="margin:0; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.65);">
+                  3 &nbsp;{reward_points} points land in your account — and {referrer_name} gets some too.
+                  Spend them against what you pay next time.
+                </p>
+              </td></tr>
+            </table>
+          </td></tr>
+
+          <tr><td style="background:rgba(0,0,0,0.3); padding:16px 36px; text-align:center;">
+            <p style="margin:0; font-size:11px; line-height:1.6; color:rgba(245,235,221,0.4);">
+              You got this because {referrer_name} entered your address on theomy.
+              No account has been made for you, and we won't write again unless you join.
+            </p>
+          </td></tr>
+
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    _send_email(to_email, subject, text_body, html_body)
+
+
+def send_referral_invite_whatsapp(
+    to_phone: str, referrer_name: str, code: str, share_url: str, reward_points: int,
+) -> None:
+    """The same invite over WhatsApp. Raises if Twilio isn't configured,
+    rather than returning quietly — see the note above.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        raise RuntimeError("WhatsApp sending isn't set up on this server.")
+    if not to_phone:
+        raise ValueError("No phone number given.")
+
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    body = (
+        f"{referrer_name} has invited you to theomy — Bengali theatre, streaming at home.\n\n"
+        f"Join with code *{code}* and you'll get {reward_points} reward points once you take "
+        f"your first subscription.\n\n{share_url}"
+    )
+
+    client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    client.messages.create(
+        from_=settings.TWILIO_FROM_NUMBER,
+        to=f"whatsapp:{to_number}",
+        body=body,
+    )

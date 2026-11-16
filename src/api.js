@@ -890,6 +890,28 @@ export function fetchRewardConfig() {
   return request("/reward-config");
 }
 
+// --- Refer & Earn ---
+
+// This user's own code and share link, plus how their referrals are
+// going. Issues a fresh code if theirs has run out, so it always
+// returns something usable.
+export function fetchMyReferral() {
+  return request("/referrals/me", { auth: true });
+}
+
+// Send the invite to one email address or WhatsApp number.
+export function shareReferral({ channel, to }) {
+  return request("/referrals/share", { method: "POST", auth: true, body: { channel, to } });
+}
+
+// Record that this (new) account arrived through someone's code. Nobody
+// is paid until this account takes its first subscription. Resolves with
+// { claimed: false, reason } for the ordinary refusals — a stale link
+// shouldn't throw an error at someone who has just signed up.
+export function claimReferral(code) {
+  return request("/referrals/claim", { method: "POST", auth: true, body: { code } });
+}
+
 export function createRazorpayOrder({ planName, durationLabel, screens, rewardPointsRequested }) {
   return request("/payments/razorpay/create-order", {
     method: "POST",
