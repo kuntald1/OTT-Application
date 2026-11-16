@@ -41,7 +41,7 @@ from app.models import (
 )
 from app.notifications import send_payment_email, send_payment_whatsapp
 from app.routers.payments import _compute_pricing
-from app.rewards import points_for_amount
+from app.rewards import award_referral_if_due, points_for_amount, record_points
 
 router = APIRouter(prefix="/payments", tags=["autopay"])
 
@@ -347,6 +347,12 @@ def _apply_charge(db: Session, autopay_id: uuid.UUID, razorpay_payment_id: str) 
             f"user {user.id} earned 0 reward points."
         )
     user.reward_points_balance = (user.reward_points_balance or 0) + points_earned
+    record_points(db, user.id, points_earned, "autopay",
+                  amount=payment.total_amount, reference_id=payment.id,
+                  note=payment.plan_name)
+    # Refer & Earn: an auto-renew charge can be this account's first
+    # paid subscription, so the referral pays out from here too.
+    award_referral_if_due(db, user, payment_id=payment.id)
 
     db.commit()
     db.refresh(payment)

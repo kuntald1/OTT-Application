@@ -1201,6 +1201,12 @@ class RewardConfigOut(BaseModel):
     # assuming a point is a rupee.
     point_value_rupees: Decimal
 
+    # --- Refer & Earn ---
+    referral_enabled: bool
+    referrer_reward_points: int
+    referred_reward_points: int
+    referral_code_validity_days: int
+
     model_config = {"from_attributes": True}
 
 
@@ -1217,6 +1223,14 @@ class RewardConfigUpdate(BaseModel):
     live_stream_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
     ticket_reward_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
     point_value_rupees: Optional[Decimal] = Field(default=None, gt=0, le=1000)
+    # Refer & Earn. Flat point counts, not percentages — a referral has
+    # no payment of its own to take a percentage of. Capped at 100000 so
+    # a slipped keystroke can't hand out a fortune; validity is capped at
+    # a year.
+    referral_enabled: Optional[bool] = Field(default=None)
+    referrer_reward_points: Optional[int] = Field(default=None, ge=0, le=100000)
+    referred_reward_points: Optional[int] = Field(default=None, ge=0, le=100000)
+    referral_code_validity_days: Optional[int] = Field(default=None, ge=1, le=365)
 
 
 class WatchProgressUpdate(BaseModel):

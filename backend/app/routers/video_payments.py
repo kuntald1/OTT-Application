@@ -14,7 +14,7 @@ from app.models import (
     VideoPurchase, PaymentStatus, PaymentGateway, RewardConfig,
 )
 from app.notifications import send_video_purchase_whatsapp, send_video_purchase_email
-from app.rewards import points_for_amount
+from app.rewards import points_for_amount, record_points
 from app.routers.videos import _has_active_subscription_any
 from app.schemas import (
     CreateVideoOrderResponse, VerifyVideoPaymentRequest, VideoPurchaseOut, VideoPurchaseDetailOut,
@@ -150,6 +150,8 @@ def verify_video_purchase_payment(
             f"Fix: docker compose exec theomy-backend python -m app.seed_data"
         )
     current_user.reward_points_balance = (current_user.reward_points_balance or 0) + points_earned
+    record_points(db, current_user.id, points_earned, "video",
+                  amount=purchase.amount, reference_id=purchase.id)
 
     db.commit()
     db.refresh(purchase)

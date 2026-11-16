@@ -15,7 +15,10 @@ from app.models import (
     SubscriptionPlan, Subscription, TaxConfig, RewardConfig, AutopaySubscription,
 )
 from app.notifications import send_payment_whatsapp, send_payment_email
-from app.rewards import max_points_redeemable, points_for_amount, rupees_for_points
+from app.rewards import (
+    award_referral_if_due, max_points_redeemable, points_for_amount,
+    record_points, rupees_for_points,
+)
 from app.duration_pricing import get_duration_months_and_discount
 from app.subscription_expiry import end_of_day_ist
 from app.schemas import PaymentOut, CreateOrderRequest, CreateOrderResponse, VerifyPaymentRequest
@@ -244,9 +247,25 @@ def verify_razorpay_payment(
             f"Fix: docker compose exec theomy-backend python -m app.seed_data"
         )
 
+    if payment.reward_points_used:
+        record_points(db, current_user.id, -payment.reward_points_used, "redeemed",
+                      reference_id=payment.id,
+                      note=f"Redeemed against {payment.plan_name}")
+
     current_user.reward_points_balance = max(
         0, current_user.reward_points_balance - payment.reward_points_used
     ) + points_earned
+
+    record_points(db, current_user.id, points_earned, "subscription",
+                  amount=payment.total_amount, reference_id=payment.id,
+                  note=payment.plan_name)
+
+    # Refer & Earn — if this account signed up through somebody's code and
+    # has never been paid out, this is the subscription that triggers it.
+    # Both sides are credited inside the same transaction as everything
+    # above. It never raises, for the same reason the block above doesn't:
+    # the payment has already succeeded.
+    award_referral_if_due(db, current_user, payment_id=payment.id)
 
     db.commit()
     db.refresh(payment)

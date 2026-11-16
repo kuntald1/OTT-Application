@@ -1137,11 +1137,104 @@ class RewardConfig(Base):
     # this starts at 0 now that the code reads it — an admin turns it on.
     ticket_reward_percent = Column(Numeric(5, 2), nullable=False, default=0)
     point_value_rupees = Column(Numeric(10, 4), nullable=False, default=1)
+
+    # --- Refer & Earn ------------------------------------------------
+    # Two-sided: when a referred person pays for their FIRST subscription,
+    # the referrer gets referrer_reward_points and the new person gets
+    # referred_reward_points. Flat point counts, not percentages — the
+    # client specified them that way, and a referral has no payment of
+    # its own to take a percentage of.
+    #
+    # referral_enabled is the kill switch: off, no new code is handed out
+    # and no claim is accepted, while referrals already earned stay as
+    # they are.
+    #
+    # referral_code_validity_days is how long a shared code stays usable.
+    # It applies when the code is ISSUED, so changing it never shortens a
+    # code someone is already circulating.
+    referral_enabled = Column(Boolean, nullable=False, default=True)
+    referrer_reward_points = Column(Integer, nullable=False, default=25)
+    referred_reward_points = Column(Integer, nullable=False, default=25)
+    referral_code_validity_days = Column(Integer, nullable=False, default=30)
+
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class ReferralCode(Base):
+    """One shareable Refer & Earn code, belonging to one user.
+
+    A user holds at most one ACTIVE code at a time. When it expires they
+    are handed a new one instead of the old row being changed, so a code
+    that was already pasted into a WhatsApp message can still be traced
+    back to its owner long after it stopped working.
+    """
+    __tablename__ = "referral_codes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    code = Column(String(16), unique=True, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class Referral(Base):
+    """One referred account, and where that referral stands.
+
+    referred_user_id is UNIQUE: an account can be referred once, ever.
+    That single database constraint is what actually enforces "each
+    referral can generate rewards only once" — two claim requests
+    arriving together can't both win, which no amount of checking in
+    Python could guarantee on its own.
+
+    status:
+      registered — the account exists, nobody has been paid yet
+      rewarded   — the first subscription was paid and both sides credited
+    """
+    __tablename__ = "referrals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    referrer_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    referred_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
+    referral_code_id = Column(UUID(as_uuid=True), ForeignKey("referral_codes.id"), nullable=True)
+    code = Column(String(16), nullable=False)
+    status = Column(String(20), nullable=False, default="registered")
+    registered_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    subscribed_at = Column(DateTime(timezone=True), nullable=True)
+    referrer_points_awarded = Column(Integer, nullable=False, default=0)
+    referred_points_awarded = Column(Integer, nullable=False, default=0)
+    payment_id = Column(UUID(as_uuid=True), nullable=True)
+
+
+class RewardTransaction(Base):
+    """A line per movement of reward points, with where it came from.
+
+    users.reward_points_balance is still the live balance and the only
+    thing checkout reads — this table is the record of how that number
+    got there, which is what makes "earned by referring" and "earned by
+    subscribing" separable at all.
+
+    points is signed: positive earned, negative spent. source is one of
+    subscription / autopay / video / live_stream / ticket /
+    referral_referrer / referral_referred / redeemed.
+    """
+    __tablename__ = "reward_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    points = Column(Integer, nullable=False)
+    source = Column(String(32), nullable=False)
+    # What was paid, for an earning line — kept so a rate change later
+    # doesn't make an old line impossible to explain.
+    amount_rupees = Column(Numeric(10, 2), nullable=True)
+    # The payment / purchase / booking this line came from, if any.
+    reference_id = Column(UUID(as_uuid=True), nullable=True)
+    note = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class AdminRole(str, enum.Enum):

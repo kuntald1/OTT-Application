@@ -295,9 +295,16 @@ def seed_reward_config(db):
         # it on is a deliberate choice in Admin > Reward Points.
         ticket_reward_percent=0,
         point_value_rupees=1,
+        # Refer & Earn: 25 points to each side when the referred person
+        # pays for their first subscription, codes good for 30 days.
+        referral_enabled=True,
+        referrer_reward_points=25,
+        referred_reward_points=25,
+        referral_code_validity_days=30,
     ))
     db.commit()
-    print("Seeded reward config: 20% on subscriptions/renewals/videos/streams, 0% on tickets, 1 point = Rs 1.")
+    print("Seeded reward config: 20% on subscriptions/renewals/videos/streams, 0% on tickets, "
+          "1 point = Rs 1, Refer & Earn 25+25 points on a 30-day code.")
 
 
 def seed_page_heroes(db):

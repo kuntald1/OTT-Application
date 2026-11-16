@@ -33,7 +33,7 @@ from app.models import (
     PaymentStatus, PaymentGateway, CreatorEarnings, RevenueRateConfig, RewardConfig,
 )
 from app.notifications import send_ticket_booking_whatsapp, send_ticket_booking_email
-from app.rewards import points_for_amount
+from app.rewards import points_for_amount, record_points
 from app.schemas import (
     TicketTierAvailabilityOut, CreateTicketBookingRequest, CreateTicketBookingOrderResponse,
     VerifyTicketBookingRequest, TicketBookingOut, CheckInTicketRequest, CheckInTicketResponse,
@@ -329,6 +329,8 @@ def verify_ticket_booking_payment(
             f"Fix: docker compose exec theomy-backend python -m app.seed_data"
         )
     current_user.reward_points_balance = (current_user.reward_points_balance or 0) + points_earned
+    record_points(db, current_user.id, points_earned, "ticket",
+                  amount=booking.amount, reference_id=booking.id)
 
     # The organiser who proposed the show gets the takings, minus
     # theomy's commission, into the same balance they already withdraw
