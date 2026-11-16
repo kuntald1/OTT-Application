@@ -273,7 +273,7 @@ export default function AdminReferralsPage() {
           </div>
 
           <div style={{ ...card, overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
               <thead>
                 <tr>
                   <th style={th}>Referrer</th>
@@ -308,20 +308,25 @@ export default function AdminReferralsPage() {
                       </td>
                       <td style={{ ...td, fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{r.code}</td>
                       <td style={td}>
-                        <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        {/* The hint that used to sit under this badge
+                            ("First subscription paid") was the widest
+                            thing in the row and pushed the table into a
+                            scrollbar. It lives in the tooltip now: the
+                            badge says it, and the Subscribed column
+                            dates it. */}
+                        <span className="inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                              title={st.hint}
                               style={{ background: `${st.color}22`, color: st.color }}>
                           {st.label}
                         </span>
-                        <div className="mt-1 text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>{st.hint}</div>
                       </td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>{fmtDate(r.registered_at)}</td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>{fmtDate(r.subscribed_at)}</td>
                       <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                         {r.status === "rewarded"
-                          ? <>
+                          ? <span title="referrer + new customer">
                               {r.referrer_points_awarded} + {r.referred_points_awarded}
-                              <div className="text-[11px]" style={{ color: "rgba(245,235,221,0.4)" }}>referrer + new</div>
-                            </>
+                            </span>
                           : <span style={{ color: "rgba(245,235,221,0.4)" }}>—</span>}
                       </td>
                       <td style={{ ...td, textAlign: "right" }}>
