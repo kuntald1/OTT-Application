@@ -167,7 +167,13 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
 
       {/* Content */}
       <main className="flex-1 px-8 py-8">
-        <div className="mx-auto max-w-3xl">
+        {/* Was max-w-3xl (768px), which is narrower than several of the
+            data tables in here — Referrals in particular scrolled
+            sideways while a third of the window sat empty on either
+            side. The form-heavy pages set their own width (max-w-md,
+            max-w-2xl and so on), so widening this one only gives the
+            tables room; it doesn't stretch any form. */}
+        <div className="mx-auto max-w-6xl">
           {NAV_ITEMS.every((item) => !item.visible) && (
             // An account with no visible menu (e.g. a Plays Organiser with
             // admin access whose role has no built page enabled yet) used to
