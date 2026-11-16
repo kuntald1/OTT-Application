@@ -30,10 +30,13 @@ from app.notifications import send_referral_invite_email, send_referral_invite_w
 
 router = APIRouter(prefix="/admin/referrals", tags=["admin-referrals"])
 
-# Ledger sources that mean "they bought something", as opposed to
-# "somebody they referred bought something".
+# Ledger sources, grouped the way the report reads them. The two
+# referral sources are kept APART on purpose: lumping them together
+# labelled a newly referred customer as having referred somebody, which
+# is the opposite of what happened to them.
 _PURCHASE_SOURCES = ("subscription", "autopay", "video", "live_stream", "ticket")
-_REFERRAL_SOURCES = ("referral_referrer", "referral_referred")
+_REFERRED_OTHERS_SOURCE = "referral_referrer"   # they brought someone in
+_WAS_REFERRED_SOURCE = "referral_referred"      # someone brought them in
 
 
 class ReferralRow(BaseModel):
@@ -54,7 +57,8 @@ class EarnerRow(BaseModel):
     user_id: str
     name: str
     email: str
-    referral_points: int
+    referred_others_points: int
+    was_referred_points: int
     purchase_points: int
     spent_points: int
     balance: int
@@ -180,10 +184,14 @@ def referral_report(
         .group_by(RewardTransaction.user_id, RewardTransaction.source)
         .all()
     ):
-        bucket = per_user.setdefault(user_id, {"referral": 0, "purchase": 0, "spent": 0})
+        bucket = per_user.setdefault(
+            user_id, {"referred_others": 0, "was_referred": 0, "purchase": 0, "spent": 0},
+        )
         points = int(total_points or 0)
-        if source in _REFERRAL_SOURCES:
-            bucket["referral"] += points
+        if source == _REFERRED_OTHERS_SOURCE:
+            bucket["referred_others"] += points
+        elif source == _WAS_REFERRED_SOURCE:
+            bucket["was_referred"] += points
         elif source in _PURCHASE_SOURCES:
             bucket["purchase"] += points
         else:
@@ -191,7 +199,8 @@ def referral_report(
 
     top_ids = sorted(
         per_user,
-        key=lambda uid: per_user[uid]["referral"] + per_user[uid]["purchase"],
+        key=lambda uid: (per_user[uid]["referred_others"] + per_user[uid]["was_referred"]
+                         + per_user[uid]["purchase"]),
         reverse=True,
     )[:20]
     earner_users = (
@@ -205,7 +214,9 @@ def referral_report(
         b = per_user[uid]
         top_earners.append(EarnerRow(
             user_id=str(uid), name=u.name, email=u.email,
-            referral_points=b["referral"], purchase_points=b["purchase"],
+            referred_others_points=b["referred_others"],
+            was_referred_points=b["was_referred"],
+            purchase_points=b["purchase"],
             spent_points=abs(b["spent"]),
             balance=u.reward_points_balance or 0,
         ))

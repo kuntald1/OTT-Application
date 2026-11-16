@@ -461,11 +461,16 @@ export default function AdminReferralsPage() {
             balance earned before that shows here as a balance with nothing behind it.
           </p>
           <div style={{ ...card, overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
               <thead>
                 <tr>
                   <th style={th}>Customer</th>
-                  <th style={{ ...th, textAlign: "right" }}>By referring</th>
+                  {/* Two columns, not one: a newly referred customer has
+                      referral points without having referred anybody, and
+                      a single "by referring" column said the opposite of
+                      what happened to them. */}
+                  <th style={{ ...th, textAlign: "right" }}>Referred others</th>
+                  <th style={{ ...th, textAlign: "right" }}>Was referred</th>
                   <th style={{ ...th, textAlign: "right" }}>By buying</th>
                   <th style={{ ...th, textAlign: "right" }}>Spent</th>
                   <th style={{ ...th, textAlign: "right" }}>Balance now</th>
@@ -473,7 +478,7 @@ export default function AdminReferralsPage() {
               </thead>
               <tbody>
                 {data.top_earners.length === 0 && (
-                  <tr><td style={{ ...td, color: "rgba(245,235,221,0.5)" }} colSpan={5}>No point movements recorded yet.</td></tr>
+                  <tr><td style={{ ...td, color: "rgba(245,235,221,0.5)" }} colSpan={6}>No point movements recorded yet.</td></tr>
                 )}
                 {data.top_earners.map((e) => (
                   <tr key={e.user_id}>
@@ -481,7 +486,8 @@ export default function AdminReferralsPage() {
                       {e.name}
                       <div className="text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>{e.email}</div>
                     </td>
-                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: e.referral_points ? COLORS.green : "rgba(245,235,221,0.4)" }}>{e.referral_points}</td>
+                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: e.referred_others_points ? COLORS.green : "rgba(245,235,221,0.4)" }}>{e.referred_others_points}</td>
+                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: e.was_referred_points ? COLORS.green : "rgba(245,235,221,0.4)" }}>{e.was_referred_points}</td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{e.purchase_points}</td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: "rgba(245,235,221,0.6)" }}>{e.spent_points}</td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: COLORS.gold }}>{e.balance}</td>
