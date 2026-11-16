@@ -1047,6 +1047,9 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
         {isIndia && (
           <button
             type="button"
+            role="switch"
+            aria-checked={autoRenew}
+            aria-label="Auto-renew with UPI Autopay"
             onClick={() => setAutoRenew((v) => !v)}
             className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
             style={{
@@ -1058,13 +1061,30 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
               Auto-renew with UPI Autopay — ₹{recurringInr} every {duration.label.toLowerCase()}. Approve once in your UPI app; turn it off any time.
               {rewardPoints > 0 && autoRenew ? " Reward points can't be redeemed on auto-renew." : ""}
             </span>
+            {/* The word matters as much as the switch. Off used to be a
+                pale track with a white knob, which on this dark card read
+                as a filled, switched-ON control — people were asking why
+                auto-renew defaulted to on when it never did. Off is now a
+                dark, empty groove with a dimmed knob, and it says so. */}
+            <span
+              className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide"
+              style={{ color: autoRenew ? COLORS.gold : "rgba(245,235,221,0.45)" }}
+            >
+              {autoRenew ? "On" : "Off"}
+            </span>
             <div
               className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
-              style={{ background: autoRenew ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}
+              style={{
+                background: autoRenew ? CTA_GRADIENT : "rgba(0,0,0,0.45)",
+                border: `1px solid ${autoRenew ? "transparent" : "rgba(245,235,221,0.22)"}`,
+              }}
             >
               <div
-                className="h-4 w-4 rounded-full bg-white transition-transform"
-                style={{ transform: autoRenew ? "translateX(16px)" : "translateX(0)" }}
+                className="h-4 w-4 rounded-full transition-transform"
+                style={{
+                  background: autoRenew ? "#ffffff" : "rgba(245,235,221,0.5)",
+                  transform: autoRenew ? "translateX(16px)" : "translateX(0)",
+                }}
               />
             </div>
           </button>
