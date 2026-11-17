@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.age_gate import blocked_ratings_for, is_blocked
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import (
@@ -65,6 +66,17 @@ def start_playback_session(
     video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    # Age restriction (see app/age_gate.py). This runs at the moment
+    # Play is actually pressed, so it also catches a session that was
+    # already open when a parent marked the profile as a minor, or when
+    # an admin added a rating to the restricted list — the next Play
+    # stops, without waiting for anything to be reloaded.
+    if is_blocked(video.age_rating, blocked_ratings_for(current_user, db)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This video isn't available on this profile.",
+        )
 
     max_screens = _get_max_screens(video, current_user, db)
     active_cutoff = datetime.now(timezone.utc) - timedelta(seconds=ACTIVE_WINDOW_SECONDS)

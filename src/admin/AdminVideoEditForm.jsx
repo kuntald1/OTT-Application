@@ -8,6 +8,7 @@ import SubtitleManager from "../shared/SubtitleManager";
 import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
 import { SECTION_LABELS, sectionLabel } from "../shared/sectionLabels";
+import { AGE_RATINGS, AGE_RATING_DROPDOWN_LABELS } from "../shared/ageRatings";
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -15,7 +16,6 @@ const FALLBACK_CATEGORIES = [
   "Bengali Theatre", "Drama", "Comedy", "Musical Theatre",
   "Classical Theatre", "Experimental Theatre", "Popular Shows",
 ];
-const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
 const inputStyle = {
   width: "100%", borderRadius: 8, border: "1px solid rgba(245,235,221,0.15)",
@@ -431,7 +431,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
           <label style={labelStyle}>Release Year</label>
           <input type="number" value={form.release_year} onChange={update("release_year")} style={inputStyle} />
         </div>
-        <Dropdown label="Age Rating" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} />
+        <Dropdown label="Age Rating" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} labels={AGE_RATING_DROPDOWN_LABELS} />
       </div>
       <div>
         <label style={labelStyle}>Categories (up to 3)</label>

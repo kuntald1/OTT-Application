@@ -9,8 +9,8 @@ import PersonAutocomplete from "../shared/PersonAutocomplete";
 import FilePreview from "../shared/FilePreview";
 import PersonFormFields, { EMPTY_PERSON_FORM } from "../shared/PersonFormFields";
 import { SECTION_LABELS, sectionLabel } from "../shared/sectionLabels";
+import { AGE_RATINGS, AGE_RATING_DROPDOWN_LABELS, ageRatingLabel } from "../shared/ageRatings";
 
-const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
 const inputStyle = {
   width: "100%",
@@ -379,7 +379,7 @@ export default function MyVideoListPage({ onBack }) {
                 <label style={labelStyle}>Release Year *</label>
                 <input type="number" min="1900" max="2100" placeholder="2026" value={form.release_year} onChange={update("release_year")} style={inputStyle} />
               </div>
-              <Dropdown label="Age Rating *" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} placeholder="Select rating" />
+              <Dropdown label="Age Rating *" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} placeholder="Select rating" labels={AGE_RATING_DROPDOWN_LABELS} />
             </div>
 
             <div>
@@ -633,7 +633,7 @@ export default function MyVideoListPage({ onBack }) {
                   <div className="p-4">
                     <p className="text-sm font-semibold" style={{ color: COLORS.cream }}>{v.title}</p>
                     <p className="mt-0.5 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
-                      {v.release_year}{v.duration_seconds > 0 ? ` · ${Math.floor(v.duration_seconds / 3600)}h ${String(Math.round((v.duration_seconds % 3600) / 60)).padStart(2, "0")}m` : ""} · {v.age_rating}{v.languages.length > 0 ? ` · ${v.languages.join(", ")}` : ""}
+                      {v.release_year}{v.duration_seconds > 0 ? ` · ${Math.floor(v.duration_seconds / 3600)}h ${String(Math.round((v.duration_seconds % 3600) / 60)).padStart(2, "0")}m` : ""} · {ageRatingLabel(v.age_rating)}{v.languages.length > 0 ? ` · ${v.languages.join(", ")}` : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(245,235,221,0.65)" }}>{sectionLabel(v.section)}</span>

@@ -986,6 +986,22 @@ export function updateAdminRewardConfig(body) {
   return request("/admin/reward-config", { method: "PUT", auth: true, body });
 }
 
+// --- Age Restriction (which ratings under-18 profiles may not watch) ---
+// Readable by any admin, superadmin-only to change. The server enforces
+// it; this screen only edits the setting.
+
+export function fetchAdminAgeRestriction() {
+  return request("/admin/age-restriction", { auth: true });
+}
+
+export function fetchAdminAgeRestrictionImpact() {
+  return request("/admin/age-restriction/impact", { auth: true });
+}
+
+export function updateAdminAgeRestriction(body) {
+  return request("/admin/age-restriction", { method: "PUT", auth: true, body });
+}
+
 // --- Refer & Earn tracking (read-only; the rates live above) ---
 
 export function fetchAdminReferrals({ status, limit = 100, offset = 0 } = {}) {

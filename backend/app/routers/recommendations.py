@@ -12,7 +12,8 @@ from app.models import (
     User, Video, VideoStatus, VideoEmbedding, VideoCast, VideoCrew, Person, VideoCategory,
     VideoWatchRecord, VideoLike,
 )
-from app.routers.videos import _to_out
+from app.age_gate import blocked_ratings_for, is_blocked
+from app.routers.videos import _exclude_blocked, _to_out
 from app.schemas import VideoOut
 
 router = APIRouter(prefix="/videos", tags=["recommendations"])
@@ -86,6 +87,17 @@ def get_more_like_this(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
+    # Age restriction (see app/age_gate.py): worked out once here and
+    # applied to the candidate pool below, so a restricted video is
+    # never recommended to an under-18 profile. Empty for every adult,
+    # which leaves this whole path exactly as it was.
+    blocked = blocked_ratings_for(current_user, db)
+    # If the video being viewed is itself restricted, there is nothing
+    # to recommend from it. The detail endpoint already 404s in that
+    # case, so this only catches a direct call to this URL.
+    if is_blocked(video.age_rating, blocked):
+        return []
+
     source = db.query(VideoEmbedding).filter(VideoEmbedding.video_id == video.id).first()
     if not source:
         return []
@@ -95,12 +107,12 @@ def get_more_like_this(
         db.query(VideoEmbedding, Video)
         .join(Video, Video.id == VideoEmbedding.video_id)
         .filter(Video.status == VideoStatus.published, Video.id != video.id)
-        .all()
     )
+    others = _exclude_blocked(others, blocked).all()
     scored = [(cosine_similarity(source_vec, json.loads(emb.vector_json)), v) for emb, v in others]
     scored.sort(key=lambda pair: pair[0], reverse=True)
     top_videos = [v for _, v in scored[:limit]]
-    return [_to_out(v, db, current_user) for v in top_videos]
+    return [_to_out(v, db, current_user, blocked_ratings=blocked) for v in top_videos]
 
 
 @router.get("/recommendations/for-me", response_model=list[VideoOut])
@@ -126,11 +138,14 @@ def get_recommendations_for_me(
     }
     seed_ids = watched_ids | liked_ids
 
-    all_published = (
-        db.query(Video)
-        .filter(Video.status == VideoStatus.published, Video.uploaded_by_user_id != current_user.id)
-        .all()
-    )
+    blocked = blocked_ratings_for(current_user, db)
+    all_published = _exclude_blocked(
+        db.query(Video).filter(
+            Video.status == VideoStatus.published,
+            Video.uploaded_by_user_id != current_user.id,
+        ),
+        blocked,
+    ).all()
     candidate_ids = {v.id for v in all_published} - watched_ids
     if not candidate_ids:
         return []
@@ -175,4 +190,4 @@ def get_recommendations_for_me(
 
     video_by_id = {v.id: v for v in all_published}
     top_videos = [video_by_id[vid] for vid in ranked_ids[:limit] if vid in video_by_id]
-    return [_to_out(v, db, current_user) for v in top_videos]
+    return [_to_out(v, db, current_user, blocked_ratings=blocked) for v in top_videos]

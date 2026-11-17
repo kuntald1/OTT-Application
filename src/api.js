@@ -1214,6 +1214,17 @@ export function deactivateSubAccount(subAccountId) {
   return request(`/sub-accounts/${subAccountId}/deactivate`, { method: "PATCH", auth: true });
 }
 
+// The parent changing whether a family account is for someone under 18.
+// Turning it OFF needs the Family PIN when the family has one set — the
+// server decides that, not this call: send no pin first, and a 400
+// asking for the PIN is the signal to prompt for it. Turning it back ON
+// never needs one.
+export function setSubAccountMinor(subAccountId, { isMinor, pin } = {}) {
+  const body = { is_minor: isMinor };
+  if (pin) body.pin = pin;
+  return request(`/sub-accounts/${subAccountId}/minor`, { method: "PATCH", auth: true, body });
+}
+
 // --- Family account switching ("Who's watching?") — routers/family.py ---
 // Wrong PINs come back as 400 ("Incorrect PIN. N attempts left.") and the
 // lockout as 429 — deliberately never 401, which request() above treats as

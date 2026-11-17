@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ArrowLeft, Play, Users, Film, Megaphone, VolumeX, IndianRupee } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "./theme";
 import { fetchVideoById, getToken, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken } from "./api";
+import { ageRatingLabel } from "./shared/ageRatings";
 
 // ---------------------------------------------------------------------------
 // Real video detail + player page. Reached with a video's id — wire a
@@ -183,7 +184,7 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavig
         {/* Meta row */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>{video.release_year}</span>
-          <span className="rounded border px-1.5 py-0.5 text-xs font-medium" style={{ borderColor: "rgba(212,175,55,0.4)", color: COLORS.gold }}>{video.age_rating}</span>
+          <span className="rounded border px-1.5 py-0.5 text-xs font-medium" style={{ borderColor: "rgba(212,175,55,0.4)", color: COLORS.gold }}>{ageRatingLabel(video.age_rating)}</span>
           {video.categories.map((cat) => (
             <span key={cat} className="rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ background: "rgba(212,175,55,0.1)", color: COLORS.gold }}>{cat}</span>
           ))}

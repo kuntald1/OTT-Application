@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.age_gate import blocked_ratings_for, is_blocked
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
@@ -33,7 +34,7 @@ POSTER_UPLOAD_DIR = Path("uploads/video_posters")
 ALLOWED_POSTER_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_POSTER_BYTES = 5 * 1024 * 1024  # 5 MB
 
-ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+"}
+ALLOWED_AGE_RATINGS = {"U", "UA7+", "UA13+", "UA16+", "A"}
 # Matches shared/languages.js's LANGUAGE_OPTIONS on the frontend — a
 # fixed toggle list rather than free text, so values stay consistent
 # everywhere they're stored, filtered, or displayed.
@@ -172,7 +173,12 @@ def _has_active_subscription_any(user: User, db: Session) -> bool:
     )
 
 
-def _check_video_access(video: Video, user: User | None, db: Session) -> tuple[bool, str | None]:
+def _check_video_access(
+    video: Video,
+    user: User | None,
+    db: Session,
+    blocked_ratings: set[str] | None = None,
+) -> tuple[bool, str | None]:
     """Real, server-side access gate — the only thing that decides
     whether playback_url/embed_url get populated in _to_out below.
     Replaces the old behaviour where the video player only checked
@@ -181,7 +187,21 @@ def _check_video_access(video: Video, user: User | None, db: Session) -> tuple[b
 
     Returns (has_access, access_reason). access_reason is None only
     when has_access is True.
+
+    blocked_ratings, when given, is this viewer's age-restricted ratings
+    already worked out for the whole request (see app/age_gate.py) —
+    list endpoints compute it once and pass it in, so rendering a
+    hundred cards doesn't re-read the settings row a hundred times.
+    Left out, it is worked out here.
     """
+    # The age gate comes FIRST, ahead of even the uploader's own
+    # self-preview carve-out below: nothing should be able to hand a
+    # restricted video to an under-18 profile, whoever uploaded it.
+    if blocked_ratings is None:
+        blocked_ratings = blocked_ratings_for(user, db)
+    if is_blocked(video.age_rating, blocked_ratings):
+        return False, "age_restricted"
+
     if user is None:
         return False, "login_required"
 
@@ -215,7 +235,29 @@ def _check_video_access(video: Video, user: User | None, db: Session) -> tuple[b
     return False, "subscription_required"
 
 
-def _to_out(video: Video, db: Session, viewer: User | None = None, force_access: bool = False) -> VideoOut:
+def _exclude_blocked(query, blocked: set[str]):
+    """Drop age-restricted videos from a Video query entirely, so they
+    never reach browse, search, recommendations or any other listing.
+
+    Done in SQL rather than in Python after the fact so that paging and
+    counts stay honest, and so a restricted video can't leak through a
+    listing someone forgot to post-filter.
+    """
+    if not blocked:
+        return query
+    members = [AgeRating(r) for r in blocked if r in {e.value for e in AgeRating}]
+    if not members:
+        return query
+    return query.filter(~Video.age_rating.in_(members))
+
+
+def _to_out(
+    video: Video,
+    db: Session,
+    viewer: User | None = None,
+    force_access: bool = False,
+    blocked_ratings: set[str] | None = None,
+) -> VideoOut:
     if video.bunny_video_id and video.duration_seconds is None:
         _fetch_and_cache_duration(video, db)
 
@@ -264,7 +306,7 @@ def _to_out(video: Video, db: Session, viewer: User | None = None, force_access:
     if force_access:
         has_access, access_reason = True, None
     else:
-        has_access, access_reason = _check_video_access(video, viewer, db)
+        has_access, access_reason = _check_video_access(video, viewer, db, blocked_ratings)
     likes_count = db.query(VideoLike).filter(VideoLike.video_id == video.id).count()
     liked_by_me = bool(
         viewer and db.query(VideoLike).filter(VideoLike.video_id == video.id, VideoLike.user_id == viewer.id).first()
@@ -690,7 +732,9 @@ def list_published_videos(
     # language/uploaded_by power the "Popular Languages" and "Studios"
     # discovery rows (see /languages and /studios below) — clicking a
     # tile lands back here with the matching filter.
+    blocked = blocked_ratings_for(current_user, db)
     query = db.query(Video).filter(Video.status == VideoStatus.published)
+    query = _exclude_blocked(query, blocked)
     if section:
         if section not in ("play", "archive"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
@@ -707,7 +751,7 @@ def list_published_videos(
             v for v in videos
             if v.languages and needle in [l.strip().lower() for l in v.languages.split(",")]
         ]
-    return [_to_out(v, db, current_user) for v in videos]
+    return [_to_out(v, db, current_user, blocked_ratings=blocked) for v in videos]
 
 
 @router.get("/languages", response_model=list[VideoLanguageOut])
@@ -853,10 +897,16 @@ def search_videos(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
         section_enum = VideoSection(section)
 
+    blocked = blocked_ratings_for(current_user, db)
+
     def _scoped(query):
         query = query.filter(Video.status == VideoStatus.published)
         if section_enum:
             query = query.filter(Video.section == section_enum)
+        # Age restriction belongs here rather than on each of the five
+        # match queries below, for the same reason `section` does: one
+        # place, so a match type added later can't quietly skip it.
+        query = _exclude_blocked(query, blocked)
         return query
 
     matching_ids: set = set()
@@ -899,7 +949,7 @@ def search_videos(
         .order_by(Video.published_at.desc())
         .all()
     )
-    return [_to_out(v, db, current_user) for v in videos]
+    return [_to_out(v, db, current_user, blocked_ratings=blocked) for v in videos]
 
 
 @router.get("/{video_id}", response_model=VideoOut)
@@ -921,11 +971,24 @@ def get_published_video(
     the fix for the previously-known gap where the player only checked
     whether the browser HAD a login token, never whether that user's
     subscription was actually active or had since expired.
+
+    An age-restricted video 404s here rather than returning a locked
+    card, so a shared link leaks no title, poster, synopsis or cast to
+    an under-18 profile — the same "it isn't there" the browse and
+    search listings give. Deliberately NOT the usual "Video not found"
+    wording: a parent looking over a child's shoulder should be able to
+    tell a restriction apart from a broken link.
     """
     video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    return _to_out(video, db, current_user)
+    blocked = blocked_ratings_for(current_user, db)
+    if is_blocked(video.age_rating, blocked):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This video isn't available on this profile.",
+        )
+    return _to_out(video, db, current_user, blocked_ratings=blocked)
 
 
 def _resolve_viewer_for_vmap(current_user: User | None, token: str | None, db: Session) -> User | None:

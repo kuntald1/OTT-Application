@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock, BookOpen, ImagePlus } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection, uploadMyStudioCoverImage, fetchStudioCoverImage } from "../api";
+import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, setSubAccountMinor, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection, uploadMyStudioCoverImage, fetchStudioCoverImage } from "../api";
 import ConfirmDialog from "../shared/ConfirmDialog";
+import PinField, { isCompletePin } from "../shared/PinField";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
 import FamilyPinSection from "../shared/FamilyPinSection";
 
@@ -190,6 +191,50 @@ export default function ManageProfilePage({ onBack }) {
       setSubError(err.message || "Couldn't create the account. Please try again.");
     } finally {
       setCreatingSub(false);
+    }
+  };
+
+  // --- Changing a family account's under-18 declaration -------------
+  // Turning it OFF opens age-restricted content up, so the server asks
+  // for the Family PIN when the family has one. We don't check that
+  // here: we send without a PIN first, and a 400 naming the PIN is the
+  // signal to prompt. That keeps one copy of the rule, on the server.
+  const [minorDialog, setMinorDialog] = useState(null); // { sub, nextIsMinor }
+  const [minorPin, setMinorPin] = useState("");
+  const [minorBusy, setMinorBusy] = useState(false);
+  const [minorError, setMinorError] = useState("");
+  const [minorNeedsPin, setMinorNeedsPin] = useState(false);
+
+  const openMinorDialog = (sub) => {
+    setMinorDialog({ sub, nextIsMinor: !sub.is_minor });
+    setMinorPin("");
+    setMinorError("");
+    setMinorNeedsPin(false);
+  };
+
+  const submitMinorChange = async () => {
+    if (!minorDialog) return;
+    setMinorError("");
+    setMinorBusy(true);
+    try {
+      await setSubAccountMinor(minorDialog.sub.id, {
+        isMinor: minorDialog.nextIsMinor,
+        pin: minorNeedsPin ? minorPin : undefined,
+      });
+      setMinorDialog(null);
+      setMinorPin("");
+      loadFamilyInfo();
+      refreshFamily();
+    } catch (err) {
+      const msg = err.message || "Couldn't save that change. Please try again.";
+      // The server asks for the PIN by name; that is what turns the
+      // field on. A wrong PIN comes back the same way, with its own
+      // "attempts left" message, and the field stays up.
+      if (/family pin/i.test(msg) || /incorrect pin/i.test(msg)) setMinorNeedsPin(true);
+      setMinorError(msg);
+      setMinorPin("");
+    } finally {
+      setMinorBusy(false);
     }
   };
 
@@ -426,14 +471,24 @@ export default function ManageProfilePage({ onBack }) {
                       <p className="truncate text-sm font-medium" style={{ color: COLORS.cream }}>
                         {s.name} {!s.is_active && <span className="ml-1 text-[10px] font-semibold uppercase" style={{ color: "#f87171" }}>Deactivated</span>}
                         {s.is_active && (
-                          <span
-                            className="ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                          // The badge is also the control: tapping it is how a
+                          // parent corrects the declaration. Every family
+                          // account made before this existed starts as "Minor",
+                          // which is the safe default but not always the true
+                          // one, so there has to be a way out.
+                          <button
+                            type="button"
+                            onClick={() => openMinorDialog(s)}
+                            title={s.is_minor
+                              ? "Marked as being for someone under 18 — tap to change"
+                              : "Marked as 18 or over — tap to change"}
+                            className="ml-1.5 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase"
                             style={s.is_minor
-                              ? { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)" }
-                              : { background: "rgba(212,175,55,0.15)", color: COLORS.gold }}
+                              ? { background: "rgba(245,235,221,0.08)", color: "rgba(245,235,221,0.5)", border: "1px solid rgba(245,235,221,0.15)" }
+                              : { background: "rgba(212,175,55,0.15)", color: COLORS.gold, border: "1px solid rgba(212,175,55,0.3)" }}
                           >
                             {s.is_minor ? "Minor" : "Adult"}
-                          </span>
+                          </button>
                         )}
                       </p>
                       <p className="truncate text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{s.email}</p>
@@ -524,6 +579,74 @@ export default function ManageProfilePage({ onBack }) {
           </div>
         )}
       </main>
+
+      {/* Changing a family account's under-18 declaration. Not a plain
+          ConfirmDialog because turning it off may need the Family PIN,
+          and because the two directions deserve different words: one
+          opens content up, the other closes it. */}
+      {minorDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={() => !minorBusy && setMinorDialog(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6"
+            style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.25)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+              {minorDialog.nextIsMinor ? "Mark as under 18" : "Mark as 18 or over"}
+            </h3>
+            <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+              {minorDialog.nextIsMinor
+                ? `${minorDialog.sub.name} will stop seeing age-restricted content, including 18+. Date of birth and city won't be asked for or kept for this account.`
+                : `${minorDialog.sub.name} will be able to watch age-restricted content, including 18+. Only do this if this account really is for someone 18 or over. We'll let you know by WhatsApp and email that this changed.`}
+            </p>
+
+            {minorNeedsPin && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-medium" style={{ color: "rgba(245,235,221,0.7)" }}>
+                  Enter your Family PIN to confirm
+                </p>
+                <PinField
+                  value={minorPin}
+                  onChange={setMinorPin}
+                  onEnter={submitMinorChange}
+                  disabled={minorBusy}
+                  ariaLabel="Family PIN"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {minorError && (
+              <p className="mb-3 text-xs" style={{ color: "#f87171" }}>{minorError}</p>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setMinorDialog(null)}
+                disabled={minorBusy}
+                className="rounded-full px-4 py-2 text-xs font-medium hover:opacity-80"
+                style={{ color: "rgba(245,235,221,0.6)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitMinorChange}
+                disabled={minorBusy || (minorNeedsPin && !isCompletePin(minorPin))}
+                className="rounded-full px-5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: COLORS.gold, color: "#0a0104" }}
+              >
+                {minorBusy ? "Working…" : minorDialog.nextIsMinor ? "Mark as under 18" : "Mark as 18 or over"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={!!confirmDeactivateSub}

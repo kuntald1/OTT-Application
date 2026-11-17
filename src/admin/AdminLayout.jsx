@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText, Compass, Upload, IndianRupee, CalendarPlus, Gift, Share2 } from "lucide-react";
+import { Clapperboard, Users, LogOut, PlusCircle, CalendarCheck, Wallet, Tag, Megaphone, Radio, UserCog, Sparkles, Newspaper, Contact, MessagesSquare, HandCoins, CreditCard, Receipt, LifeBuoy, LayoutDashboard, BarChart3, GalleryHorizontal, Contact2, Landmark, FileText, Compass, Upload, IndianRupee, CalendarPlus, Gift, Share2, ShieldAlert } from "lucide-react";
 import { setAdminToken } from "./adminApi";
 import AdminVideoReviewPage from "./AdminVideoReviewPage";
 import AdminAccountsPage from "./AdminAccountsPage";
@@ -19,6 +19,7 @@ import AdminSubscriptionPlansPage from "./AdminSubscriptionPlansPage";
 import AdminSubscriptionsPage from "./AdminSubscriptionsPage";
 import AdminRewardSettingsPage from "./AdminRewardSettingsPage";
 import AdminReferralsPage from "./AdminReferralsPage";
+import AdminAgeRestrictionPage from "./AdminAgeRestrictionPage";
 import AdminHelpCenterPage from "./AdminHelpCenterPage";
 import AdminDashboardPage from "./AdminDashboardPage";
 import AdminReportsPage from "./AdminReportsPage";
@@ -94,6 +95,9 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
     // much money comes back to customers on every sale.
     { id: "reward-settings", label: "Reward Points", icon: Gift, visible: isSuperadmin },
     { id: "referrals", label: "Referrals", icon: Share2, visible: isSuperadmin },
+    // Readable by any admin, superadmin-only to change (the page itself
+    // enforces that) — it decides what children can watch.
+    { id: "age-restriction", label: "Age Restriction", icon: ShieldAlert, visible: true },
     { id: "help-center", label: "Help Center", icon: LifeBuoy, visible: canSeeMenu("help-center") },
     { id: "page-heroes", label: "Page Heroes", icon: GalleryHorizontal, visible: canSeeMenu("page-heroes") },
     { id: "theater-hero-slides", label: "Ticketing Hero Slides", icon: Contact2, visible: canSeeMenu("theater-hero-slides") },
@@ -195,6 +199,7 @@ export default function AdminLayout({ currentAdmin, onLogout }) {
           {activePage === "subscriptions" && <AdminSubscriptionsPage />}
           {activePage === "reward-settings" && isSuperadmin && <AdminRewardSettingsPage />}
           {activePage === "referrals" && isSuperadmin && <AdminReferralsPage />}
+          {activePage === "age-restriction" && <AdminAgeRestrictionPage isSuperadmin={isSuperadmin} />}
           {activePage === "help-center" && <AdminHelpCenterPage />}
           {activePage === "page-heroes" && <AdminPageHeroesPage />}
           {activePage === "theater-hero-slides" && <AdminTheaterHeroSlidesPage />}

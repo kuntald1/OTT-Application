@@ -6,6 +6,7 @@ import razorpay
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.age_gate import blocked_ratings_for, is_blocked
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
@@ -43,6 +44,19 @@ def create_video_purchase_order(
     video = db.query(Video).filter(Video.id == video_id, Video.status == VideoStatus.published).first()
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+
+    # Age restriction (see app/age_gate.py) — checked BEFORE anything is
+    # charged. Without this an under-18 profile could be taken through a
+    # real Razorpay payment for something it would then be refused at
+    # playback, which is the worst of both worlds. Same 404 wording the
+    # detail endpoint gives, so the restriction reads the same way
+    # wherever it's met.
+    if is_blocked(video.age_rating, blocked_ratings_for(current_user, db)):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This video isn't available on this profile.",
+        )
+
     if video.monetization_type != VideoMonetization.pay_per_video:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This video isn't Pay-Per-Video.")
 

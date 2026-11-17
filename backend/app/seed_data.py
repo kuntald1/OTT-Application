@@ -12,7 +12,7 @@ Usage (from inside the backend container):
     docker compose exec theomy-backend python -m app.seed_data
 """
 from app.database import SessionLocal
-from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig, PageHero, SitePage, FaqItem
+from app.models import Menu, SubscriptionPlan, SubscriptionDuration, TaxConfig, Blog, User, CommunityRoom, RoomPost, RevenueRateConfig, ExchangeRateConfig, RewardConfig, AgeRestrictionConfig, PageHero, SitePage, FaqItem
 from app.security import hash_password
 
 
@@ -307,6 +307,21 @@ def seed_reward_config(db):
           "1 point = Rs 1, Refer & Earn 25+25 points on a 30-day code.")
 
 
+def seed_age_restriction_config(db):
+    """The single age_restriction_config row (see models). Default is the
+    client's decision of Nov 2026: UA16+ and A (18+) closed to under-18
+    family sub-accounts, everything else open.
+    """
+    existing = db.query(AgeRestrictionConfig).first()
+    if existing:
+        print(f"Age restriction config already exists (enabled={existing.enabled}, "
+              f"restricted={existing.restricted_ratings}), skipping.")
+        return
+    db.add(AgeRestrictionConfig(enabled=True, restricted_ratings="UA16+,A"))
+    db.commit()
+    print("Seeded age restriction config: UA16+ and A (18+) hidden from under-18 profiles.")
+
+
 def seed_page_heroes(db):
     """Text-only defaults for all four hero-bearing pages — matches the
     copy that used to be hardcoded in MovixHero.jsx/ArchiveHero.jsx/
@@ -379,6 +394,7 @@ if __name__ == "__main__":
         seed_revenue_rate(db)
         seed_exchange_rate(db)
         seed_reward_config(db)
+        seed_age_restriction_config(db)
         seed_page_heroes(db)
         seed_site_content(db)
     finally:

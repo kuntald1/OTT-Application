@@ -20,6 +20,7 @@ import palPurple from "../assets/posters/pal-purple.jpg";
 import palForest from "../assets/posters/pal-forest.jpg";
 import palSlate from "../assets/posters/pal-slate.jpg";
 import palRose from "../assets/posters/pal-rose.jpg";
+import { ageRatingLabel } from "../shared/ageRatings";
 
 // ---------------------------------------------------------------------------
 // VideoStreaming's own Browse feed — now organized into genre-style rows
@@ -1316,6 +1317,15 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                     >
                       Log in to Watch
                     </button>
+                  ) : video.access_reason === "age_restricted" ? (
+                    // Age restriction (Admin > Age Restriction). A viewer
+                    // normally never gets this far — the listing hides the
+                    // video and the detail endpoint 404s — so this is the
+                    // backstop that stops it falling through to "Subscribe
+                    // to Watch", which would be both wrong and insulting.
+                    <p className="text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+                      This video isn't available on this profile.
+                    </p>
                   ) : video.access_reason === "purchase_required" ? (
                     <button
                       type="button"
@@ -1359,7 +1369,7 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                       not decorative. */}
                   <button
                     type="button"
-                    onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${video.age_rating}`, section: "Video Streaming" })}
+                    onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${ageRatingLabel(video.age_rating)}`, section: "Video Streaming" })}
                     aria-label={saved ? "Remove from My List" : "Add to My List"}
                     className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
                     style={{
@@ -1397,7 +1407,7 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
               <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" style={{ color: T.textMuted }}>
                 <span>{video.release_year}</span>
                 {video.duration_seconds > 0 && <span>{formatDuration(Math.round(video.duration_seconds / 60))}</span>}
-                <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: GOLD, color: GOLD }}>{video.age_rating}</span>
+                <span className="rounded border px-1.5 py-0.5 text-xs font-semibold" style={{ borderColor: GOLD, color: GOLD }}>{ageRatingLabel(video.age_rating)}</span>
                 <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs" style={{ color: GOLD }}>{video.categories[0]}</span>
               </div>
 

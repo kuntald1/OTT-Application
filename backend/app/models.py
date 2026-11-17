@@ -1164,6 +1164,43 @@ class RewardConfig(Base):
     )
 
 
+class AgeRestrictionConfig(Base):
+    """Single-row master table deciding which age ratings an under-18
+    profile may NOT watch. Edited from Admin > Age Restriction; read by
+    app/age_gate.py, which is the only place the rule is applied.
+
+    Why a settings row rather than a constant: the client asked for this
+    to be changeable from the admin panel, so the certification policy
+    can move (a new rating, a stricter line for minors) without a code
+    change or a deploy.
+
+    enabled is the master switch. Turned off — or if this row has never
+    been seeded — every viewer sees exactly what they saw before this
+    feature shipped. That is deliberately the safe failure mode: a
+    half-finished deploy under-restricts rather than locking paying
+    adults out of content they can already watch.
+
+    restricted_ratings is a comma-separated list of AgeRating VALUES
+    ("UA16+,A"), not ids. A value here that no longer exists as a rating
+    is simply ignored, so retiring a rating can never orphan this row.
+
+    WHO COUNTS AS UNDER-18 is not stored here. Main accounts are 18+ by
+    registration (auth.MIN_REGISTRATION_AGE), so only family
+    sub-accounts can be minors, and UserDemographics.is_declared_minor
+    is the single source of truth for that — see age_gate.is_minor_viewer.
+    """
+    __tablename__ = "age_restriction_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enabled = Column(Boolean, nullable=False, default=True)
+    restricted_ratings = Column(String(200), nullable=False, default="UA16+,A")
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class ReferralCode(Base):
     """One shareable Refer & Earn code, belonging to one user.
 
@@ -1346,6 +1383,11 @@ class AgeRating(str, enum.Enum):
     ua7 = "UA7+"
     ua13 = "UA13+"
     ua16 = "UA16+"
+    # 18+ / Adult (migration 2026-11-17). Shown to viewers as "18+"
+    # rather than the bare "A" — see the frontend's AGE_RATING_LABELS.
+    # Which ratings an under-18 profile may actually watch is NOT decided
+    # here; it is a setting an admin edits (see AgeRestrictionConfig).
+    a = "A"
 
 
 class VideoSection(str, enum.Enum):

@@ -1210,6 +1210,43 @@ class RewardConfigOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AgeRestrictionConfigOut(BaseModel):
+    """Admin > Age Restriction. restricted_ratings comes back as a LIST
+    of rating values, not the raw comma-separated column, so the admin
+    screen can tick checkboxes without parsing anything.
+
+    all_ratings is every rating that exists, weakest first — the screen
+    renders its checkboxes from this rather than from a copy of the list
+    kept in the frontend, so adding a rating server-side never leaves the
+    two out of step.
+    """
+    enabled: bool
+    restricted_ratings: List[str]
+    all_ratings: List[str]
+    updated_at: Optional[datetime] = None
+
+
+class AgeRestrictionConfigUpdate(BaseModel):
+    """Both fields optional — only what is sent gets changed, so the
+    screen can flip the master switch without resending the ticked
+    ratings. An unknown rating is rejected rather than ignored: a typo
+    that silently restricted nothing would be worse than an error.
+    """
+    enabled: Optional[bool] = Field(default=None)
+    restricted_ratings: Optional[List[str]] = Field(default=None)
+
+    @field_validator("restricted_ratings")
+    @classmethod
+    def _known_ratings_only(cls, v):
+        if v is None:
+            return v
+        from app.age_gate import RATING_ORDER
+        unknown = [r for r in v if r not in RATING_ORDER]
+        if unknown:
+            raise ValueError(f"Unknown age rating(s): {', '.join(unknown)}")
+        return v
+
+
 class RewardConfigUpdate(BaseModel):
     """Admin > Reward Points. Every field optional — only what is sent
     gets changed. Percentages are capped at 100 (handing back more than
@@ -1923,6 +1960,18 @@ class SubAccountOut(BaseModel):
     is_minor: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class SubAccountMinorUpdate(BaseModel):
+    """The parent changing whether a family account is for someone under
+    18, from Manage Profile.
+
+    pin is the Family PIN, and is required only when turning the flag
+    OFF and only when that family has a PIN set — the direction that
+    opens age-restricted content up. See routers/sub_accounts.py.
+    """
+    is_minor: bool
+    pin: Optional[str] = Field(default=None, pattern=r"^[0-9]{4}$")
 
 
 class MySubAccountsOut(BaseModel):

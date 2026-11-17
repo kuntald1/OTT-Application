@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.age_gate import blocked_ratings_for
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User, Video, VideoStatus, VideoSection, WatchProgress
+from app.routers.videos import _exclude_blocked
 from app.schemas import WatchProgressUpdate, ContinueWatchingOut, WatchHistoryOut
 
 router = APIRouter(prefix="/videos", tags=["watch-progress"])
@@ -95,6 +97,11 @@ def get_continue_watching(
         .join(Video, Video.id == WatchProgress.video_id)
         .filter(WatchProgress.user_id == current_user.id, Video.status == VideoStatus.published)
     )
+    # A video watched before it was restricted (or before the profile
+    # was marked as a minor) stays in the database but drops out of this
+    # row — see app/age_gate.py. The progress itself is kept, so it
+    # comes back untouched if the restriction is lifted.
+    query = _exclude_blocked(query, blocked_ratings_for(current_user, db))
     if section:
         if section not in ("play", "archive"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="section must be 'play' or 'archive'")
@@ -128,13 +135,12 @@ def get_watch_history(
     "History" page. Includes finished videos too, unlike Continue
     Watching.
     """
-    rows = (
+    rows = _exclude_blocked(
         db.query(WatchProgress, Video)
         .join(Video, Video.id == WatchProgress.video_id)
-        .filter(WatchProgress.user_id == current_user.id, Video.status == VideoStatus.published)
-        .order_by(WatchProgress.updated_at.desc())
-        .all()
-    )
+        .filter(WatchProgress.user_id == current_user.id, Video.status == VideoStatus.published),
+        blocked_ratings_for(current_user, db),
+    ).order_by(WatchProgress.updated_at.desc()).all()
     return [
         WatchHistoryOut(
             video_id=video.id,

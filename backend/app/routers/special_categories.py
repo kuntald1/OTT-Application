@@ -3,16 +3,28 @@ from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.age_gate import blocked_ratings_for
 from app.config import settings
 from app.database import get_db
-from app.models import SpecialCategory, SpecialCategoryVideo, Video, VideoSection, VideoStatus
+from app.deps import get_current_user_optional
+from app.models import SpecialCategory, SpecialCategoryVideo, User, Video, VideoSection, VideoStatus
+from app.routers.videos import _exclude_blocked
 from app.schemas import SpecialCategoryOut, SpecialCategoryVideoCardOut
 
 router = APIRouter(prefix="/special-categories", tags=["special-categories"])
 
 
 @router.get("", response_model=list[SpecialCategoryOut])
-def list_active_special_categories(section: str = "play", db: Session = Depends(get_db)):
+def list_active_special_categories(
+    section: str = "play",
+    db: Session = Depends(get_db),
+    # Auth is OPTIONAL and new here (Nov 2026): this stays a public
+    # endpoint, but a token, when one is sent, is what tells an
+    # under-18 profile apart from an adult for the age restriction
+    # below. Without a token the viewer is treated as logged out, which
+    # is itself restricted — see app/age_gate.py.
+    current_user: User | None = Depends(get_current_user_optional),
+):
     """Public — no auth. Returns only categories that are currently
     "live": not disabled, and (today falls within [visible_from,
     visible_to] inclusive) OR (both dates are unset — a PERMANENT
@@ -53,6 +65,7 @@ def list_active_special_categories(section: str = "play", db: Session = Depends(
         .all()
     )
     rows = dated_rows + permanent_rows
+    blocked = blocked_ratings_for(current_user, db)
 
     out = []
     for sc in rows:
@@ -66,7 +79,10 @@ def list_active_special_categories(section: str = "play", db: Session = Depends(
         # may show on the site. (Admin's own list, admin_special_categories,
         # deliberately still shows every member.)
         videos = (
-            db.query(Video).filter(Video.id.in_(video_ids), Video.status == VideoStatus.published).all()
+            _exclude_blocked(
+                db.query(Video).filter(Video.id.in_(video_ids), Video.status == VideoStatus.published),
+                blocked,
+            ).all()
             if video_ids else []
         )
         out.append(SpecialCategoryOut(

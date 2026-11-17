@@ -9,6 +9,7 @@ import PersonAutocomplete from "../shared/PersonAutocomplete";
 import { CATEGORIES as FALLBACK_CATEGORIES } from "../shared/categories";
 import { fetchCategoryOptions } from "../api";
 import { SECTION_LABELS, sectionLabel } from "../shared/sectionLabels";
+import { AGE_RATINGS, AGE_RATING_DROPDOWN_LABELS } from "../shared/ageRatings";
 
 const COLORS = {
   panel: "#150307",
@@ -18,7 +19,6 @@ const COLORS = {
   blackSoft: "#150307",
 };
 
-const AGE_RATINGS = ["U", "UA7+", "UA13+", "UA16+"];
 
 const inputStyle = {
   width: "100%",
@@ -491,7 +491,7 @@ export default function AdminAddVideoPage() {
                 <label style={labelStyle}>Release Year *</label>
                 <input type="number" min="1900" max="2100" placeholder="2026" value={form.release_year} onChange={update("release_year")} style={inputStyle} />
               </div>
-              <Dropdown label="Age Rating *" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} placeholder="Select rating" />
+              <Dropdown label="Age Rating *" value={form.age_rating} options={AGE_RATINGS} onChange={(v) => setForm((f) => ({ ...f, age_rating: v }))} placeholder="Select rating" labels={AGE_RATING_DROPDOWN_LABELS} />
             </div>
 
             <div>

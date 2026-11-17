@@ -963,3 +963,61 @@ def send_referral_invite_whatsapp(
         to=f"whatsapp:{to_number}",
         body=body,
     )
+
+
+# --- Family: a sub-account's minor flag was changed -------------------
+#
+# Sent to the PARENT, not to the sub-account, and only when a profile
+# stops being treated as under-18 — the direction that opens content up.
+# The point is that a parent finds out even if somebody else made the
+# change from their logged-in browser, so both channels are tried: the
+# phone number is optional on non-India accounts (see User.phone), and
+# the email address always exists.
+#
+# Both swallow their errors. A failed notification must never undo the
+# change the parent just made, or leave the API returning an error for
+# something that did in fact happen.
+
+def send_minor_flag_removed_whatsapp(to_phone: str, parent_name: str, child_name: str) -> None:
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    body = (
+        f"theomy: Hi {parent_name}, the family account \"{child_name}\" is no longer marked "
+        f"as being for someone under 18. It can now watch age-restricted content, including 18+. "
+        f"If you didn't make this change, open Manage Profile on theomy and switch it back, "
+        f"then change your password."
+    )
+    try:
+        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_minor_flag_removed_email(to_email: str, parent_name: str, child_name: str) -> None:
+    subject = f'"{child_name}" is no longer set as an under-18 account'
+    text_body = (
+        f"Hi {parent_name},\n\n"
+        f"The family account \"{child_name}\" on theomy is no longer marked as being for "
+        f"someone under 18. It can now watch age-restricted content, including 18+.\n\n"
+        f"If you didn't make this change, open Manage Profile on theomy and switch it back, "
+        f"then change your password.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "An age setting changed on your family",
+        [
+            f"Hi {parent_name},",
+            f'The family account "<b>{child_name}</b>" is no longer marked as being for someone '
+            f"under 18. It can now watch age-restricted content, including 18+.",
+            "If you didn't make this change, open Manage Profile on theomy and switch it back, "
+            "then change your password.",
+        ],
+        "#D4AF37",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
