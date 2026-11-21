@@ -194,7 +194,7 @@ export default function VideoDetailPage({ videoId, onBack, onViewPerson, onNavig
         </div>
 
         {video.description && (
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.75)" }}>{video.description}</p>
+          <p className="mb-6 max-w-2xl whitespace-pre-line text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.75)" }}>{video.description}</p>
         )}
 
         {video.languages.length > 0 && (

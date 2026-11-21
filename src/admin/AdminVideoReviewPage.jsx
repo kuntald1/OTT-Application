@@ -259,7 +259,7 @@ export default function AdminVideoReviewPage() {
                       By {v.uploaded_by_name} · {sectionLabel(v.section)} · {v.categories.join(", ")} · {v.release_year}{v.duration_seconds > 0 ? ` · ${Math.floor(v.duration_seconds / 3600)}h ${String(Math.round((v.duration_seconds % 3600) / 60)).padStart(2, "0")}m` : ""} · {v.age_rating} · {v.monetization_type.replace(/_/g, " ")} · {v.has_ads ? "Ad Present" : "Ad Free"} · Submitted {formatDate(v.created_at)}
                     </p>
                     {v.description && (
-                      <p className="mt-1.5 text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>{v.description}</p>
+                      <p className="mt-1.5 whitespace-pre-line text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>{v.description}</p>
                     )}
                     {(v.cast.length > 0 || v.crew.length > 0) && (
                       <div className="mt-2 flex flex-col gap-1.5">

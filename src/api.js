@@ -423,6 +423,14 @@ export async function confirmVideoUpload(videoId) {
   return request(`/videos/${videoId}/confirm-upload`, { method: "POST", auth: true });
 }
 
+// Pressing Cancel mid-upload. The browser stops sending on its own; this
+// is what takes the half-written file off Bunny, so an abandoned upload
+// doesn't sit there costing storage. Only valid while the upload is
+// unconfirmed — a finished file is deleted, not cancelled.
+export async function cancelVideoUpload(videoId) {
+  return request(`/videos/${videoId}/cancel-upload`, { method: "POST", auth: true });
+}
+
 export function uploadVideoTrailer(videoId, file, onProgress) {
   return new Promise((resolve, reject) => {
     const token = getToken();

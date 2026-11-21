@@ -275,6 +275,12 @@ export async function confirmVideoUploadAdmin(videoId) {
   return request(`/admin/videos/${videoId}/confirm-upload`, { method: "POST", auth: true });
 }
 
+// Pressing Cancel mid-upload — removes the partial file from Bunny. See
+// cancelVideoUpload in ../api.js for the creator-facing equivalent.
+export async function cancelVideoUploadAdmin(videoId) {
+  return request(`/admin/videos/${videoId}/cancel-upload`, { method: "POST", auth: true });
+}
+
 export function uploadAdminVideoTrailer(videoId, file, onProgress) {
   return new Promise((resolve, reject) => {
     const token = getAdminToken();

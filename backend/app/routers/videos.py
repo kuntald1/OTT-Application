@@ -1452,6 +1452,56 @@ def _get_or_create_tus_credentials(video: Video, db: Session) -> TusUploadCreden
     )
 
 
+def _cancel_upload(video: Video, db: Session) -> Video:
+    """Stop an upload that is still in flight and take the half-written
+    file off Bunny Stream, so a cancelled 900MB attempt doesn't sit there
+    costing storage with nothing pointing at it.
+
+    Only ever touches an UNCONFIRMED upload. A video whose file is
+    already confirmed is a finished video: removing that is deleting the
+    video, not cancelling an upload, so this refuses rather than
+    destroying something the page didn't mean to.
+
+    Clearing bunny_video_id is what makes the next attempt a clean one —
+    _get_or_create_tus_credentials mints a brand-new Bunny video rather
+    than re-signing the deleted GUID.
+    """
+    if video.upload_confirmed_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This video's file is already uploaded. Delete the video instead of cancelling.",
+        )
+    if not video.bunny_video_id:
+        # Cancelled before the first byte, or cancelled twice. Nothing to
+        # undo, and the page shouldn't see an error for tidying up.
+        return video
+
+    if settings.BUNNY_LIBRARY_ID and settings.BUNNY_API_KEY:
+        try:
+            resp = httpx.delete(
+                f"https://video.bunnycdn.com/library/{settings.BUNNY_LIBRARY_ID}/videos/{video.bunny_video_id}",
+                headers={"AccessKey": settings.BUNNY_API_KEY, "Accept": "application/json"},
+                timeout=30.0,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't reach the video server to cancel the upload: {exc}",
+            )
+        # 404 means Bunny has no such video — already gone, which is the
+        # state we were asking for, so it counts as done.
+        if resp.status_code not in (200, 201, 204, 404):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Couldn't remove the partial upload from the video server: {resp.text}",
+            )
+
+    video.bunny_video_id = None
+    db.commit()
+    db.refresh(video)
+    return video
+
+
 def _confirm_upload(video: Video, db: Session) -> Video:
     if not video.bunny_video_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No upload was started for this video.")
@@ -1472,6 +1522,23 @@ def get_tus_upload_credentials(
     if not video:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
     return _get_or_create_tus_credentials(video, db)
+
+
+@router.post("/{video_id}/cancel-upload", response_model=VideoOut)
+def cancel_video_upload(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Called when someone presses Cancel while a file is still going up.
+    The browser stops sending; this removes what Bunny has kept so far.
+    """
+    _require_creator_or_organiser(current_user)
+    video = db.query(Video).filter(Video.id == video_id, Video.uploaded_by_user_id == current_user.id).first()
+    if not video:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    video = _cancel_upload(video, db)
+    return _to_out(video, db)
 
 
 @router.post("/{video_id}/confirm-upload", response_model=VideoOut)

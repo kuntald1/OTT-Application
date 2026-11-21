@@ -633,7 +633,7 @@ function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-3">
-            <p className="text-sm leading-relaxed sm:col-span-2" style={{ color: T.textMuted }}>{card.description}</p>
+            <p className="whitespace-pre-line text-sm leading-relaxed sm:col-span-2" style={{ color: T.textMuted }}>{card.description}</p>
             <div className="flex flex-col gap-3 text-xs">
               <div>
                 <p className="mb-1" style={{ color: T.textFainter }}>GENRES</p>
@@ -1412,7 +1412,7 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
               </div>
 
               <div className="grid gap-6 sm:grid-cols-3">
-                <p className="text-sm leading-relaxed sm:col-span-2" style={{ color: T.textMuted }}>{video.description}</p>
+                <p className="whitespace-pre-line text-sm leading-relaxed sm:col-span-2" style={{ color: T.textMuted }}>{video.description}</p>
                 <div className="flex flex-col gap-3 text-xs">
                   {video.categories.length > 0 && (
                     <div>

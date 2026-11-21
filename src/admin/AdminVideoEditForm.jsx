@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, ChevronDown, ImagePlus, Upload } from "lucide-react";
-import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin, fetchAdminSpecialCategories, addVideoToAdminSpecialCategory, removeVideoFromAdminSpecialCategory } from "./adminApi";
+import { editVideo, fetchAdminAds, fetchAdminVideoCuePoints, addAdminVideoCuePoint, deleteAdminVideoCuePoint, uploadAdminVideoPoster, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin, cancelVideoUploadAdmin, fetchAdminSpecialCategories, addVideoToAdminSpecialCategory, removeVideoFromAdminSpecialCategory } from "./adminApi";
 import { startResumableVideoUpload } from "../shared/tusUpload";
 import { LANGUAGE_OPTIONS } from "../shared/languages";
 import { fetchCategoryOptions } from "../api";
@@ -195,6 +195,10 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
   // form's own preview) reflects it without needing Save changes.
   const [uploadingVideoFile, setUploadingVideoFile] = useState(false);
   const [videoFileProgress, setVideoFileProgress] = useState(0);
+  const [cancellingUpload, setCancellingUpload] = useState(false);
+  // The live tus upload, so Cancel can stop it. A ref, not state: it
+  // isn't rendered and must not re-render the form on every chunk.
+  const uploadControlRef = useRef(null);
   const [uploadingPoster, setUploadingPoster] = useState(false);
   const [uploadingTrailer, setUploadingTrailer] = useState(false);
   const [trailerProgress, setTrailerProgress] = useState(0);
@@ -205,8 +209,9 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
     if (!file) return;
     setFileError("");
     setVideoFileProgress(0);
+    setCancellingUpload(false);
     setUploadingVideoFile(true);
-    startResumableVideoUpload({
+    uploadControlRef.current = startResumableVideoUpload({
       file,
       getCredentials: () => fetchTusUploadCredentialsAdmin(video.id),
       confirmUpload: () => confirmVideoUploadAdmin(video.id),
@@ -214,14 +219,35 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
       onSuccess: (updated) => {
         setUploadingVideoFile(false);
         setVideoFileProgress(0);
+        uploadControlRef.current = null;
         onFileUpdated?.(updated);
       },
       onError: (message) => {
         setFileError(message || "Couldn't upload video file. Please try again.");
         setUploadingVideoFile(false);
         setVideoFileProgress(0);
+        uploadControlRef.current = null;
       },
     });
+  };
+
+  // Cancel while the file is still going up: stop sending, and have the
+  // part Bunny already holds deleted, so an abandoned upload doesn't sit
+  // there. The panel goes back to the upload button either way.
+  const handleCancelUpload = async () => {
+    setCancellingUpload(true);
+    uploadControlRef.current?.abort();
+    uploadControlRef.current = null;
+    try {
+      await cancelVideoUploadAdmin(video.id);
+      setFileError("");
+    } catch (err) {
+      setFileError(err.message || "Upload stopped, but the partial file may still be on the video server.");
+    } finally {
+      setUploadingVideoFile(false);
+      setVideoFileProgress(0);
+      setCancellingUpload(false);
+    }
   };
 
   const handlePosterSelect = async (e) => {
@@ -297,6 +323,20 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
   const pricingValid = !isPayPerVideo || (Number(form.price_inr) > 0 && Number(form.price_usd) > 0);
   const canSubmit = form.title.trim() && form.categories.length > 0 && form.release_year && form.age_rating && tiersValid && pricingValid;
 
+  // A greyed-out Save with no explanation reads as a broken page. The
+  // commonest cause is a video submitted with no category at all (older
+  // ones, and anything created before Categories was required), which
+  // nothing on screen points at. This names whatever is actually
+  // missing, in the same words as the field labels.
+  const missing = [
+    !form.title.trim() && "a Title",
+    form.categories.length === 0 && "at least one Category",
+    !form.release_year && "a Release Year",
+    !form.age_rating && "an Age Rating",
+    !tiersValid && "a minimum-minutes and a rate above 0 in every revenue-share tier",
+    !pricingValid && "a Pay-Per-Video price in both ₹ and $",
+  ].filter(Boolean);
+
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setError("");
@@ -354,6 +394,16 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
                     style={{ width: `${videoFileProgress}%`, background: COLORS.gold }}
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  disabled={cancellingUpload}
+                  className="mt-2 flex items-center gap-1 text-[11px] font-medium hover:opacity-80 disabled:opacity-50"
+                  style={{ color: "#f87171" }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  {cancellingUpload ? "Cancelling…" : "Cancel upload"}
+                </button>
               </div>
             ) : (
               <label
@@ -424,7 +474,7 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
       </div>
       <div>
         <label style={labelStyle}>Description</label>
-        <textarea rows={2} value={form.description} onChange={update("description")} style={{ ...inputStyle, resize: "vertical" }} />
+        <textarea rows={6} value={form.description} onChange={update("description")} style={{ ...inputStyle, resize: "vertical" }} />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
@@ -559,6 +609,11 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
           {submitting ? "Saving…" : "Save changes"}
         </button>
         <button type="button" onClick={onCancel} className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
+        {missing.length > 0 && (
+          <span className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+            Add {missing.join(", ")} to save.
+          </span>
+        )}
       </div>
     </div>
   );

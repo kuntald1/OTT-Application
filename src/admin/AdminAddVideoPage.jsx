@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film, Search, X, UserCircle, Sparkles } from "lucide-react";
-import { createAdminVideo, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin } from "./adminApi";
+import { createAdminVideo, uploadAdminVideoTrailer, addAdminVideoSubtitle, deleteAdminVideoSubtitle, uploadAdminVideoPoster, uploadAdminPersonPhoto, searchCreatorAccounts, suggestVideoMetadata, fetchTusUploadCredentialsAdmin, confirmVideoUploadAdmin, cancelVideoUploadAdmin } from "./adminApi";
 import { startResumableVideoUpload } from "../shared/tusUpload";
 import { LANGUAGE_OPTIONS } from "../shared/languages";
 import SubtitleManager from "../shared/SubtitleManager";
@@ -129,6 +129,10 @@ export default function AdminAddVideoPage() {
   const [hoveredVideoId, setHoveredVideoId] = useState(null);
   const [playingVideoId, setPlayingVideoId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [cancellingUpload, setCancellingUpload] = useState(false);
+  // The live tus upload, so Cancel can stop it. A ref, not state: it
+  // isn't rendered and must not re-render the page on every chunk.
+  const uploadControlRef = useRef(null);
   const [fileUploadError, setFileUploadError] = useState("");
   const [uploadingPosterFor, setUploadingPosterFor] = useState(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
@@ -261,8 +265,9 @@ export default function AdminAddVideoPage() {
     if (!file) return;
     setFileUploadError("");
     setUploadProgress(0);
+    setCancellingUpload(false);
     setUploadingFileFor(videoId);
-    startResumableVideoUpload({
+    uploadControlRef.current = startResumableVideoUpload({
       file,
       getCredentials: () => fetchTusUploadCredentialsAdmin(videoId),
       confirmUpload: () => confirmVideoUploadAdmin(videoId),
@@ -271,13 +276,37 @@ export default function AdminAddVideoPage() {
         setAddedVideos((prev) => prev.map((v) => (v.id === videoId ? updated : v)));
         setUploadingFileFor(null);
         setUploadProgress(0);
+        uploadControlRef.current = null;
       },
       onError: (message) => {
         setFileUploadError(message || "Couldn't upload video file. Please try again.");
         setUploadingFileFor(null);
         setUploadProgress(0);
+        uploadControlRef.current = null;
       },
     });
+  };
+
+  // Cancel while the file is still going up. Two things have to happen:
+  // the browser stops sending (abort), and the part Bunny already has is
+  // deleted, so an abandoned 900MB attempt doesn't sit there. The screen
+  // goes back to "Upload video file" either way — if the server-side
+  // cleanup fails there is nothing the person can do about it from here,
+  // and leaving the progress bar stuck would be worse.
+  const handleCancelUpload = async (videoId) => {
+    setCancellingUpload(true);
+    uploadControlRef.current?.abort();
+    uploadControlRef.current = null;
+    try {
+      await cancelVideoUploadAdmin(videoId);
+      setFileUploadError("");
+    } catch (err) {
+      setFileUploadError(err.message || "Upload stopped, but the partial file may still be on the video server.");
+    } finally {
+      setUploadingFileFor(null);
+      setUploadProgress(0);
+      setCancellingUpload(false);
+    }
   };
 
   const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
@@ -841,6 +870,16 @@ export default function AdminAddVideoPage() {
                               style={{ width: `${uploadProgress}%`, background: COLORS.gold }}
                             />
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelUpload(v.id)}
+                            disabled={cancellingUpload}
+                            className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80 disabled:opacity-50"
+                            style={{ color: "#f87171" }}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            {cancellingUpload ? "Cancelling…" : "Cancel upload"}
+                          </button>
                         </div>
                       ) : (
                         <div>

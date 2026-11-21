@@ -46,9 +46,15 @@ export function startResumableVideoUpload({ file, getCredentials, confirmUpload,
           filetype: file.type,
           title: file.name,
         },
-        // Keyed on name+size+type+mtime by default — good enough to
-        // recognize "same file, re-selected after a closed tab or
-        // reload" without us tracking anything extra ourselves.
+        // The default key is name+size+type+mtime+endpoint, which can't
+        // tell a resume from a fresh start after a CANCEL: the same file
+        // picked again would resume into the Bunny video we just had
+        // deleted, and every request would 404. Keying on the Bunny
+        // video id instead gets both cases right, because the server
+        // hands back the SAME id while an upload is still pending and a
+        // NEW one once it has been cancelled.
+        fingerprint: () =>
+          Promise.resolve(`theomy-${creds.video_id}-${file.name}-${file.size}-${file.lastModified}`),
         storeFingerprintForResuming: true,
         removeFingerprintOnSuccess: true,
         onError: (error) => {
@@ -84,9 +90,20 @@ export function startResumableVideoUpload({ file, getCredentials, confirmUpload,
     });
 
   return {
+    // abort(true) tells Bunny to drop the partial upload and clears the
+    // saved resume point, so nothing is left half-written on their side
+    // and the file can be picked again from scratch. The promise is
+    // swallowed: the caller follows this with its own cancel call to our
+    // backend, which deletes the Bunny video outright, so a failure here
+    // changes nothing and must not stop the page resetting.
     abort: () => {
       cancelled = true;
-      uploadRef?.abort();
+      try {
+        const result = uploadRef?.abort(true);
+        if (result && typeof result.catch === "function") result.catch(() => {});
+      } catch {
+        // Nothing to do — the backend cancel below is the real cleanup.
+      }
     },
   };
 }

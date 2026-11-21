@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Video, Plus, Trash2, ChevronDown, Upload, CheckCircle2, Clapperboard, IndianRupee, Megaphone, VolumeX, Play, ImagePlus, Users, Film } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
-import { uploadVideo, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, createPerson, fetchMyVideos, fetchTusUploadCredentials, confirmVideoUpload } from "../api";
+import { uploadVideo, uploadVideoTrailer, addVideoSubtitle, deleteVideoSubtitle, uploadVideoPoster, uploadPersonPhoto, createPerson, fetchMyVideos, fetchTusUploadCredentials, confirmVideoUpload, cancelVideoUpload } from "../api";
 import { startResumableVideoUpload } from "../shared/tusUpload";
 import { LANGUAGE_OPTIONS } from "../shared/languages";
 import SubtitleManager from "../shared/SubtitleManager";
@@ -122,6 +122,10 @@ export default function MyVideoListPage({ onBack }) {
   const [hoveredVideoId, setHoveredVideoId] = useState(null);
   const [playingVideoId, setPlayingVideoId] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [cancellingUpload, setCancellingUpload] = useState(false);
+  // The live tus upload, so Cancel can stop it. A ref, not state: it
+  // isn't rendered and must not re-render the page on every chunk.
+  const uploadControlRef = useRef(null);
   const [fileUploadError, setFileUploadError] = useState("");
   const [uploadingPosterFor, setUploadingPosterFor] = useState(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
@@ -259,8 +263,9 @@ export default function MyVideoListPage({ onBack }) {
     if (!file) return;
     setFileUploadError("");
     setUploadProgress(0);
+    setCancellingUpload(false);
     setUploadingFileFor(videoId);
-    startResumableVideoUpload({
+    uploadControlRef.current = startResumableVideoUpload({
       file,
       getCredentials: () => fetchTusUploadCredentials(videoId),
       confirmUpload: () => confirmVideoUpload(videoId),
@@ -268,14 +273,36 @@ export default function MyVideoListPage({ onBack }) {
       onSuccess: () => {
         setUploadingFileFor(null);
         setUploadProgress(0);
+        uploadControlRef.current = null;
         loadVideos();
       },
       onError: (message) => {
         setFileUploadError(message || "Couldn't upload video file. Please try again.");
         setUploadingFileFor(null);
         setUploadProgress(0);
+        uploadControlRef.current = null;
       },
     });
+  };
+
+  // Cancel while the file is still going up. The browser stops sending,
+  // and the part Bunny already has is deleted, so an abandoned 900MB
+  // attempt doesn't sit there. The card goes back to "Upload video file"
+  // either way — a stuck progress bar would be worse than a warning.
+  const handleCancelUpload = async (videoId) => {
+    setCancellingUpload(true);
+    uploadControlRef.current?.abort();
+    uploadControlRef.current = null;
+    try {
+      await cancelVideoUpload(videoId);
+      setFileUploadError("");
+    } catch (err) {
+      setFileUploadError(err.message || "Upload stopped, but the partial file may still be on the video server.");
+    } finally {
+      setUploadingFileFor(null);
+      setUploadProgress(0);
+      setCancellingUpload(false);
+    }
   };
 
   const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
@@ -714,6 +741,16 @@ export default function MyVideoListPage({ onBack }) {
                               style={{ width: `${uploadProgress}%`, background: CTA_GRADIENT }}
                             />
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelUpload(v.id)}
+                            disabled={cancellingUpload}
+                            className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80 disabled:opacity-50"
+                            style={{ color: "#f87171" }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {cancellingUpload ? "Cancelling…" : "Cancel upload"}
+                          </button>
                         </div>
                       ) : (
                         <div>
