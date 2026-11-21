@@ -431,7 +431,12 @@ export async function cancelVideoUpload(videoId) {
   return request(`/videos/${videoId}/cancel-upload`, { method: "POST", auth: true });
 }
 
-export function uploadVideoTrailer(videoId, file, onProgress) {
+// onStart hands the caller the XMLHttpRequest so a Cancel button can
+// abort it. Aborting is all a trailer cancel needs: the backend creates
+// the Bunny video only AFTER it has read the whole file (see
+// _upload_trailer_to_bunny), so a cut-off upload never reaches Bunny and
+// leaves nothing behind to delete.
+export function uploadVideoTrailer(videoId, file, onProgress, onStart) {
   return new Promise((resolve, reject) => {
     const token = getToken();
     const formData = new FormData();
@@ -459,6 +464,17 @@ export function uploadVideoTrailer(videoId, file, onProgress) {
 
     xhr.onerror = () => reject(new Error("Network error during upload. Please try again."));
 
+    // abort() fires neither onload nor onerror, so without this the
+    // promise would never settle and the caller's finally block would
+    // never run. Named AbortError so a deliberate cancel can be told
+    // apart from a real failure and shown no error message.
+    xhr.onabort = () => {
+      const err = new Error("Upload cancelled.");
+      err.name = "AbortError";
+      reject(err);
+    };
+
+    onStart?.(xhr);
     xhr.send(formData);
   });
 }

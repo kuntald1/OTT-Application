@@ -202,6 +202,8 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
   const [uploadingPoster, setUploadingPoster] = useState(false);
   const [uploadingTrailer, setUploadingTrailer] = useState(false);
   const [trailerProgress, setTrailerProgress] = useState(0);
+  // The live trailer request, so Cancel can abort it.
+  const trailerXhrRef = useRef(null);
   const [fileError, setFileError] = useState("");
 
   const handleVideoFileSelect = (e) => {
@@ -272,14 +274,36 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
     setTrailerProgress(0);
     setUploadingTrailer(true);
     try {
-      const updated = await uploadAdminVideoTrailer(video.id, file, (pct) => setTrailerProgress(pct));
+      const updated = await uploadAdminVideoTrailer(
+        video.id, file,
+        (pct) => setTrailerProgress(pct),
+        (xhr) => { trailerXhrRef.current = xhr; },
+      );
       onFileUpdated?.(updated);
     } catch (err) {
-      setFileError(err.message || "Couldn't upload trailer. Please try again.");
+      // A cancel isn't a failure — handleCancelTrailer has already
+      // reset the panel, so there is nothing to report.
+      if (err.name !== "AbortError") {
+        setFileError(err.message || "Couldn't upload trailer. Please try again.");
+      }
     } finally {
+      trailerXhrRef.current = null;
       setUploadingTrailer(false);
       setTrailerProgress(0);
     }
+  };
+
+  // Cancel a trailer still going up. No server call is needed: the
+  // backend creates the Bunny video only after it has read the whole
+  // file, so a cut-off upload leaves nothing behind. Past 100% the bytes
+  // are all with our server and it finishes the Bunny side regardless,
+  // so the button is hidden from that point.
+  const handleCancelTrailer = () => {
+    trailerXhrRef.current?.abort();
+    trailerXhrRef.current = null;
+    setFileError("");
+    setUploadingTrailer(false);
+    setTrailerProgress(0);
   };
 
   const [form, setForm] = useState({
@@ -445,6 +469,17 @@ export default function AdminVideoEditForm({ video, onSave, onCancel, onFileUpda
                 </div>
                 {trailerProgress >= 100 && (
                   <p className="mt-1 text-[10px]" style={{ color: "rgba(245,235,221,0.4)" }}>Can take a few minutes for large files</p>
+                )}
+                {trailerProgress < 100 && (
+                  <button
+                    type="button"
+                    onClick={handleCancelTrailer}
+                    className="mt-2 flex items-center gap-1 text-[11px] font-medium hover:opacity-80"
+                    style={{ color: "#f87171" }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Cancel upload
+                  </button>
                 )}
               </div>
             ) : (

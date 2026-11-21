@@ -312,6 +312,8 @@ export default function AdminAddVideoPage() {
   const [uploadingTrailerFor, setUploadingTrailerFor] = useState(null);
   const [trailerUploadProgress, setTrailerUploadProgress] = useState(0);
   const [trailerUploadError, setTrailerUploadError] = useState("");
+  // The live trailer request, so Cancel can abort it.
+  const trailerXhrRef = useRef(null);
 
   const handleTrailerSelect = async (videoId, e) => {
     const file = e.target.files?.[0];
@@ -320,14 +322,33 @@ export default function AdminAddVideoPage() {
     setTrailerUploadProgress(0);
     setUploadingTrailerFor(videoId);
     try {
-      const updated = await uploadAdminVideoTrailer(videoId, file, (pct) => setTrailerUploadProgress(pct));
+      const updated = await uploadAdminVideoTrailer(videoId, file, (pct) => setTrailerUploadProgress(pct), (xhr) => { trailerXhrRef.current = xhr; });
       setAddedVideos((prev) => prev.map((v) => (v.id === videoId ? updated : v)));
     } catch (err) {
-      setTrailerUploadError(err.message || "Couldn't upload trailer. Please try again.");
+      // A cancel isn't a failure — handleCancelTrailer has already
+      // reset the panel, so there is nothing to report.
+      if (err.name !== "AbortError") {
+        setTrailerUploadError(err.message || "Couldn't upload trailer. Please try again.");
+      }
     } finally {
+      trailerXhrRef.current = null;
       setUploadingTrailerFor(null);
       setTrailerUploadProgress(0);
     }
+  };
+
+  // Cancel a trailer that is still going up. Unlike the main video file
+  // this needs no server call: the backend only creates the Bunny video
+  // after it has read the whole file, so a cut-off upload leaves nothing
+  // behind. Once the bar reaches 100% the bytes are all with our server
+  // and it will finish the Bunny side regardless, so the button is
+  // hidden from that point rather than promising something it can't do.
+  const handleCancelTrailer = () => {
+    trailerXhrRef.current?.abort();
+    trailerXhrRef.current = null;
+    setTrailerUploadError("");
+    setUploadingTrailerFor(null);
+    setTrailerUploadProgress(0);
   };
 
   const handleSubtitleUpdated = (updatedVideo) => {
@@ -933,6 +954,17 @@ export default function AdminAddVideoPage() {
                               style={{ width: `${trailerUploadProgress}%`, background: COLORS.gold }}
                             />
                           </div>
+                          {trailerUploadProgress < 100 && (
+                            <button
+                              type="button"
+                              onClick={handleCancelTrailer}
+                              className="mt-2 flex items-center gap-1 text-xs font-medium hover:opacity-80"
+                              style={{ color: "#f87171" }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Cancel upload
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div>
