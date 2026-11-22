@@ -39,7 +39,7 @@ from app.models import (
     AutopaySubscription, Payment, PaymentGateway, PaymentStatus,
     RewardConfig, Subscription, SubscriptionPlan, TaxConfig, User,
 )
-from app.notifications import send_payment_email, send_payment_whatsapp
+from app.notifications import send_autopay_charge_email, send_autopay_charge_whatsapp
 from app.routers.payments import _compute_pricing
 from app.rewards import award_referral_if_due, points_for_amount, record_points
 
@@ -276,6 +276,11 @@ def _apply_charge(db: Session, autopay_id: uuid.UUID, razorpay_payment_id: str) 
     if autopay.subscription_id:
         subscription = db.query(Subscription).filter(Subscription.id == autopay.subscription_id).first()
 
+    # Which wording the confirmation uses ("is active" vs "has renewed").
+    # Read before the branch below creates the row, or every charge would
+    # look like a renewal.
+    is_first_charge = subscription is None
+
     if subscription is None:
         # First charge — same rule as a one-time purchase: only one active
         # subscription per user.
@@ -358,12 +363,26 @@ def _apply_charge(db: Session, autopay_id: uuid.UUID, razorpay_payment_id: str) 
     db.refresh(payment)
 
     # Best-effort notifications — never fail the charge over these.
+    #
+    # Deliberately NOT the plain payment templates: those read as "paid,
+    # done", which is wrong for a mandate that will charge again. These
+    # carry the next date and how to stop, which is what keeps a renewal
+    # from arriving as a surprise and turning into a dispute.
+    #
+    # The date is derived the same way /autopay/me derives it — expires_at
+    # carries the grace days, so take them back off — rather than stored
+    # twice and allowed to drift apart.
+    next_renewal_at = subscription.expires_at - timedelta(days=AUTOPAY_GRACE_DAYS)
     try:
         if user.phone:
-            send_payment_whatsapp(user.phone, payment.plan_name, payment.total_amount, payment.duration_label)
-        send_payment_email(
+            send_autopay_charge_whatsapp(
+                user.phone, payment.plan_name, payment.total_amount,
+                payment.duration_label, next_renewal_at, is_first_charge,
+            )
+        send_autopay_charge_email(
             user.email, payment.plan_name, payment.total_amount,
             payment.tax_amount, payment.duration_label, payment.screens,
+            next_renewal_at, is_first_charge,
         )
     except Exception as exc:
         print(f"WARNING: autopay notification failed for payment {payment.id}: {exc}")

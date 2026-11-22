@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock, BookOpen, ImagePlus } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Users, Plus, UserX, Lock, BookOpen, ImagePlus, RefreshCw } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, setSubAccountMinor, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection, uploadMyStudioCoverImage, fetchStudioCoverImage } from "../api";
+import { fetchMySubAccounts, fetchMyParent, createSubAccount, deactivateSubAccount, setSubAccountMinor, changePassword, fetchMyOrganiserSections, createMyOrganiserSection, updateMyOrganiserSection, deleteMyOrganiserSection, uploadMyStudioCoverImage, fetchStudioCoverImage, fetchMyAutopay, cancelMyAutopay } from "../api";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import PinField, { isCompletePin } from "../shared/PinField";
 import OrganiserProfileSectionsEditor from "../shared/OrganiserProfileSectionsEditor";
@@ -144,6 +144,46 @@ export default function ManageProfilePage({ onBack }) {
       setPhotoError(err.message || "Couldn't upload photo. Please try again.");
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  // --- Auto-renew (UPI Autopay) ---------------------------------------
+  // The checkout screen promises "cancel any time from Manage Profile",
+  // so it has to actually be here. It was only on the Subscription Plans
+  // page, which is where someone goes to BUY — the last place a person
+  // trying to stop paying thinks to look. A promise people can't find is
+  // what turns a renewal into a dispute.
+  const [autopay, setAutopay] = useState(null);
+  const [cancellingAutopay, setCancellingAutopay] = useState(false);
+  const [confirmCancelAutopay, setConfirmCancelAutopay] = useState(false);
+  const [autopayError, setAutopayError] = useState("");
+
+  const loadAutopay = async () => {
+    try {
+      setAutopay(await fetchMyAutopay());
+    } catch {
+      setAutopay(null);
+    }
+  };
+
+  useEffect(() => {
+    // Sub-accounts don't own the plan, so there is nothing here for them
+    // to cancel — the parent holds the mandate.
+    if (!profile?.parent_id) loadAutopay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.parent_id]);
+
+  const handleCancelAutopay = async () => {
+    setCancellingAutopay(true);
+    setAutopayError("");
+    try {
+      await cancelMyAutopay();
+      await loadAutopay();
+    } catch (err) {
+      setAutopayError(err.message || "Couldn't turn off auto-renew. Please try again.");
+    } finally {
+      setCancellingAutopay(false);
+      setConfirmCancelAutopay(false);
     }
   };
 
@@ -352,6 +392,48 @@ export default function ManageProfilePage({ onBack }) {
             )}
           </div>
         </div>
+
+        {/* Auto-renew — only when one is actually running. Hidden for
+            everyone else rather than shown as an empty "off" state,
+            which would just be noise on a page people open for other
+            reasons. */}
+        {autopay?.active && (
+          <>
+            <div className="mb-8" />
+            <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.3)" }}>
+              <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+                <RefreshCw className="h-4 w-4" style={{ color: COLORS.gold }} /> Auto-renew
+              </h2>
+              <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.65)" }}>
+                Your {autopay.plan_name} plan renews automatically. ₹{autopay.total_amount} will be
+                charged via UPI Autopay
+                {autopay.next_renewal_at
+                  ? ` around ${new Date(autopay.next_renewal_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`
+                  : ""}
+                , then every {String(autopay.duration_label || "").toLowerCase()}.
+              </p>
+
+              {autopayError && (
+                <div className="mb-4 rounded-lg px-3 py-2 text-sm font-medium" style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}>
+                  {autopayError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={cancellingAutopay}
+                onClick={() => setConfirmCancelAutopay(true)}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
+              >
+                {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
+              </button>
+              <p className="mt-3 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+                You keep access until the period you have already paid for ends.
+              </p>
+            </div>
+          </>
+        )}
 
         <div className="mb-8" />
         <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -657,6 +739,21 @@ export default function ManageProfilePage({ onBack }) {
         busy={deactivatingSubId === confirmDeactivateSub?.id}
         onCancel={() => setConfirmDeactivateSub(null)}
         onConfirm={handleDeactivateSubConfirmed}
+      />
+
+      <ConfirmDialog
+        open={confirmCancelAutopay}
+        title="Turn off auto-renew"
+        message={
+          autopay?.next_renewal_at
+            ? `No further payments will be taken. You keep ${autopay.plan_name} until ${new Date(autopay.next_renewal_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}, then access ends.`
+            : "No further payments will be taken. You keep access until the period you have already paid for ends."
+        }
+        confirmLabel="Turn off"
+        danger
+        busy={cancellingAutopay}
+        onCancel={() => setConfirmCancelAutopay(false)}
+        onConfirm={handleCancelAutopay}
       />
     </div>
   );

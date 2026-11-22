@@ -88,6 +88,126 @@ Thank you for subscribing to theomy!
         pass
 
 
+def send_autopay_charge_whatsapp(
+    to_phone: str, plan_name: str, total_amount, duration_label: str,
+    next_renewal_at, is_first_charge: bool,
+) -> None:
+    """The auto-renew version of send_payment_whatsapp.
+
+    A one-off payment is finished when it is made; an auto-renew charge is
+    a promise to charge again. So this says the next date and the amount,
+    and where to stop it. That is what card networks and Stripe both ask
+    for, and it is the single thing that most reduces "I was charged after
+    I cancelled" disputes — a customer who was told cannot be surprised.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    when = next_renewal_at.strftime("%d %b %Y") if next_renewal_at else None
+    opening = (
+        f"theomy: Your {plan_name} plan is active — ₹{total_amount} paid."
+        if is_first_charge
+        else f"theomy: Your {plan_name} plan renewed — ₹{total_amount} paid."
+    )
+    body = (
+        f"{opening} Auto-renew is ON, so ₹{total_amount} will be charged again "
+        + (f"around {when}" if when else f"every {duration_label.lower()}")
+        + ". To stop it, open Manage Profile on theomy.com or in the app and "
+        "turn off auto-renew."
+    )
+    try:
+        TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN).messages.create(
+            from_=settings.TWILIO_FROM_NUMBER,
+            to=f"whatsapp:{to_number}",
+            body=body,
+        )
+    except Exception:
+        pass
+
+
+def send_autopay_charge_email(
+    to_email: str, plan_name: str, total_amount, tax_amount, duration_label: str,
+    screens: int, next_renewal_at, is_first_charge: bool,
+) -> None:
+    """The auto-renew version of send_payment_email. See the WhatsApp one
+    above for why the next date and the way to stop belong in here.
+    """
+    when = next_renewal_at.strftime("%d %B %Y") if next_renewal_at else None
+    next_line = (
+        f"₹{total_amount} will be charged again around {when}."
+        if when
+        else f"₹{total_amount} will be charged again every {duration_label.lower()}."
+    )
+    subject = (
+        "Your theomy subscription is confirmed"
+        if is_first_charge
+        else f"Your theomy {plan_name} plan has renewed"
+    )
+    headline = "Subscription confirmed" if is_first_charge else "Subscription renewed"
+
+    text_body = f"""Hi,
+
+Your payment was successful and your {plan_name} plan is active.
+
+Plan: {plan_name}
+Duration: {duration_label}
+Screens: {screens}
+Tax (GST): Rs {tax_amount}
+Total paid: Rs {total_amount}
+
+Auto-renew is ON. {next_line}
+
+To stop it, open Manage Profile on theomy.com or in the app and turn off
+auto-renew. You keep access until the period you have already paid for ends.
+
+Thank you for subscribing to theomy!
+"""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">{headline}</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Your payment was successful and your {plan_name} plan is active.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8);">
+              <tr><td style="padding:6px 0;">Plan</td><td style="padding:6px 0; text-align:right; font-weight:600;">{plan_name}</td></tr>
+              <tr><td style="padding:6px 0;">Duration</td><td style="padding:6px 0; text-align:right;">{duration_label}</td></tr>
+              <tr><td style="padding:6px 0;">Screens</td><td style="padding:6px 0; text-align:right;">{screens}</td></tr>
+              <tr><td style="padding:6px 0;">Tax (GST)</td><td style="padding:6px 0; text-align:right;">&#8377;{tax_amount}</td></tr>
+              <tr><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); font-weight:700; color:#D4AF37;">Total paid</td><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); text-align:right; font-weight:700; color:#D4AF37;">&#8377;{total_amount}</td></tr>
+            </table>
+            <div style="margin:24px 0 0 0; padding:14px 16px; background:rgba(212,175,55,0.08); border:1px solid rgba(212,175,55,0.3); border-radius:10px;">
+              <p style="margin:0 0 6px 0; font-size:13px; font-weight:600; color:#D4AF37;">Auto-renew is on</p>
+              <p style="margin:0; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.75);">
+                {next_line}<br>
+                To stop it, open <strong style="color:#f5ebdd;">Manage Profile</strong> on theomy.com or in
+                the app and turn off auto-renew. You keep access until the period you have already paid for ends.
+              </p>
+            </div>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
 def send_withdrawal_paid_whatsapp(to_phone: str, amount_rupees) -> None:
     """WhatsApp confirmation once an admin has actually sent a
     withdrawal payment manually (bank transfer/UPI, since RazorpayX
