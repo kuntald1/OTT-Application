@@ -417,6 +417,40 @@ class AutopaySubscription(Base):
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class AutopayRenewalReminder(Base):
+    """One row per "we warned you about this charge" message.
+
+    Its only job is to stop the reminder going out twice. The scheduler
+    polls, so without a record of what has been sent, a customer whose
+    renewal is three days away would be told again on every single poll.
+
+    A row here rather than a `reminder_sent_at` column on
+    autopay_subscriptions for the usual reason in this codebase:
+    Base.metadata.create_all creates missing TABLES but never adds
+    COLUMNS, so a new table appears by itself on the next startup while a
+    new column would need a hand-written ALTER TABLE on the live
+    database. It also leaves an audit trail of what was sent and when,
+    which is exactly what you want in front of you during a chargeback.
+
+    The unique constraint is the real guard: two workers polling at the
+    same moment can both decide a reminder is due, and the second insert
+    then fails instead of sending a duplicate.
+    """
+    __tablename__ = "autopay_renewal_reminders"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    autopay_id = Column(UUID(as_uuid=True), ForeignKey("autopay_subscriptions.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    # The charge date this reminder was about. Part of the key, so the
+    # NEXT cycle's reminder is a different row and still gets sent.
+    renewal_at = Column(DateTime(timezone=True), nullable=False)
+    sent_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint("autopay_id", "renewal_at", name="uq_autopay_reminder_per_renewal"),
+    )
+
+
 class TaxConfig(Base):
     """Single-row table holding the current GST rate. Admin-editable
     (update the one row) — the checkout flow always reads the latest value,

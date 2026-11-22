@@ -1,7 +1,28 @@
+from datetime import timedelta, timezone
 from twilio.rest import Client as TwilioClient
 
 from app.config import settings
 from app.email_utils import _send_email
+
+
+# UPI Autopay is India-only, so every date in these messages is read in
+# IST. A UTC date can land a day early for an evening charge (19:00 UTC
+# is already the next day in Kolkata), and "you said the 22nd" is exactly
+# the kind of detail a dispute turns on.
+#
+# A fixed offset rather than ZoneInfo("Asia/Kolkata"): India has no DST,
+# so the offset is always +05:30, and this needs no tzdata package in the
+# container.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _ist_date(dt, fmt: str) -> str | None:
+    """Formats a timestamp as the calendar date an Indian customer sees."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:  # defensive: treat a naive timestamp as UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(IST).strftime(fmt)
 
 
 def send_payment_whatsapp(to_phone: str, plan_name: str, total_amount, duration_label: str) -> None:
@@ -106,7 +127,7 @@ def send_autopay_charge_whatsapp(
         return
 
     to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
-    when = next_renewal_at.strftime("%d %b %Y") if next_renewal_at else None
+    when = _ist_date(next_renewal_at, "%d %b %Y")
     opening = (
         f"theomy: Your {plan_name} plan is active — ₹{total_amount} paid."
         if is_first_charge
@@ -135,7 +156,7 @@ def send_autopay_charge_email(
     """The auto-renew version of send_payment_email. See the WhatsApp one
     above for why the next date and the way to stop belong in here.
     """
-    when = next_renewal_at.strftime("%d %B %Y") if next_renewal_at else None
+    when = _ist_date(next_renewal_at, "%d %B %Y")
     next_line = (
         f"₹{total_amount} will be charged again around {when}."
         if when
@@ -195,6 +216,113 @@ Thank you for subscribing to theomy!
                 the app and turn off auto-renew. You keep access until the period you have already paid for ends.
               </p>
             </div>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_autopay_reminder_whatsapp(
+    to_phone: str, plan_name: str, total_amount, renewal_at,
+) -> None:
+    """Sent a few days BEFORE an auto-renew charge, not after it.
+
+    This is the cheapest dispute prevention there is. Almost every "I was
+    charged without permission" claim is really "I forgot I had this",
+    and a message that arrives while there is still time to cancel turns
+    that into a cancellation instead of a chargeback. The customer's bank
+    also warns them 24 hours ahead under the RBI's e-mandate rules; this
+    is ours, earlier, and it names the plan rather than just an amount.
+
+    Non-fatal like every other notification here.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    when = _ist_date(renewal_at, "%d %b %Y")
+    body = (
+        f"theomy: Your {plan_name} plan renews on {when} — ₹{total_amount} will be "
+        f"charged via UPI Autopay. Nothing to do if you want to keep watching. "
+        f"If not, open Manage Profile on theomy.com or in the app and turn off "
+        f"auto-renew before then."
+    )
+    try:
+        TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN).messages.create(
+            from_=settings.TWILIO_FROM_NUMBER,
+            to=f"whatsapp:{to_number}",
+            body=body,
+        )
+    except Exception:
+        pass
+
+
+def send_autopay_reminder_email(
+    to_email: str, plan_name: str, total_amount, duration_label: str, renewal_at,
+) -> None:
+    """The email twin of send_autopay_reminder_whatsapp — see there for
+    why this goes out before the charge rather than after.
+    """
+    when = _ist_date(renewal_at, "%d %B %Y")
+    subject = f"Your theomy {plan_name} plan renews on {when}"
+
+    text_body = f"""Hi,
+
+A heads-up before your next payment.
+
+Plan: {plan_name}
+Renews on: {when}
+Amount: Rs {total_amount}
+Paid by: UPI Autopay
+
+If you want to keep watching, there is nothing to do — the payment goes
+through on its own and your plan continues.
+
+If you would rather stop, open Manage Profile on theomy.com or in the
+app and turn off auto-renew before {when}. You keep access until the
+period you have already paid for ends.
+
+— theomy
+"""
+    html_body = f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background-color:#0a0104; font-family: 'Segoe UI', Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0104; padding: 40px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#150307; border:1px solid rgba(212,175,55,0.25); border-radius:16px; overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#73001E,#4a0113); padding:28px 32px;">
+            <span style="font-size:22px; font-weight:600; color:#f5ebdd;">theomy</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <h1 style="margin:0 0 16px 0; font-size:20px; color:#f5ebdd;">Your plan renews on {when}</h1>
+            <p style="margin:0 0 20px 0; font-size:14px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              A heads-up before your next payment, so nothing arrives as a surprise.
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:rgba(245,235,221,0.8);">
+              <tr><td style="padding:6px 0;">Plan</td><td style="padding:6px 0; text-align:right; font-weight:600;">{plan_name}</td></tr>
+              <tr><td style="padding:6px 0;">Billing cycle</td><td style="padding:6px 0; text-align:right;">{duration_label}</td></tr>
+              <tr><td style="padding:6px 0;">Renews on</td><td style="padding:6px 0; text-align:right;">{when}</td></tr>
+              <tr><td style="padding:6px 0;">Paid by</td><td style="padding:6px 0; text-align:right;">UPI Autopay</td></tr>
+              <tr><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); font-weight:700; color:#D4AF37;">Amount</td><td style="padding:10px 0 0 0; border-top:1px solid rgba(245,235,221,0.15); text-align:right; font-weight:700; color:#D4AF37;">&#8377;{total_amount}</td></tr>
+            </table>
+            <p style="margin:24px 0 0 0; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Want to keep watching? Nothing to do — the payment goes through on its own.
+            </p>
+            <p style="margin:12px 0 0 0; font-size:13px; line-height:1.6; color:rgba(245,235,221,0.75);">
+              Would rather stop? Open <strong style="color:#f5ebdd;">Manage Profile</strong> on theomy.com
+              or in the app and turn off auto-renew before {when}. You keep access until the period you
+              have already paid for ends.
+            </p>
           </td></tr>
         </table>
       </td></tr>
