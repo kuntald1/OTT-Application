@@ -848,7 +848,31 @@ function SubscriptionPurchasePage({ onBack }) {
 // ---------------------------------------------------------------------------
 function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, pointValue = 1, userEmail, userPhone, isIndia, exchangeRate, onClose, onSuccess }) {
   const [useRewards, setUseRewards] = useState(false);
-  const [autoRenew, setAutoRenew] = useState(false);
+  // Auto-renew starts OFF, and that is deliberate — do not pre-tick it.
+  //
+  // It was briefly switched to ON by default in Nov 2026 and changed
+  // back the same day: a UPI Autopay mandate is a recurring debit, and
+  // under the RBI's e-mandate rules the customer has to opt IN to one
+  // rather than opt out of one already ticked for them. They do approve
+  // it again in their UPI app, but consent starts here, on this screen.
+  //
+  // It also keeps reward points usable. Points can't be redeemed against
+  // a mandate, so the "use your points" row below is hidden whenever
+  // this is on — defaulting it to on would quietly hide a customer's
+  // own balance from them at the only place they can spend it.
+  //
+  // India only: this toggle, and UPI Autopay itself, don't exist
+  // anywhere else.
+  // On for Indian customers, because a renewing plan is what we are
+  // selling and UPI Autopay is the only rail that can carry it. This is
+  // defensible only because nothing about it is quiet: the box states
+  // the amount and the interval, the pay button itself reads "& turn on
+  // auto-renew", and UPI asks again in the customer's own app. If any of
+  // those three go, this default has to go with them.
+  //
+  // Off everywhere else — the switch isn't even shown outside India, so
+  // turning it on there would register a mandate nobody agreed to.
+  const [autoRenew, setAutoRenew] = useState(isIndia);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
 
@@ -1018,6 +1042,29 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
           {plan.name} — {duration.label}, {screens} screen{screens > 1 ? "s" : ""}
         </p>
 
+        {/* Auto-renew hides the redeem row, because a UPI mandate is
+            registered for one fixed amount and a discounted first
+            payment doesn't fit it. With auto-renew now ON by default,
+            someone holding points would otherwise reach the pay button
+            having never been shown that they could spend them — their
+            own money, quietly unavailable. So say it where they are
+            looking, and make the sentence itself the way out: one tap
+            turns the mandate off and brings the redeem row back. */}
+        {rewardPoints > 0 && autoRenew && (
+          <button
+            type="button"
+            onClick={() => setAutoRenew(false)}
+            className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left"
+            style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.3)" }}
+          >
+            <Gift className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
+            <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.8)" }}>
+              You have {rewardPoints} reward points (₹{Math.round(rewardPoints * pointValue)}).
+              <span style={{ color: COLORS.gold }}> Tap to turn off auto-renew and spend them on this payment.</span>
+            </span>
+          </button>
+        )}
+
         {rewardPoints > 0 && !autoRenew && (
           <button
             type="button"
@@ -1059,7 +1106,12 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
           >
             <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
               Auto-renew with UPI Autopay — ₹{recurringInr} every {duration.label.toLowerCase()}. Approve once in your UPI app; turn it off any time.
-              {rewardPoints > 0 && autoRenew ? " Reward points can't be redeemed on auto-renew." : ""}
+              {/* Without this, someone holding points sees their balance
+                  on the page above and no way to spend it, because the
+                  redeem row is hidden while auto-renew is on. That is
+                  now said in its own tappable row above this switch,
+                  where it is actually read, rather than appended to the
+                  end of this paragraph. */}
             </span>
             {/* The word matters as much as the switch. Off used to be a
                 pale track with a white knob, which on this dark card read
