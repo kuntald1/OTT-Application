@@ -740,10 +740,17 @@ function LoginModal({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    // Scrollable, and the card is centred only while it fits. The
+    // register form is tall — country, phone, date of birth, city,
+    // invite code — and on a laptop screen it used to be clipped top and
+    // bottom by a dead-centred card inside a non-scrolling overlay: the
+    // heading was cut off above and the city list ran off below with no
+    // way to reach it. min-h-full + items-center keeps the short login
+    // form exactly where it was and lets the long one scroll.
+    <div className="fixed inset-0 z-[60] overflow-y-auto">
       {LOGIN_VIDEOS.length > 0 && (
         <video
-          className="absolute inset-0 h-full w-full object-cover"
+          className="fixed inset-0 h-full w-full object-cover"
           src={LOGIN_VIDEOS[0]}
           autoPlay
           muted
@@ -751,10 +758,14 @@ function LoginModal({ onClose }) {
           playsInline
         />
       )}
-      <div className="absolute inset-0" style={{ background: "rgba(10,1,4,0.72)" }} />
+      <div className="fixed inset-0" style={{ background: "rgba(10,1,4,0.72)" }} />
 
+      <div className="relative z-10 flex min-h-full items-center justify-center p-4">
       <div
-        className="relative z-10 w-full max-w-sm rounded-2xl p-6"
+        // Wider while registering: at max-w-sm the labelled fields and
+        // the city dropdown's "city — state" rows were cramped into
+        // 384px. Login and the OTP/forgot forms are short and stay put.
+        className={`w-full rounded-2xl p-6 ${mode === "register" ? "max-w-md sm:p-7" : "max-w-sm"}`}
         style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
       >
         <h2 className="mb-1 text-xl font-semibold" style={{ color: COLORS.cream }}>
@@ -862,39 +873,55 @@ function LoginModal({ onClose }) {
         ) : (
         /* ---------------- LOGIN / REGISTER / FORGOT MODE ---------------- */
         <div className="flex flex-col gap-3">
+          {/* Registering shows a label above each field; logging in does
+              not. Placeholders alone are fine for two familiar boxes,
+              but this form has seven, and a placeholder disappears the
+              moment you type into it — so halfway down the form there
+              is no longer anything on screen saying which box is which.
+              FieldLabel renders nothing outside register mode, so the
+              login form is untouched. */}
           {mode === "register" && !(isIndia && regOtpSent) && (
-            <input
-              type="text"
-              placeholder="Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
+            <label className="block">
+              <FieldLabel show={mode === "register"}>Full name</FieldLabel>
+              <input
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+            </label>
           )}
 
           {!(mode === "register" && isIndia && regOtpSent) && (
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
+            <label className="block">
+              <FieldLabel show={mode === "register"}>Email</FieldLabel>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+            </label>
           )}
 
           {mode !== "forgot" && !(mode === "register" && isIndia && regOtpSent) && (
-            <input
-              type="password"
-              placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-            />
+            <label className="block">
+              <FieldLabel show={mode === "register"}>Password</FieldLabel>
+              <input
+                type="password"
+                placeholder={mode === "register" ? "Password (min. 8 characters)" : "Password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
+                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+              />
+            </label>
           )}
 
           {mode === "login" && (
@@ -923,6 +950,7 @@ function LoginModal({ onClose }) {
               {/* Country — custom dropdown, native <select> options render
                   with an unstyleable white background in most browsers */}
               <div className="relative">
+                <FieldLabel show>Country</FieldLabel>
                 <button
                   type="button"
                   onClick={() => setCountryOpen((v) => !v)}
@@ -955,19 +983,28 @@ function LoginModal({ onClose }) {
                 )}
               </div>
 
-              <input
-                type="tel"
-                placeholder={isIndia ? "Phone number (required)" : "Phone number (optional)"}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="rounded-lg border px-4 py-2.5 text-sm outline-none"
-                style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-              />
+              <label className="block">
+                <FieldLabel show>
+                  Phone number{" "}
+                  <span style={{ color: "rgba(245,235,221,0.35)" }}>
+                    {isIndia ? "(we send your OTP here)" : "(optional)"}
+                  </span>
+                </FieldLabel>
+                <input
+                  type="tel"
+                  placeholder={isIndia ? "Phone number (required)" : "Phone number (optional)"}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
+                  style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+                />
+              </label>
 
               <label className="block">
-                <span className="mb-1 block text-[11px] font-medium" style={{ color: "rgba(245,235,221,0.55)" }}>
-                  Date of birth <span style={{ color: "rgba(245,235,221,0.35)" }}>(DD-MM-YYYY)</span>
-                </span>
+                <FieldLabel show>
+                  Date of birth{" "}
+                  <span style={{ color: "rgba(245,235,221,0.35)" }}>(used only for age-rated content)</span>
+                </FieldLabel>
                 <input
                   type="date"
                   aria-label="Date of birth"
@@ -979,7 +1016,12 @@ function LoginModal({ onClose }) {
                 />
               </label>
 
-              {isIndia && <CityDropdown value={city} onChange={setCity} />}
+              {isIndia && (
+                <div>
+                  <FieldLabel show>City</FieldLabel>
+                  <CityDropdown value={city} onChange={setCity} />
+                </div>
+              )}
 
               {/* An invite code, for someone who was sent the code itself
                   rather than the link. A code arriving by link is picked
@@ -1079,9 +1121,22 @@ function LoginModal({ onClose }) {
         </div>
         )}
       </div>
+      </div>
     </div>
   );
 }
+// The caption above a form field. `show` is false on the login form,
+// where two familiar boxes need no labelling, and true while
+// registering, where seven do.
+function FieldLabel({ show, children }) {
+  if (!show) return null;
+  return (
+    <span className="mb-1 block text-[11px] font-medium" style={{ color: "rgba(245,235,221,0.55)" }}>
+      {children}
+    </span>
+  );
+}
+
 function GoogleMark({ className }) {
   return (
     <svg className={className} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">

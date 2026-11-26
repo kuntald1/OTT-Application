@@ -393,48 +393,6 @@ export default function ManageProfilePage({ onBack }) {
           </div>
         </div>
 
-        {/* Auto-renew — only when one is actually running. Hidden for
-            everyone else rather than shown as an empty "off" state,
-            which would just be noise on a page people open for other
-            reasons. */}
-        {autopay?.active && (
-          <>
-            <div className="mb-8" />
-            <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.3)" }}>
-              <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
-                <RefreshCw className="h-4 w-4" style={{ color: COLORS.gold }} /> Auto-renew
-              </h2>
-              <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.65)" }}>
-                Your {autopay.plan_name} plan renews automatically. ₹{autopay.total_amount} will be
-                charged via UPI Autopay
-                {autopay.next_renewal_at
-                  ? ` around ${new Date(autopay.next_renewal_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`
-                  : ""}
-                , then every {String(autopay.duration_label || "").toLowerCase()}.
-              </p>
-
-              {autopayError && (
-                <div className="mb-4 rounded-lg px-3 py-2 text-sm font-medium" style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}>
-                  {autopayError}
-                </div>
-              )}
-
-              <button
-                type="button"
-                disabled={cancellingAutopay}
-                onClick={() => setConfirmCancelAutopay(true)}
-                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
-              >
-                {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
-              </button>
-              <p className="mt-3 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
-                You keep access until the period you have already paid for ends.
-              </p>
-            </div>
-          </>
-        )}
-
         <div className="mb-8" />
         <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}>
           <h2 className="mb-4 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
@@ -660,6 +618,56 @@ export default function ManageProfilePage({ onBack }) {
             )}
           </div>
         )}
+        {/* Auto-renew — only when one is actually running. Hidden for
+            everyone else rather than shown as an empty "off" state,
+            which would just be noise on a page people open for other
+            reasons.
+
+            Deliberately the LAST thing on the page, and the only place
+            in the whole site that can turn a mandate off (the
+            Subscription page used to carry a second button; it now just
+            points here). Last because cancelling is the one action
+            here you should have to mean — and because a red button
+            above someone's password fields is an odd thing to meet on
+            the way to changing an email address. */}
+        {autopay?.active && (
+          <>
+            <div className="mb-8" />
+            <div className="rounded-2xl p-6" style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.3)" }}>
+              <h2 className="mb-1 flex items-center gap-2 text-base font-semibold" style={{ color: COLORS.cream }}>
+                <RefreshCw className="h-4 w-4" style={{ color: COLORS.gold }} /> Auto-renew
+              </h2>
+              <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.65)" }}>
+                Your {autopay.plan_name} plan renews automatically. ₹{autopay.total_amount} will be
+                charged via UPI Autopay
+                {autopay.next_renewal_at
+                  ? ` around ${new Date(autopay.next_renewal_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`
+                  : ""}
+                , then every {String(autopay.duration_label || "").toLowerCase()}.
+              </p>
+
+              {autopayError && (
+                <div className="mb-4 rounded-lg px-3 py-2 text-sm font-medium" style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}>
+                  {autopayError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={cancellingAutopay}
+                onClick={() => setConfirmCancelAutopay(true)}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
+              >
+                {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
+              </button>
+              <p className="mt-3 text-xs" style={{ color: "rgba(245,235,221,0.45)" }}>
+                You keep access until the period you have already paid for ends.
+              </p>
+            </div>
+          </>
+        )}
+
       </main>
 
       {/* Changing a family account's under-18 declaration. Not a plain

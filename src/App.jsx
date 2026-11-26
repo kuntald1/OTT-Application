@@ -46,11 +46,11 @@ import VideoDetailPage from './VideoDetailPage'
 import PersonProfilePage from './People/PersonProfilePage'
 import ReferEarnPage from './Refer/ReferEarnPage'
 
-// Route state is { view, params }. navigate(view, params) pushes the
-// CURRENT route onto a history stack before switching, so goBack() can pop
-// back to wherever the person actually came from — not a hardcoded
-// destination. Subscription / Help Center / Manage Profile / Actor / Blog /
-// Community Room pages all use goBack for their Back button.
+// Route state is { view, params }, and it is pushed into the BROWSER's
+// history by navigate() — see the comment on the popstate effect below.
+// goBack() therefore returns to wherever the person actually came from,
+// and so does the browser's own Back button. Subscription / Help Center /
+// Manage Profile / Actor / Blog / Community Room pages all use goBack.
 //
 // resetPassword is a special case: it's the only view reached via a REAL
 // browser URL (the link in the "reset your password" email points to
@@ -100,8 +100,6 @@ export default function App() {
   if (window.location.pathname.startsWith('/admin')) {
     return <AdminApp />
   }
-  const [history, setHistory] = useState([])
-
   // Which section (play/archive) the person was last actually browsing
   // — used so the search box scopes results correctly and a blank
   // search returns to the right tab, even while sitting on the search
@@ -114,21 +112,51 @@ export default function App() {
     else if (route.view === 'theater') setLastSection('ticketing')
   }, [route.view])
 
+  // Every navigate() also pushes a real browser history entry, which is
+  // what makes the browser's own Back button work. Before this the route
+  // lived only in React state: the URL never changed, so Back went to
+  // whatever page preceded theomy and threw the person off the site from
+  // anywhere — three clicks deep or one.
+  //
+  // The entry deliberately keeps the SAME url. Giving each view its own
+  // path would make links shareable, but every one of those paths would
+  // then need serving as index.html by nginx and understanding on a cold
+  // load; that is a separate job. Pushing the current url still creates
+  // the entry, which is all Back needs.
+  //
+  // There is now ONE history — the browser's. The route travels in each
+  // entry's state and `theomyDepth` says how deep in we are, so the
+  // in-page Back buttons and the browser's own button walk the same
+  // stack and cannot disagree about where "back" leads.
+  useEffect(() => {
+    // Label the entry the browser made on first load, so returning to it
+    // restores that view instead of falling through to hero.
+    window.history.replaceState({ theomyRoute: route, theomyDepth: 0 }, '')
+    const onPop = (e) => setRoute(e.state?.theomyRoute || getInitialRoute())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+    // Mount only: `route` here is just the first route being labelled.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const navigate = (view, params = {}) => {
-    setHistory((h) => [...h, route])
+    const depth = (window.history.state?.theomyDepth ?? 0) + 1
+    window.history.pushState({ theomyRoute: { view, params }, theomyDepth: depth }, '')
     setRoute({ view, params })
   }
 
   const goBack = () => {
-    setHistory((h) => {
-      if (h.length === 0) {
-        setRoute({ view: 'hero', params: {} })
-        return h
-      }
-      const prev = h[h.length - 1]
-      setRoute(prev)
-      return h.slice(0, -1)
-    })
+    // Hand it to the browser, so popstate above restores the route and
+    // the entry is actually consumed — otherwise Back would still have
+    // to be pressed once for every in-page Back already clicked.
+    if ((window.history.state?.theomyDepth ?? 0) > 0) {
+      window.history.back()
+      return
+    }
+    // Depth 0: this is the first page of the visit (someone arrived
+    // straight on a blog link, say). There is nothing of ours behind it,
+    // so go home rather than leaving the site.
+    setRoute({ view: 'hero', params: {} })
   }
 
   const openPerson = (personId) => navigate('actor', { personId })

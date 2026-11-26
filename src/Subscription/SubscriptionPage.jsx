@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film } from "lucide-react";
+import { Check, Minus, Plus, Monitor, ArrowLeft, BadgeCheck, Gift, Calendar, Receipt, Film, RefreshCw } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { useApp } from "../context/AppContext";
-import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createAutopaySubscription, verifyAutopayPayment, fetchMyAutopay, cancelMyAutopay, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent, fetchRewardConfig } from "../api";
+import { fetchSubscriptionPlans, fetchSubscriptionDurations, fetchSubscriptionHistory, fetchPaymentRecords, fetchTaxConfig, fetchExchangeRate, createRazorpayOrder, verifyRazorpayPayment, createAutopaySubscription, verifyAutopayPayment, fetchMyAutopay, createStripeCheckoutSession, fetchMyVideoPurchases, fetchMyParent, fetchRewardConfig } from "../api";
 
 // ---------------------------------------------------------------------------
 // Subscription — plan catalog (name, pricing, features) now comes from
@@ -86,7 +86,6 @@ function SubscriptionPurchasePage({ onBack }) {
   const [durations, setDurations] = useState([]);
   const [screens, setScreens] = useState({});
   const [durationId, setDurationId] = useState(null);
-  const [useRewards, setUseRewards] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [error, setError] = useState("");
   const {
@@ -97,11 +96,11 @@ function SubscriptionPurchasePage({ onBack }) {
   const isIndia = profile.country === "India";
   const [exchangeRate, setExchangeRate] = useState(null);
 
-  // UPI Autopay (auto-renew) status — shown as a card under the current-plan
-  // banner only while auto-renew is actually on, with a way to turn it off.
+  // UPI Autopay (auto-renew) status — stated under the current-plan
+  // banner while one is running. Read-only here: turning it off lives in
+  // Manage Profile and nowhere else, so there is one answer to "where do
+  // I cancel?" instead of two places that could drift apart.
   const [autopay, setAutopay] = useState(null);
-  const [cancellingAutopay, setCancellingAutopay] = useState(false);
-  const [confirmCancelAutopay, setConfirmCancelAutopay] = useState(false);
 
   const loadAutopay = async () => {
     try {
@@ -115,19 +114,6 @@ function SubscriptionPurchasePage({ onBack }) {
     if (isLoggedIn && isIndia) loadAutopay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, isIndia]);
-
-  const handleCancelAutopay = async () => {
-    setCancellingAutopay(true);
-    try {
-      await cancelMyAutopay();
-      await loadAutopay();
-    } catch (err) {
-      setError(err.message || "Couldn't turn off auto-renew. Please try again.");
-    } finally {
-      setCancellingAutopay(false);
-      setConfirmCancelAutopay(false);
-    }
-  };
 
   useEffect(() => {
     fetchSubscriptionDurations()
@@ -246,16 +232,15 @@ function SubscriptionPurchasePage({ onBack }) {
     // INR — always computed from the plan's own INR base price
     const monthly = plan.basePrice + (count - 1) * plan.perExtraScreen;
     const preRewards = Math.round(monthly * duration.months * (1 - duration.discount));
-    // How many points fit against this price, and what they take off.
-    // A point is worth pointValue rupees (Admin > Reward Points), so
-    // 100 points can be ₹100 off or ₹25 off. Floor, so the discount is
-    // never worth more than the price itself. The server recomputes all
-    // of this in payments._compute_pricing — this is only the display.
-    const pointsUsed = useRewards
-      ? Math.min(profile.rewardPoints, Math.floor(preRewards / pointValue))
-      : 0;
-    const rewardDiscount = Math.round(pointsUsed * pointValue);
-    const total = preRewards - rewardDiscount;
+    // Reward points are no longer redeemable against a plan (client's
+    // call, Nov 2026 — see the CheckoutModal comment), so the price on
+    // a plan card is the price, with nothing deducted. Kept as named
+    // zeros because the card markup and the USD branch below both read
+    // them, and because reinstating redemption should be a small change
+    // rather than a rebuild.
+    const pointsUsed = 0;
+    const rewardDiscount = 0;
+    const total = preRewards;
 
     // USD — computed from the plan's own USD base price (set directly by
     // the admin), NOT derived by converting the INR total. Reward points
@@ -312,7 +297,11 @@ function SubscriptionPurchasePage({ onBack }) {
           </div>
         )}
 
-        {/* UPI Autopay status */}
+        {/* UPI Autopay status — states it, and says where to stop it.
+            Turning it off used to be possible from here too; it now
+            lives in one place only (Manage Profile), so there is a
+            single, findable answer to "where do I cancel?" rather than
+            a red button sitting on the page that sells the plans. */}
         {autopay && autopay.active && (
           <div
             className="mx-auto mb-8 flex max-w-4xl flex-wrap items-center gap-3 rounded-2xl px-5 py-4"
@@ -321,16 +310,8 @@ function SubscriptionPurchasePage({ onBack }) {
             <p className="flex-1 text-sm" style={{ color: COLORS.gold }}>
               Auto-renew is on — ₹{autopay.total_amount} will be charged via UPI Autopay
               {autopay.next_renewal_at ? ` around ${formatDate(autopay.next_renewal_at)}` : ""}, then every {String(autopay.duration_label || "").toLowerCase()}.
+              <span style={{ color: "rgba(245,235,221,0.65)" }}> You can turn it off in Manage Profile.</span>
             </p>
-            <button
-              type="button"
-              disabled={cancellingAutopay}
-              onClick={() => setConfirmCancelAutopay(true)}
-              className="rounded-full px-4 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
-            >
-              {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
-            </button>
           </div>
         )}
 
@@ -372,16 +353,14 @@ function SubscriptionPurchasePage({ onBack }) {
           ))}
         </div>
 
-        {/* Rewards redemption toggle */}
+        {/* Reward points are shown, not spendable here. They can't be
+            applied to a plan any more (see the CheckoutModal comment),
+            and a toggle that promised a discount the checkout then
+            ignored would be worse than saying nothing. */}
         {profile.rewardPoints > 0 && (
-          <button
-            type="button"
-            onClick={() => setUseRewards((v) => !v)}
-            className="mx-auto mt-4 flex max-w-md items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors"
-            style={{
-              background: useRewards ? "rgba(212,175,55,0.1)" : COLORS.blackSoft,
-              border: `1px solid ${useRewards ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.08)"}`,
-            }}
+          <div
+            className="mx-auto mt-4 flex max-w-md items-center gap-3 rounded-2xl px-4 py-3 text-left"
+            style={{ background: COLORS.blackSoft, border: "1px solid rgba(255,255,255,0.08)" }}
           >
             <div
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
@@ -394,19 +373,10 @@ function SubscriptionPurchasePage({ onBack }) {
                 You have {profile.rewardPoints} reward points (₹{Math.round(profile.rewardPoints * pointValue)})
               </p>
               <p className="text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>
-                {useRewards ? "Applying to your total below — tap to remove" : "Tap to redeem toward this subscription"}
+                Not redeemable against a plan.
               </p>
             </div>
-            <div
-              className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
-              style={{ background: useRewards ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}
-            >
-              <div
-                className="h-4 w-4 rounded-full bg-white transition-transform"
-                style={{ transform: useRewards ? "translateX(16px)" : "translateX(0)" }}
-              />
-            </div>
-          </button>
+          </div>
         )}
 
         {plansLoading || durations.length === 0 ? (
@@ -445,22 +415,14 @@ function SubscriptionPurchasePage({ onBack }) {
                 <p className="mt-1 text-xs" style={{ color: "rgba(245,235,221,0.55)" }}>{plan.tagline}</p>
 
                 <div className="mt-5 flex items-baseline gap-2">
-                  {pointsUsed > 0 && (
-                    <span className="text-base line-through" style={{ color: "rgba(245,235,221,0.35)" }}>{isIndia ? `₹${preRewards}` : `$${preRewardsUsd}`}</span>
-                  )}
                   <span className="text-3xl font-semibold" style={{ color: COLORS.cream }}>{isIndia ? `₹${total}` : `$${totalUsd}`}</span>
                   <span className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
                     /{duration.months === 1 ? "month" : duration.label.toLowerCase()}
                   </span>
                 </div>
-                {pointsUsed > 0 && (
-                  <p className="mt-0.5 text-[11px] font-medium" style={{ color: COLORS.gold }}>
-                    − {isIndia ? `₹${rewardDiscount}` : `$${pointsUsedUsd}`} reward points applied
-                  </p>
-                )}
                 {duration.months > 1 && (
                   <p className="mt-0.5 text-[11px]" style={{ color: "rgba(245,235,221,0.45)" }}>
-                    ≈ {isIndia ? `₹${Math.round(preRewards / duration.months)}` : `$${Math.round((preRewardsUsd / duration.months) * 100) / 100}`}/month before rewards · save {Math.round(duration.discount * 100)}%
+                    ≈ {isIndia ? `₹${Math.round(preRewards / duration.months)}` : `$${Math.round((preRewardsUsd / duration.months) * 100) / 100}`}/month · save {Math.round(duration.discount * 100)}%
                   </p>
                 )}
                 <p className="mt-1 text-xs" style={{ color: COLORS.gold }}>Unlimited</p>
@@ -764,46 +726,6 @@ function SubscriptionPurchasePage({ onBack }) {
         )}
       </main>
 
-      {confirmCancelAutopay && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ background: "rgba(10,1,4,0.8)" }}
-          onClick={() => { if (!cancellingAutopay) setConfirmCancelAutopay(false); }}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl p-6"
-            style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.2)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-2 text-lg font-semibold" style={{ color: COLORS.cream }}>Turn off auto-renew?</h2>
-            <p className="mb-5 text-sm leading-relaxed" style={{ color: "rgba(245,235,221,0.7)" }}>
-              Your current plan stays active until it expires, and you won't be charged again.
-              You can turn auto-renew back on any time by subscribing again.
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={cancellingAutopay}
-                onClick={() => setConfirmCancelAutopay(false)}
-                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-              >
-                Keep auto-renew
-              </button>
-              <button
-                type="button"
-                disabled={cancellingAutopay}
-                onClick={handleCancelAutopay}
-                className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ border: "1px solid rgba(248,113,113,0.5)", color: "#f87171" }}
-              >
-                {cancellingAutopay ? "Turning off…" : "Turn off auto-renew"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {checkoutPlan && (
         <CheckoutModal
           plan={checkoutPlan}
@@ -847,44 +769,37 @@ function SubscriptionPurchasePage({ onBack }) {
 // theomy.com/stripe/success on completion).
 // ---------------------------------------------------------------------------
 function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, pointValue = 1, userEmail, userPhone, isIndia, exchangeRate, onClose, onSuccess }) {
-  const [useRewards, setUseRewards] = useState(false);
-  // Auto-renew starts OFF, and that is deliberate — do not pre-tick it.
+  // Auto-renew is simply how an Indian subscription works now — no
+  // switch, no state. The client's call (Nov 2026): every plan sold here
+  // renews, so offering a one-off purchase alongside it was a choice
+  // nobody needed to make at checkout.
   //
-  // It was briefly switched to ON by default in Nov 2026 and changed
-  // back the same day: a UPI Autopay mandate is a recurring debit, and
-  // under the RBI's e-mandate rules the customer has to opt IN to one
-  // rather than opt out of one already ticked for them. They do approve
-  // it again in their UPI app, but consent starts here, on this screen.
+  // Nothing about it is hidden: the box below states the amount and the
+  // interval, the pay button reads "& turn on auto-renew", UPI asks for
+  // the mandate again in the customer's own app, every charge is
+  // announced by email and WhatsApp with the next date, a reminder goes
+  // out three days before each one, and Manage Profile turns it off in
+  // one tap. Those are what make a non-optional mandate fair rather than
+  // sharp; if any of them go, this has to be reconsidered.
   //
-  // It also keeps reward points usable. Points can't be redeemed against
-  // a mandate, so the "use your points" row below is hidden whenever
-  // this is on — defaulting it to on would quietly hide a customer's
-  // own balance from them at the only place they can spend it.
-  //
-  // India only: this toggle, and UPI Autopay itself, don't exist
-  // anywhere else.
-  // On for Indian customers, because a renewing plan is what we are
-  // selling and UPI Autopay is the only rail that can carry it. This is
-  // defensible only because nothing about it is quiet: the box states
-  // the amount and the interval, the pay button itself reads "& turn on
-  // auto-renew", and UPI asks again in the customer's own app. If any of
-  // those three go, this default has to go with them.
-  //
-  // Off everywhere else — the switch isn't even shown outside India, so
-  // turning it on there would register a mandate nobody agreed to.
-  const [autoRenew, setAutoRenew] = useState(isIndia);
+  // Outside India there is no UPI Autopay rail at all, so it stays off
+  // and the Stripe one-off path runs instead.
+  const autoRenew = isIndia;
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
 
   const monthly = plan.basePrice + (screens - 1) * plan.perExtraScreen;
   const preRewardsInr = Math.round(monthly * duration.months * (1 - duration.discount));
-  // Auto-renew has one fixed recurring amount, so reward points can't be redeemed on it.
-  // A point is worth pointValue rupees (Admin > Reward Points), so the
-  // number of points and the rupees they take off are two numbers now.
-  const maxPointsHere = Math.floor(preRewardsInr / pointValue);
-  const pointsUsed = useRewards && !autoRenew ? Math.min(rewardPoints, maxPointsHere) : 0;
-  const rewardDiscountInr = Math.round(pointsUsed * pointValue);
-  const taxableInr = preRewardsInr - rewardDiscountInr;
+  // Reward points are no longer spendable on a subscription (client's
+  // call, Nov 2026): a mandate is registered for one fixed amount, so a
+  // discounted first payment never fitted it, and the "turn auto-renew
+  // off to spend your points" escape hatch only made checkout a decision
+  // instead of a purchase. Kept as a named zero rather than deleted —
+  // the server still recomputes pricing from rewardPointsRequested, and
+  // this is the value it is sent.
+  const pointsUsed = 0;
+  const rewardDiscountInr = 0;
+  const taxableInr = preRewardsInr;
 
   const gstPercent = taxConfig ? Number(taxConfig.gst_percent) : 18;
   const taxAmountInr = isIndia ? Math.round((taxableInr * gstPercent) / 100) : 0;
@@ -1042,104 +957,24 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
           {plan.name} — {duration.label}, {screens} screen{screens > 1 ? "s" : ""}
         </p>
 
-        {/* Auto-renew hides the redeem row, because a UPI mandate is
-            registered for one fixed amount and a discounted first
-            payment doesn't fit it. With auto-renew now ON by default,
-            someone holding points would otherwise reach the pay button
-            having never been shown that they could spend them — their
-            own money, quietly unavailable. So say it where they are
-            looking, and make the sentence itself the way out: one tap
-            turns the mandate off and brings the redeem row back. */}
-        {rewardPoints > 0 && autoRenew && (
-          <button
-            type="button"
-            onClick={() => setAutoRenew(false)}
-            className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left"
-            style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.3)" }}
-          >
-            <Gift className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
-            <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.8)" }}>
-              You have {rewardPoints} reward points (₹{Math.round(rewardPoints * pointValue)}).
-              <span style={{ color: COLORS.gold }}> Tap to turn off auto-renew and spend them on this payment.</span>
-            </span>
-          </button>
-        )}
-
-        {rewardPoints > 0 && !autoRenew && (
-          <button
-            type="button"
-            onClick={() => setUseRewards((v) => !v)}
-            className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
-            style={{
-              background: useRewards ? "rgba(212,175,55,0.1)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${useRewards ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.08)"}`,
-            }}
-          >
-            <Gift className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
-            <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
-              Redeem {Math.min(rewardPoints, maxPointsHere)} reward points (₹{Math.round(Math.min(rewardPoints, maxPointsHere) * pointValue)} off)
-            </span>
-            <div
-              className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
-              style={{ background: useRewards ? CTA_GRADIENT : "rgba(255,255,255,0.15)" }}
-            >
-              <div
-                className="h-4 w-4 rounded-full bg-white transition-transform"
-                style={{ transform: useRewards ? "translateX(16px)" : "translateX(0)" }}
-              />
-            </div>
-          </button>
-        )}
-
+        {/* States the mandate rather than offering it — see the comment
+            on `autoRenew` above for why there is no longer a switch
+            here. It stays prominent precisely BECAUSE it can't be
+            declined: the one thing worse than a non-optional recurring
+            charge is a quiet one. Amount, interval, where the approval
+            happens and where to stop it, in that order. */}
         {isIndia && (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoRenew}
-            aria-label="Auto-renew with UPI Autopay"
-            onClick={() => setAutoRenew((v) => !v)}
-            className="mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors"
-            style={{
-              background: autoRenew ? "rgba(212,175,55,0.1)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${autoRenew ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.08)"}`,
-            }}
+          <div
+            className="mb-4 flex w-full items-start gap-3 rounded-xl px-4 py-3 text-left"
+            style={{ background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.4)" }}
           >
-            <span className="flex-1 text-xs" style={{ color: "rgba(245,235,221,0.75)" }}>
-              Auto-renew with UPI Autopay — ₹{recurringInr} every {duration.label.toLowerCase()}. Approve once in your UPI app; turn it off any time.
-              {/* Without this, someone holding points sees their balance
-                  on the page above and no way to spend it, because the
-                  redeem row is hidden while auto-renew is on. That is
-                  now said in its own tappable row above this switch,
-                  where it is actually read, rather than appended to the
-                  end of this paragraph. */}
+            <RefreshCw className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: COLORS.gold }} />
+            <span className="flex-1 text-xs leading-relaxed" style={{ color: "rgba(245,235,221,0.8)" }}>
+              Renews automatically — ₹{recurringInr} every {duration.label.toLowerCase()} by UPI Autopay.
+              You approve the mandate once in your UPI app. We message you before every charge, and
+              you can turn it off any time from <span style={{ color: COLORS.gold }}>Manage Profile</span>.
             </span>
-            {/* The word matters as much as the switch. Off used to be a
-                pale track with a white knob, which on this dark card read
-                as a filled, switched-ON control — people were asking why
-                auto-renew defaulted to on when it never did. Off is now a
-                dark, empty groove with a dimmed knob, and it says so. */}
-            <span
-              className="flex-shrink-0 text-[11px] font-semibold uppercase tracking-wide"
-              style={{ color: autoRenew ? COLORS.gold : "rgba(245,235,221,0.45)" }}
-            >
-              {autoRenew ? "On" : "Off"}
-            </span>
-            <div
-              className="flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
-              style={{
-                background: autoRenew ? CTA_GRADIENT : "rgba(0,0,0,0.45)",
-                border: `1px solid ${autoRenew ? "transparent" : "rgba(245,235,221,0.22)"}`,
-              }}
-            >
-              <div
-                className="h-4 w-4 rounded-full transition-transform"
-                style={{
-                  background: autoRenew ? "#ffffff" : "rgba(245,235,221,0.5)",
-                  transform: autoRenew ? "translateX(16px)" : "translateX(0)",
-                }}
-              />
-            </div>
-          </button>
+          </div>
         )}
 
         <div className="mb-4 flex flex-col gap-1.5 rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(255,255,255,0.03)" }}>
@@ -1148,11 +983,6 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
               <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
                 <span>Plan price</span><span>₹{preRewardsInr}</span>
               </div>
-              {pointsUsed > 0 && (
-                <div className="flex justify-between" style={{ color: COLORS.gold }}>
-                  <span>Reward points applied</span><span>− ₹{rewardDiscountInr}</span>
-                </div>
-              )}
               <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
                 <span>GST ({gstPercent}%)</span><span>₹{taxAmountInr}</span>
               </div>
@@ -1165,11 +995,6 @@ function CheckoutModal({ plan, duration, screens, taxConfig, rewardPoints, point
               <div className="flex justify-between" style={{ color: "rgba(245,235,221,0.65)" }}>
                 <span>Plan price</span><span>${preRewardsUsd}</span>
               </div>
-              {pointsUsed > 0 && (
-                <div className="flex justify-between" style={{ color: COLORS.gold }}>
-                  <span>Reward points applied</span><span>− ${pointsUsedUsd}</span>
-                </div>
-              )}
               <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold" style={{ borderColor: "rgba(255,255,255,0.1)", color: COLORS.cream }}>
                 <span>Total</span><span>${totalUsd}</span>
               </div>

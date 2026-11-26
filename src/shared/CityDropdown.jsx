@@ -1,7 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { COLORS } from "../theme";
 import { INDIA_CITIES_FLAT } from "./indiaCities";
+
+// Roughly what the open panel needs: search row plus the scroll area.
+const PANEL_HEIGHT_PX = 260;
 
 // ---------------------------------------------------------------------------
 // CityDropdown — searchable India-city picker used in registration and the
@@ -15,11 +18,39 @@ const OTHER = "__other__";
 export default function CityDropdown({ value, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // City is the last field on the registration form, so on a laptop the
+  // button often sits near the bottom of the window and a panel opening
+  // downward ran straight off the screen — the list was there, just
+  // unreachable. Measure once on open and put it above instead when
+  // there isn't room below.
+  const [dropUp, setDropUp] = useState(false);
+  const buttonRef = useRef(null);
   const isOther = value !== "" && !INDIA_CITIES_FLAT.some((c) => c.city === value);
+
+  const toggleOpen = () => {
+    setOpen((wasOpen) => {
+      if (!wasOpen && buttonRef.current) {
+        const { top, bottom } = buttonRef.current.getBoundingClientRect();
+        const roomBelow = window.innerHeight - bottom;
+        // Only flip when going up is genuinely better, so a button near
+        // the top of a short window doesn't end up with a clipped panel
+        // above it instead of a clipped one below.
+        setDropUp(roomBelow < PANEL_HEIGHT_PX && top > roomBelow);
+      }
+      return !wasOpen;
+    });
+  };
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q ? INDIA_CITIES_FLAT.filter((c) => c.city.toLowerCase().includes(q)) : INDIA_CITIES_FLAT;
+    // Matching the state too, so "bengal" finds Kolkata and the rest —
+    // people who can't recall how a town is spelt nearly always know
+    // which state it is in.
+    const list = q
+      ? INDIA_CITIES_FLAT.filter(
+          (c) => c.city.toLowerCase().includes(q) || c.state.toLowerCase().includes(q)
+        )
+      : INDIA_CITIES_FLAT;
     return list.slice(0, 50); // keep the open list short and fast to scroll
   }, [query]);
 
@@ -32,9 +63,10 @@ export default function CityDropdown({ value, onChange, disabled = false }) {
   return (
     <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-label="City"
         className="flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left text-sm disabled:opacity-50"
         style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: value ? COLORS.cream : "rgba(245,235,221,0.4)" }}
@@ -47,7 +79,7 @@ export default function CityDropdown({ value, onChange, disabled = false }) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
-            className="absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded-xl"
+            className={`absolute left-0 z-20 w-full overflow-hidden rounded-xl ${dropUp ? "bottom-full mb-1" : "top-full mt-1"}`}
             style={{ background: COLORS.blackSoft, border: "1px solid rgba(212,175,55,0.25)" }}
           >
             <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "rgba(245,235,221,0.1)" }}>

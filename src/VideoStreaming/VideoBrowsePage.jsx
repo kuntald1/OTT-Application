@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
+import { ChevronRight, Play, Plus, Check, X, Volume2, VolumeX, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { useApp } from "../context/AppContext";
 import { pickCast, pickCrew } from "../shared/peopleData";
@@ -7,7 +7,7 @@ import { useAnimatedModal } from "../shared/useAnimatedModal";
 import Footer from "../shared/Footer";
 import DiscoveryRows from "../shared/DiscoveryRows";
 import { createWatchSegmentTracker } from "../shared/watchSegmentTracker";
-import { fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, toggleVideoLike, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories } from "../api";
+import { fetchVideoById, createVideoPurchaseOrder, verifyVideoPurchasePayment, sendWatchHeartbeat, startPlaybackSession, endPlaybackSession, getPlaybackSessionToken, saveWatchProgress, fetchContinueWatching, fetchRecommendedForMe, fetchMoreLikeThis, fetchSpecialCategories } from "../api";
 
 import filmsPoster from "../assets/posters/films.jpg";
 import seriesPoster from "../assets/posters/series.jpg";
@@ -539,10 +539,6 @@ function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
     // No real playback exists in this demo — subscription check is the point.
   });
 
-  const handleThumbsUp = requireSubscription(() => {
-    // Decorative — no real "liked" state exists in this demo.
-  });
-
   const handlePersonClick = requireSubscription((personId) => {
     onClose();
     onOpenPerson?.(personId);
@@ -612,9 +608,6 @@ function DetailModal({ card, closing, onClose, onOpenPerson, onNavigate }) {
               }}
             >
               {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            </button>
-            <button type="button" onClick={handleThumbsUp} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white hover:bg-white/10">
-              <ThumbsUp className="h-4 w-4" />
             </button>
           </div>
 
@@ -987,9 +980,6 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
   const [playing, setPlaying] = useState(false);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState("");
-  const [liked, setLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0);
-  const [likeBusy, setLikeBusy] = useState(false);
   const [playStarting, setPlayStarting] = useState(false);
   const [screenLimitError, setScreenLimitError] = useState("");
   const { isInList, toggleListItem, profile, requestLogin, isLoggedIn } = useApp();
@@ -1035,8 +1025,6 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
     fetchVideoById(card.videoId)
       .then((v) => {
         setVideo(v);
-        setLiked(v.liked_by_me);
-        setLikesCount(v.likes_count);
       })
       .catch(() => setVideo(null))
       .finally(() => setLoading(false));
@@ -1058,32 +1046,6 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
   };
 
   useEffect(loadVideo, [card.videoId]);
-
-  const handleToggleLike = () => {
-    if (!isLoggedIn) {
-      requestLogin();
-      return;
-    }
-    if (likeBusy) return;
-    // Optimistic update — the toggle is idempotent server-side (same
-    // create/delete-row pattern as My List), so a failed request just
-    // reverts these two values back rather than leaving stale state.
-    const prevLiked = liked;
-    const prevCount = likesCount;
-    setLiked(!prevLiked);
-    setLikesCount(prevLiked ? prevCount - 1 : prevCount + 1);
-    setLikeBusy(true);
-    toggleVideoLike(card.videoId)
-      .then((res) => {
-        setLiked(res.liked);
-        setLikesCount(res.likes_count);
-      })
-      .catch(() => {
-        setLiked(prevLiked);
-        setLikesCount(prevCount);
-      })
-      .finally(() => setLikeBusy(false));
-  };
 
   // Real gating — has_access comes straight from the backend's actual
   // subscription/purchase check (_check_video_access), not just "is
@@ -1364,9 +1326,11 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                     </button>
                   )}
 
-                  {/* Real "Add to My List" AND real thumbs-up — both
-                      persisted server-side (MyListItem / VideoLike),
-                      not decorative. */}
+                  {/* Real "Add to My List", persisted server-side
+                      (MyListItem). The thumbs-up that used to sit beside
+                      it is gone at the client's request — the backend
+                      route and the stored VideoLike rows are untouched,
+                      so it is one block to put back. */}
                   <button
                     type="button"
                     onClick={() => toggleListItem({ id: card.id, title: video.title, image: card.poster, meta: `${video.release_year} · ${ageRatingLabel(video.age_rating)}`, section: "Video Streaming" })}
@@ -1379,21 +1343,6 @@ export function RealDetailModal({ card, closing, onClose, onNavigate, onSelectRe
                     }}
                   >
                     {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleLike}
-                    disabled={likeBusy}
-                    aria-label={liked ? "Remove like" : "Like this video"}
-                    className="flex h-9 items-center gap-1.5 rounded-full border px-3 transition-colors disabled:cursor-not-allowed"
-                    style={{
-                      borderColor: liked ? COLORS.gold : "rgba(255,255,255,0.3)",
-                      color: liked ? COLORS.gold : "#fff",
-                      background: liked ? "rgba(212,175,55,0.12)" : "transparent",
-                    }}
-                  >
-                    <ThumbsUp className="h-4 w-4" style={liked ? { fill: COLORS.gold } : undefined} />
-                    {likesCount > 0 && <span className="text-xs font-medium">{likesCount}</span>}
                   </button>
                 </div>
                 {buyError && (

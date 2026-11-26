@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronRight, Play, Plus, Check, ThumbsUp, X, Volume2, VolumeX, Star } from "lucide-react";
+import { ChevronRight, Play, Plus, Check, X, Volume2, VolumeX, Star } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "./theme";
 import { useApp } from "./context/AppContext";
 import { pickCast, pickCrew } from "./shared/peopleData";
@@ -319,7 +319,6 @@ function DetailModal({ card, closing, onClose, t, isLight, onOpenPerson, onNavig
 
   const handlePlay = requireSubscription(() => {});
 
-  const handleThumbsUp = requireSubscription(() => {});
 
   const handlePersonClick = requireSubscription((personId) => {
     onClose();
@@ -391,9 +390,6 @@ function DetailModal({ card, closing, onClose, t, isLight, onOpenPerson, onNavig
               <span className={saved ? "" : iconBtnClass}>
                 {saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               </span>
-            </button>
-            <button type="button" onClick={handleThumbsUp} className={`flex h-9 w-9 items-center justify-center rounded-full border ${iconBtnClass}`}>
-              <ThumbsUp className="h-4 w-4" />
             </button>
           </div>
 

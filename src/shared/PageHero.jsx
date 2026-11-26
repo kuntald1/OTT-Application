@@ -72,7 +72,16 @@ export default function PageHero({ pageKey, theme }) {
           autoPlay
           muted
           playsInline
-          onEnded={() => setSlideIndex((i) => (i + 1) % media.length)}
+          // With ONE video in the sequence the hero used to freeze on its
+          // last frame: onEnded advanced the index to (0 + 1) % 1 = 0, the
+          // key never changed, nothing remounted, and the finished element
+          // just sat there. Let the browser loop that case itself.
+          // Several videos still rotate through onEnded as before — the
+          // key changes each time, so each one remounts and plays.
+          loop={media.length === 1}
+          onEnded={() => {
+            if (media.length > 1) setSlideIndex((i) => (i + 1) % media.length);
+          }}
         />
       )}
       {isImageSlideshow && (
