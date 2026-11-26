@@ -1306,7 +1306,7 @@ def send_blog_submitted_whatsapp(to_phone: str, admin_name: str, author_name: st
     _whatsapp(
         to_phone,
         f"theomy: {author_name} has submitted a blog post for review — \"{title}\". "
-        f"Open Admin > Blogs > Pending to publish or reject it.",
+        f"Open Admin > Blog > Pending to publish or reject it.",
     )
 
 
@@ -1315,7 +1315,7 @@ def send_blog_submitted_email(to_email: str, admin_name: str, author_name: str, 
     text_body = (
         f"Hi {admin_name},\n\n{author_name} has submitted a blog post for review.\n\n"
         f"Title: {title}\n\n{excerpt}\n\n"
-        f"Open Admin > Blogs > Pending to publish or reject it.\n\n— theomy"
+        f"Open Admin > Blog > Pending to publish or reject it.\n\n— theomy"
     )
     html_body = _video_email_html(
         "A blog post is waiting for review",
@@ -1324,7 +1324,7 @@ def send_blog_submitted_email(to_email: str, admin_name: str, author_name: str, 
             f"<b>{author_name}</b> has submitted a blog post.",
             f'Title: "<b>{title}</b>"',
             f"<i>{excerpt}</i>",
-            "Open Admin &gt; Blogs &gt; Pending to publish or reject it.",
+            "Open Admin &gt; Blog &gt; Pending to publish or reject it.",
         ],
         "#d4af37",
     )
