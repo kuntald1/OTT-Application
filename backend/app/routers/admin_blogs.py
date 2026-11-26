@@ -1,5 +1,6 @@
 import os
 import uuid as uuid_module
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
@@ -8,7 +9,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_admin
 from app.models import AdminUser, Blog, BlogComment, BlogLike, User
-from app.schemas import BlogCreate, BlogUpdate, BlogListItemOut, BlogDetailOut, BlogCommentOut, BlogCommentUpdate, BlogCommentCreate, BlogLikeToggleOut
+from app.notifications import (
+    send_blog_approved_email, send_blog_approved_whatsapp,
+    send_blog_rejected_email, send_blog_rejected_whatsapp,
+)
+from app.schemas import BlogCreate, BlogUpdate, BlogListItemOut, BlogDetailOut, BlogCommentOut, BlogCommentUpdate, BlogCommentCreate, BlogLikeToggleOut, BlogRejectRequest
 from app.routers.blogs import _comment_to_out
 
 router = APIRouter(prefix="/admin/blogs", tags=["admin-blogs"])
@@ -24,6 +29,16 @@ def _counts(blog_id, db: Session):
     return likes_count, comment_count
 
 
+def _submitter_name(b: Blog, db: Session) -> str | None:
+    """The account that submitted this post, if a member did. None for
+    an admin-written post, which is how the review screen tells the two
+    apart and why there is nobody to write back to on approval."""
+    if not b.submitted_by_user_id:
+        return None
+    user = db.query(User).filter(User.id == b.submitted_by_user_id).first()
+    return user.name if user else None
+
+
 def _to_list_out(b: Blog, db: Session, current_admin: AdminUser) -> BlogListItemOut:
     likes_count, comment_count = _counts(b.id, db)
     liked_by_me = (
@@ -34,6 +49,7 @@ def _to_list_out(b: Blog, db: Session, current_admin: AdminUser) -> BlogListItem
         id=b.id, title=b.title, excerpt=b.excerpt, author_name=b.author_name,
         published_at=b.published_at, cover_image_url=b.cover_image_url,
         is_published=b.is_published, likes_count=likes_count, liked_by_me=liked_by_me, comment_count=comment_count,
+        status=b.status, review_note=b.review_note, submitted_by_name=_submitter_name(b, db),
     )
 
 
@@ -47,6 +63,7 @@ def _to_detail_out(b: Blog, db: Session, current_admin: AdminUser) -> BlogDetail
         id=b.id, title=b.title, excerpt=b.excerpt, body=b.body, author_name=b.author_name,
         published_at=b.published_at, cover_image_url=b.cover_image_url, is_published=b.is_published,
         likes_count=likes_count, liked_by_me=liked_by_me, comment_count=comment_count,
+        status=b.status, review_note=b.review_note, submitted_by_name=_submitter_name(b, db),
     )
 
 
@@ -59,6 +76,10 @@ def create_blog(
     blog = Blog(
         title=payload.title, excerpt=payload.excerpt, body=payload.body,
         author_name=payload.author_name, is_published=payload.is_published,
+        # An admin writing in the panel IS the review. An unpublished one
+        # is their own draft, not a submission in anyone's queue, so it
+        # never gets status "pending".
+        status="published" if payload.is_published else "draft",
     )
     db.add(blog)
     db.commit()
@@ -100,6 +121,92 @@ def update_blog(
         blog.is_published = payload.is_published
     db.commit()
     db.refresh(blog)
+    return _to_detail_out(blog, db, current_admin)
+
+
+# --- Review queue: a member submitted a post, an admin decides --------------
+#
+# Approve and reject are separate endpoints rather than one "set the
+# status" call, because they are not symmetrical: rejecting carries a
+# reason the author is owed, approving publishes something to the public
+# site. Each also writes to the author, so each deserves to be a
+# deliberate act with its own name in the log.
+
+
+def _notify_author(blog: Blog, db: Session, approved: bool, reason: str = "") -> None:
+    """Write back to whoever submitted it. Never raises — the decision
+    is already committed, and a Twilio or SMTP failure must not be
+    reported to the admin as a failure to approve.
+
+    Silently does nothing for an admin-written post: there is no
+    submitter to write to.
+    """
+    try:
+        if not blog.submitted_by_user_id:
+            return
+        author = db.query(User).filter(User.id == blog.submitted_by_user_id).first()
+        if not author:
+            return
+        name = author.name or "there"
+        if approved:
+            if author.phone:
+                send_blog_approved_whatsapp(author.phone, name, blog.title)
+            if author.email:
+                send_blog_approved_email(author.email, name, blog.title)
+        else:
+            if author.phone:
+                send_blog_rejected_whatsapp(author.phone, name, blog.title, reason)
+            if author.email:
+                send_blog_rejected_email(author.email, name, blog.title, reason)
+    except Exception:
+        pass
+
+
+@router.post("/{blog_id}/approve", response_model=BlogDetailOut)
+def approve_blog(
+    blog_id: str,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    blog.status = "published"
+    blog.is_published = True
+    blog.review_note = None  # a previous rejection no longer applies
+    blog.reviewed_at = datetime.now(timezone.utc)
+    # Dated from when it went live, not from when it was written — the
+    # public list orders by this, and a post approved weeks after
+    # submission should appear as today's, not buried mid-list.
+    blog.published_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(blog)
+
+    _notify_author(blog, db, approved=True)
+    return _to_detail_out(blog, db, current_admin)
+
+
+@router.post("/{blog_id}/reject", response_model=BlogDetailOut)
+def reject_blog(
+    blog_id: str,
+    payload: BlogRejectRequest,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    reason = payload.reason.strip()
+    blog.status = "rejected"
+    blog.is_published = False
+    blog.review_note = reason
+    blog.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(blog)
+
+    _notify_author(blog, db, approved=False, reason=reason)
     return _to_detail_out(blog, db, current_admin)
 
 

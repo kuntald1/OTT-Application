@@ -777,6 +777,24 @@ export function updateAdminBlog(id, updates) {
   return request(`/admin/blogs/${id}`, { method: "PUT", auth: true, body: updates });
 }
 
+// Deciding on a member's submission. Separate calls rather than one
+// "set the status", because they aren't symmetrical: approving puts
+// something on the public site, rejecting owes the author a reason.
+// Both also write to the author by WhatsApp and email.
+export function approveAdminBlog(id) {
+  return request(`/admin/blogs/${id}/approve`, { method: "POST", auth: true });
+}
+
+export function rejectAdminBlog(id, reason) {
+  return request(`/admin/blogs/${id}/reject`, { method: "POST", auth: true, body: { reason } });
+}
+
+// Where an admin's WhatsApp alerts go. Superadmin-only; "" clears it
+// and puts the account back to email-only.
+export function updateAdminPhone(adminId, phone) {
+  return request(`/admin/auth/admins/${adminId}/phone`, { method: "PUT", auth: true, body: { phone } });
+}
+
 export function deleteAdminBlog(id) {
   return request(`/admin/blogs/${id}`, { method: "DELETE", auth: true });
 }

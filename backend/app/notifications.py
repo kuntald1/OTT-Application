@@ -1269,3 +1269,125 @@ def send_minor_flag_removed_email(to_email: str, parent_name: str, child_name: s
         _send_email(to_email, subject, text_body, html_body)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Blog submissions. Three moments, two directions: a member submits (the
+# admins hear about it), and an admin decides (the member hears back).
+#
+# Every one of these swallows its own exceptions, like the rest of this
+# module. A WhatsApp or SMTP failure must never roll back the thing that
+# actually happened — the post IS submitted, or IS approved, whether or
+# not the message got out.
+# ---------------------------------------------------------------------------
+
+def _whatsapp(to_phone: str, body: str) -> None:
+    """Send one WhatsApp, or quietly do nothing.
+
+    Factored out because the five senders below differ only in wording,
+    and the four guards in front of every send (credentials present,
+    number present, +91 default, swallow failures) were worth writing
+    once. Country code: a bare 10-digit number is Indian here, which is
+    the same assumption every other sender in this file makes.
+    """
+    if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+        return
+    if not to_phone:
+        return
+    to_number = to_phone if to_phone.startswith("+") else f"+91{to_phone}"
+    try:
+        client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        client.messages.create(from_=settings.TWILIO_FROM_NUMBER, to=f"whatsapp:{to_number}", body=body)
+    except Exception:
+        pass
+
+
+def send_blog_submitted_whatsapp(to_phone: str, admin_name: str, author_name: str, title: str) -> None:
+    _whatsapp(
+        to_phone,
+        f"theomy: {author_name} has submitted a blog post for review — \"{title}\". "
+        f"Open Admin > Blogs > Pending to publish or reject it.",
+    )
+
+
+def send_blog_submitted_email(to_email: str, admin_name: str, author_name: str, title: str, excerpt: str) -> None:
+    subject = f'Blog awaiting review: "{title}"'
+    text_body = (
+        f"Hi {admin_name},\n\n{author_name} has submitted a blog post for review.\n\n"
+        f"Title: {title}\n\n{excerpt}\n\n"
+        f"Open Admin > Blogs > Pending to publish or reject it.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "A blog post is waiting for review",
+        [
+            f"Hi {admin_name},",
+            f"<b>{author_name}</b> has submitted a blog post.",
+            f'Title: "<b>{title}</b>"',
+            f"<i>{excerpt}</i>",
+            "Open Admin &gt; Blogs &gt; Pending to publish or reject it.",
+        ],
+        "#d4af37",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_blog_approved_whatsapp(to_phone: str, author_name: str, title: str) -> None:
+    _whatsapp(
+        to_phone,
+        f"theomy: Good news, {author_name} — your blog post \"{title}\" has been "
+        f"published and is now live on theomy. Thank you for writing it!",
+    )
+
+
+def send_blog_approved_email(to_email: str, author_name: str, title: str) -> None:
+    subject = f'Your post "{title}" is now live on theomy'
+    text_body = (
+        f"Hi {author_name},\n\nYour blog post \"{title}\" has been published and is "
+        f"now live on theomy.\n\nThank you for writing it.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Your post is live! \U0001F389",
+        [
+            f"Hi {author_name},",
+            f'Your blog post "<b>{title}</b>" has been published and is now live on theomy.',
+            "Thank you for writing it.",
+        ],
+        "#6FCF97",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass
+
+
+def send_blog_rejected_whatsapp(to_phone: str, author_name: str, title: str, reason: str) -> None:
+    _whatsapp(
+        to_phone,
+        f"theomy: Hi {author_name}, your blog post \"{title}\" was not published. "
+        f"Reason: {reason}. You're welcome to make changes and submit it again.",
+    )
+
+
+def send_blog_rejected_email(to_email: str, author_name: str, title: str, reason: str) -> None:
+    subject = f'Update on your post "{title}"'
+    text_body = (
+        f"Hi {author_name},\n\nYour blog post \"{title}\" was not published.\n\n"
+        f"Reason: {reason}\n\nYou're welcome to make changes and submit it again.\n\n— theomy"
+    )
+    html_body = _video_email_html(
+        "Post not published",
+        [
+            f"Hi {author_name},",
+            f'Your blog post "<b>{title}</b>" was not published.',
+            f"<b>Reason:</b> {reason}",
+            "You're welcome to make changes and submit it again.",
+        ],
+        "#f87171",
+    )
+    try:
+        _send_email(to_email, subject, text_body, html_body)
+    except Exception:
+        pass

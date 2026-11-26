@@ -1,24 +1,28 @@
-import React, { useState } from "react";
-import { ArrowLeft, MessageCircle, Plus } from "lucide-react";
-import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
+import React, { useMemo, useState } from "react";
+import { ArrowLeft, MessageCircle } from "lucide-react";
+import { COLORS } from "../theme";
 import { useApp } from "../context/AppContext";
+import SearchBox from "../shared/SearchBox";
 
+// Every room, behind the Community page's "View all". Creating one is
+// deliberately not possible here (client's call, Nov 2026) — rooms are
+// opened from the admin panel for now, so members join rather than
+// start them. The button and its dialog are gone rather than disabled:
+// a control that does nothing reads as broken, not as unavailable.
 export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
-  const { rooms, createRoom, isLoggedIn, requestLogin } = useApp();
-  const [showCreate, setShowCreate] = useState(false);
+  const { rooms } = useApp();
+  const [query, setQuery] = useState("");
 
-  const handleCreateClick = () => {
-    if (!isLoggedIn) {
-      requestLogin();
-      return;
-    }
-    setShowCreate(true);
-  };
-
-  const handleCreated = (roomId) => {
-    setShowCreate(false);
-    onOpenRoom(roomId);
-  };
+  const needle = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      needle
+        ? rooms.filter((r) =>
+            [r.title, r.createdBy].some((f) => (f || "").toLowerCase().includes(needle))
+          )
+        : rooms,
+    [rooms, needle]
+  );
 
   return (
     <div style={{ background: COLORS.black, fontFamily: "'Geist', -apple-system, sans-serif", minHeight: "100vh" }}>
@@ -32,23 +36,27 @@ export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold" style={{ color: COLORS.cream }}>Community Rooms</h1>
-            <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>{rooms.length} rooms</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleCreateClick}
-            className="flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-90"
-            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-          >
-            <Plus className="h-4 w-4" /> Create Room
-          </button>
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold" style={{ color: COLORS.cream }}>Community Rooms</h1>
+          <p className="mt-1 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+            {needle ? `${filtered.length} of ${rooms.length} rooms` : `${rooms.length} rooms`}
+          </p>
         </div>
 
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          placeholder="Search rooms"
+          className="mb-8 max-w-md"
+        />
+
         <div className="flex flex-col gap-3">
-          {rooms.map((room) => (
+          {filtered.length === 0 && (
+            <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+              {needle ? `No room matches "${query.trim()}".` : "No rooms yet."}
+            </p>
+          )}
+          {filtered.map((room) => (
             <div
               key={room.id}
               className="flex flex-wrap items-center justify-between gap-4 rounded-2xl p-5"
@@ -78,66 +86,7 @@ export default function CommunityRoomsPage({ onBack, onOpenRoom }) {
         </div>
       </main>
 
-      {showCreate && (
-        <CreateRoomModal
-          onClose={() => setShowCreate(false)}
-          onCreate={async (title) => {
-            const roomId = await createRoom(title);
-            handleCreated(roomId);
-          }}
-        />
-      )}
     </div>
   );
 }
 
-function CreateRoomModal({ onClose, onCreate }) {
-  const [title, setTitle] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async () => {
-    setError("");
-    setSubmitting(true);
-    try {
-      await onCreate(title.trim());
-    } catch (err) {
-      setError(err.message || "Couldn't create room. Please try again.");
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl p-6"
-        style={{ background: COLORS.blackSoft, border: `1px solid rgba(212,175,55,0.2)` }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="mb-4 text-xl font-semibold" style={{ color: COLORS.cream }}>Create a room</h2>
-        <input
-          type="text"
-          placeholder="Room title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-lg border px-4 py-2.5 text-sm outline-none"
-          style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
-        />
-        {error && (
-          <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{error}</p>
-        )}
-        <div className="mt-4 flex items-center justify-between">
-          <button onClick={onClose} disabled={submitting} className="text-xs hover:opacity-80" style={{ color: "rgba(245,235,221,0.5)" }}>Cancel</button>
-          <button
-            disabled={!title.trim() || submitting}
-            onClick={handleSubmit}
-            className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ background: CTA_GRADIENT, color: CTA_TEXT_COLOR }}
-          >
-            {submitting ? "Creating…" : "Create room"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare, Heart, MessageCircle, Facebook, Instagram, Send, Search, X } from "lucide-react";
+import { Newspaper, Plus, Pencil, Trash2, ImagePlus, Eye, EyeOff, MessageSquare, Heart, MessageCircle, Facebook, Instagram, Send, Search, X, Check, Ban, Clock } from "lucide-react";
 import {
   createAdminBlog, fetchAdminBlogs, updateAdminBlog, deleteAdminBlog, uploadAdminBlogCover,
   fetchAllAdminBlogComments, editAdminBlogComment, deleteAdminBlogComment,
-  toggleAdminBlogLike, addAdminBlogComment,
+  toggleAdminBlogLike, addAdminBlogComment, approveAdminBlog, rejectAdminBlog,
 } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import FilePreview from "../shared/FilePreview";
@@ -26,6 +26,13 @@ export default function AdminBlogsPage() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [postSearch, setPostSearch] = useState("");
+  // Which slice of the queue is on screen. Pending first and by
+  // default: it is the only one with work waiting in it, and a review
+  // queue nobody is shown is a review queue that stalls.
+  const [tab, setTab] = useState("pending");
+  const [rejecting, setRejecting] = useState(null); // the post being turned down
+  const [rejectReason, setRejectReason] = useState("");
+  const [deciding, setDeciding] = useState(false);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -212,11 +219,58 @@ export default function AdminBlogsPage() {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
+  // A member's submission, decided. Both calls also message the author
+  // by WhatsApp and email — the server does that, not this page.
+  const handleApprove = async (post) => {
+    setDeciding(true);
+    setError("");
+    try {
+      await approveAdminBlog(post.id);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't publish that post.");
+    } finally {
+      setDeciding(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectReason.trim()) return;
+    setDeciding(true);
+    setError("");
+    try {
+      await rejectAdminBlog(rejecting.id, rejectReason.trim());
+      setRejecting(null);
+      setRejectReason("");
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't reject that post.");
+    } finally {
+      setDeciding(false);
+    }
+  };
+
+  // A post written in this panel has no submitter, so it is nobody's
+  // pending item and belongs under Published (or its drafts) rather
+  // than in the review queue.
+  const inTab = (p) => {
+    if (tab === "pending") return p.status === "pending";
+    if (tab === "rejected") return p.status === "rejected";
+    return p.status !== "pending" && p.status !== "rejected";
+  };
+  const tabCounts = {
+    pending: posts.filter((p) => p.status === "pending").length,
+    published: posts.filter((p) => p.status !== "pending" && p.status !== "rejected").length,
+    rejected: posts.filter((p) => p.status === "rejected").length,
+  };
+
   // Search by TITLE only: a post matches when every word typed appears in its
   // title (case-insensitive, any order). The full list is already loaded, so
   // this is just a filter — no extra requests.
   const searchTerms = postSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const visiblePosts = posts.filter((p) => searchTerms.every((t) => (p.title || "").toLowerCase().includes(t)));
+  const visiblePosts = posts
+    .filter(inTab)
+    .filter((p) => searchTerms.every((t) => (p.title || "").toLowerCase().includes(t)));
 
   return (
     <div>
@@ -224,6 +278,32 @@ export default function AdminBlogsPage() {
         <h1 className="flex items-center gap-2 text-xl font-semibold" style={{ color: COLORS.cream }}>
           <Newspaper className="h-5 w-5" style={{ color: COLORS.gold }} /> Blog
         </h1>
+      </div>
+
+      {/* Pending / Published / Not published. The pending count sits on
+          the tab itself so a queue with work in it says so without
+          being opened. */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {[
+          { key: "pending", label: "Pending", icon: Clock },
+          { key: "published", label: "Published", icon: Eye },
+          { key: "rejected", label: "Not published", icon: Ban },
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold"
+            style={
+              tab === key
+                ? { background: COLORS.gold, color: "#0a0104" }
+                : { background: "rgba(245,235,221,0.06)", color: "rgba(245,235,221,0.7)" }
+            }
+          >
+            <Icon className="h-3.5 w-3.5" /> {label}
+            <span style={{ opacity: 0.7 }}>({tabCounts[key]})</span>
+          </button>
+        ))}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -346,10 +426,52 @@ export default function AdminBlogsPage() {
                       <p className="text-base font-semibold" style={{ color: COLORS.cream }}>{post.title}</p>
                       <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
                         {post.author_name} · {post.likes_count} likes · {postComments.length} comments
-                        {!post.is_published && <span style={{ color: "#f87171" }}> · Draft</span>}
+                        {post.status === "pending" && <span style={{ color: COLORS.gold }}> · Awaiting review</span>}
+                        {post.status === "rejected" && <span style={{ color: "#f87171" }}> · Not published</span>}
+                        {post.status !== "pending" && post.status !== "rejected" && !post.is_published && (
+                          <span style={{ color: "#f87171" }}> · Draft</span>
+                        )}
                       </p>
+                      {/* Who sent it in. Absent on a post written here,
+                          which is how the reviewer tells a submission
+                          from the house's own writing. */}
+                      {post.submitted_by_name && (
+                        <p className="text-xs" style={{ color: COLORS.gold }}>
+                          Submitted by {post.submitted_by_name}
+                        </p>
+                      )}
+                      {post.status === "rejected" && post.review_note && (
+                        <p className="mt-1 text-xs" style={{ color: "#f87171" }}>
+                          Reason given: {post.review_note}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {/* Only a member's submission gets these: an
+                          admin's own post was reviewed by writing it,
+                          and Publish/Unpublish below already covers it. */}
+                      {post.submitted_by_name && post.status !== "published" && (
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(post)}
+                          disabled={deciding}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                          style={{ background: "rgba(111,207,151,0.15)", color: "#6FCF97" }}
+                        >
+                          <Check className="h-3.5 w-3.5" /> Publish
+                        </button>
+                      )}
+                      {post.submitted_by_name && post.status !== "rejected" && (
+                        <button
+                          type="button"
+                          onClick={() => { setRejecting(post); setRejectReason(""); }}
+                          disabled={deciding}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                          style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
+                        >
+                          <Ban className="h-3.5 w-3.5" /> Reject
+                        </button>
+                      )}
                       <button type="button" onClick={() => openEdit(post)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium" style={{ background: "rgba(212,175,55,0.12)", color: COLORS.gold }}>
                         <Pencil className="h-3.5 w-3.5" /> Edit
                       </button>
@@ -547,6 +669,62 @@ export default function AdminBlogsPage() {
         onCancel={() => setConfirmDeleteComment(null)}
         onConfirm={handleDeleteCommentConfirmed}
       />
+
+      {/* Rejecting needs a reason, so this is a form rather than a
+          ConfirmDialog. The reason is sent to the author by WhatsApp and
+          email and kept on the post — it is the whole difference between
+          a rejection they can act on and one they can only resent. */}
+      {rejecting && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ background: "rgba(10,1,4,0.8)" }}
+          onClick={() => { if (!deciding) setRejecting(null); }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6"
+            style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.25)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-lg font-semibold" style={{ color: COLORS.cream }}>
+              Reject this post?
+            </h2>
+            <p className="mb-4 text-sm" style={{ color: "rgba(245,235,221,0.6)" }}>
+              "{rejecting.title}" by {rejecting.submitted_by_name || rejecting.author_name}.
+              They'll get this reason by WhatsApp and email, so write it to them.
+            </p>
+            <label style={labelStyle}>What needs changing</label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              autoFocus
+              maxLength={1000}
+              placeholder="e.g. Please add the names of the production team, and check the dates in paragraph two."
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRejecting(null)}
+                disabled={deciding}
+                className="text-sm font-medium hover:opacity-80"
+                style={{ color: "rgba(245,235,221,0.55)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReject}
+                disabled={deciding || !rejectReason.trim()}
+                className="rounded-full px-5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ background: "rgba(248,113,113,0.9)", color: "#1a0206" }}
+              >
+                {deciding ? "Sending…" : "Reject and notify"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

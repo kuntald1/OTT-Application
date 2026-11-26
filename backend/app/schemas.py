@@ -696,6 +696,12 @@ class BlogListItemOut(BaseModel):
     likes_count: int = 0
     liked_by_me: bool = False
     comment_count: int = 0
+    # Review state — "pending" | "published" | "rejected". Defaulted so
+    # the public listing, which only ever returns published posts, needs
+    # no change; the author's own list and the admin queue read it.
+    status: str = "published"
+    review_note: Optional[str] = None
+    submitted_by_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -712,8 +718,26 @@ class BlogDetailOut(BaseModel):
     likes_count: int = 0
     liked_by_me: bool = False
     comment_count: int = 0
+    status: str = "published"
+    review_note: Optional[str] = None
+    submitted_by_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class BlogSubmitRequest(BaseModel):
+    """A site member writing a post. Deliberately NOT BlogCreate: that
+    one carries author_name and is_published, which a member must not
+    get to choose — the name comes from their account and publishing is
+    the admin's decision.
+    """
+    title: str = Field(min_length=1, max_length=255)
+    excerpt: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1)
+
+
+class BlogRejectRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class BlogCreate(BaseModel):
@@ -1496,6 +1520,8 @@ class AdminOut(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    # Where this admin's WhatsApp alerts go. None = email only.
+    phone: Optional[str] = None
     allowed_menu_keys: Optional[List[str]] = None
     # True when this admin login is linked to a site (`users`) account — the
     # organiser pages need one (videos/revenue/enquiries belong to users.id).
@@ -1549,6 +1575,13 @@ class AdminCreateRequest(BaseModel):
     email: NormEmail
     password: str = Field(min_length=8, max_length=128)
     role: str = Field(pattern="^(superadmin|admin|plays_organiser)$", default="admin")
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+
+class AdminPhoneUpdate(BaseModel):
+    """Empty string clears it — an admin who no longer wants WhatsApp
+    alerts needs a way back to email-only without being deleted."""
+    phone: str = Field(default="", max_length=20)
 
 
 class MyListItemIn(BaseModel):

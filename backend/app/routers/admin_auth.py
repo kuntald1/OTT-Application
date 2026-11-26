@@ -16,7 +16,7 @@ from app.identity_utils import email_equals
 from app.models import AdminUser, AdminRole, AdminRoleMenu
 from app.schemas import (
     AdminLoginRequest, AdminToken, AdminOut, AdminCreateRequest, AdminMenuPermissionsUpdate,
-    AdminRolePermissionsOut, AdminRolePermissionsUpdate, AdminRoleMenuOption,
+    AdminPhoneUpdate, AdminRolePermissionsOut, AdminRolePermissionsUpdate, AdminRoleMenuOption,
     AdminSetPasswordRequest, AdminResetPasswordRequest, ForgotPasswordRequest, MessageResponse,
 )
 from app.security import hash_password, verify_password, create_access_token
@@ -166,8 +166,35 @@ def create_admin(
         email=payload.email,
         hashed_password=hash_password(payload.password),
         role=AdminRole(payload.role),
+        # Optional. Without it this admin still gets the alert emails;
+        # with it, the WhatsApp too.
+        phone=(payload.phone or "").strip() or None,
     )
     db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return _admin_out(admin, db)
+
+
+@router.put("/admins/{admin_id}/phone", response_model=AdminOut)
+def update_admin_phone(
+    admin_id: str,
+    payload: AdminPhoneUpdate,
+    current_superadmin: AdminUser = Depends(get_current_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Where this admin's WhatsApp alerts go — currently, that a member
+    has submitted a blog post for review.
+
+    Superadmin-only, like every other change to an admin account. An
+    empty string clears it and puts the account back to email-only,
+    which is the way out for someone who does not want WhatsApp rather
+    than deleting their account.
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin account not found")
+    admin.phone = payload.phone.strip() or None
     db.commit()
     db.refresh(admin)
     return _admin_out(admin, db)

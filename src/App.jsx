@@ -307,7 +307,7 @@ export default function App() {
         ) : route.view === 'manageProfile' ? (
           <ManageProfilePage onBack={goBack} />
         ) : route.view === 'blogList' ? (
-          <BlogListPage onBack={goBack} onOpenPost={(postId) => navigate('blogDetail', { postId })} />
+          <BlogListPage onBack={goBack} onNavigate={navigate} onOpenPost={(postId) => navigate('blogDetail', { postId })} />
         ) : route.view === 'blogDetail' ? (
           <BlogDetailPage postId={route.params.postId} onBack={goBack} />
         ) : route.view === 'communityRooms' ? (

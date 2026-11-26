@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchAdminList, createAdminAccount, deactivateAdminAccount, updateAdminMenuPermissions, setAdminAccountPassword } from "./adminApi";
+import { fetchAdminList, createAdminAccount, deactivateAdminAccount, updateAdminMenuPermissions, setAdminAccountPassword, updateAdminPhone } from "./adminApi";
 import ConfirmDialog from "../shared/ConfirmDialog";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 
@@ -44,7 +44,7 @@ export default function AdminAccountsPage({ currentAdmin }) {
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "admin" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "admin", phone: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -64,7 +64,7 @@ export default function AdminAccountsPage({ currentAdmin }) {
     setSubmitting(true);
     try {
       await createAdminAccount(form);
-      setForm({ name: "", email: "", password: "", role: "admin" });
+      setForm({ name: "", email: "", password: "", role: "admin", phone: "" });
       setShowCreate(false);
       loadAdmins();
     } catch (err) {
@@ -118,6 +118,26 @@ export default function AdminAccountsPage({ currentAdmin }) {
       setError(err.message || "Couldn't clear the restriction.");
     } finally {
       setSavingPermissions(false);
+    }
+  };
+
+  const [editingPhoneId, setEditingPhoneId] = useState(null);
+  const [phoneDraft, setPhoneDraft] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
+
+  const handleSavePhone = async (adminId) => {
+    setSavingPhone(true);
+    setError("");
+    try {
+      // Empty clears it, which is how an admin goes back to email-only
+      // without having their account deleted.
+      await updateAdminPhone(adminId, phoneDraft.trim());
+      setEditingPhoneId(null);
+      load();
+    } catch (err) {
+      setError(err.message || "Couldn't save that number.");
+    } finally {
+      setSavingPhone(false);
     }
   };
 
@@ -202,6 +222,17 @@ export default function AdminAccountsPage({ currentAdmin }) {
               className="rounded-lg border px-3 py-2 text-sm outline-none"
               style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
             />
+            {/* Where this account's alerts go — currently, that a
+                member has submitted a blog post. Optional: without it
+                the account still gets the alert emails. */}
+            <input
+              type="tel"
+              placeholder="WhatsApp number (optional)"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              className="rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+            />
             <select
               value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
@@ -257,9 +288,28 @@ export default function AdminAccountsPage({ currentAdmin }) {
                       </span>
                     )}
                   </p>
-                  <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>{a.email}</p>
+                  <p className="text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+                    {a.email}
+                    {a.phone
+                      ? ` · WhatsApp ${a.phone}`
+                      : (a.role === "admin" || a.role === "superadmin")
+                      ? " · email alerts only"
+                      : ""}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {/* Only the two roles that can act on the review queue
+                      are worth alerting, so only they are offered a
+                      number. */}
+                  {(a.role === "admin" || a.role === "superadmin") && a.is_active && (
+                    <button
+                      onClick={() => { setEditingPhoneId(editingPhoneId === a.id ? null : a.id); setPhoneDraft(a.phone || ""); setError(""); }}
+                      className="text-xs font-medium hover:opacity-80"
+                      style={{ color: COLORS.gold }}
+                    >
+                      {editingPhoneId === a.id ? "Close" : a.phone ? "Change WhatsApp" : "Add WhatsApp"}
+                    </button>
+                  )}
                   {a.role === "admin" && (
                     <button
                       onClick={() => (managingPermissionsId === a.id ? setManagingPermissionsId(null) : startManagePermissions(a))}
@@ -293,6 +343,30 @@ export default function AdminAccountsPage({ currentAdmin }) {
                   )}
                 </div>
               </div>
+
+              {editingPhoneId === a.id && (
+                <div className="mt-3 flex flex-wrap items-center gap-3 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  <input
+                    type="tel"
+                    placeholder="WhatsApp number"
+                    value={phoneDraft}
+                    onChange={(e) => setPhoneDraft(e.target.value)}
+                    className="rounded-lg border px-3 py-2 text-sm outline-none"
+                    style={{ borderColor: "rgba(245,235,221,0.15)", background: "rgba(245,235,221,0.05)", color: COLORS.cream }}
+                  />
+                  <button
+                    onClick={() => handleSavePhone(a.id)}
+                    disabled={savingPhone}
+                    className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                    style={{ background: COLORS.gold, color: "#0a0104" }}
+                  >
+                    {savingPhone ? "Saving…" : "Save"}
+                  </button>
+                  <span className="text-xs" style={{ color: "rgba(245,235,221,0.4)" }}>
+                    Leave empty for email alerts only.
+                  </span>
+                </div>
+              )}
 
               {changingPasswordId === a.id && (
                 <div className="mt-3 flex flex-wrap items-center gap-3 border-t pt-3" style={{ borderColor: "rgba(255,255,255,0.06)" }}>

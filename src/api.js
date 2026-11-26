@@ -293,6 +293,19 @@ export function fetchBlogPost(id) {
   return request(`/blogs/${id}`, { auth: true }); // auth optional server-side, but needed to populate liked_by_me when logged in
 }
 
+// A member writes a post. It goes to the admin review queue, never
+// straight live — the server sets status "pending" and ignores any
+// byline sent with it (the name comes from the account).
+export function submitBlog({ title, excerpt, body }) {
+  return request("/blogs", { method: "POST", auth: true, body: { title, excerpt, body } });
+}
+
+// This person's own submissions, in every state, each with its status
+// and — if it was turned down — the reason.
+export function fetchMyBlogs() {
+  return request("/blogs/mine", { auth: true });
+}
+
 export function toggleBlogLike(id) {
   return request(`/blogs/${id}/like`, { method: "POST", auth: true });
 }

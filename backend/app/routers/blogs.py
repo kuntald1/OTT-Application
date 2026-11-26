@@ -1,13 +1,49 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.database import get_db
 from app.deps import get_current_user, get_current_user_optional
-from app.models import Blog, BlogComment, BlogLike, User, AdminUser
-from app.schemas import BlogListItemOut, BlogDetailOut, BlogCommentCreate, BlogCommentOut, BlogLikeToggleOut
+from app.models import AdminRole, Blog, BlogComment, BlogLike, User, AdminUser
+from app.notifications import send_blog_submitted_email, send_blog_submitted_whatsapp
+from app.schemas import (
+    BlogListItemOut, BlogDetailOut, BlogCommentCreate, BlogCommentOut,
+    BlogLikeToggleOut, BlogSubmitRequest,
+)
 
 router = APIRouter(prefix="/blogs", tags=["blogs"])
+
+
+def notify_admins_of_submission(blog: Blog, author: User, db: Session) -> None:
+    """Tell every active superadmin and admin that a post is waiting.
+
+    Everyone who can act on it is told, rather than one configured
+    address: a queue only one person is told about is a queue that
+    stalls when that person is away. Organiser-role admin logins are
+    left out — they cannot reach the review screen.
+
+    Never raises. A submission that succeeded must not be reported as
+    failed because Twilio was down, so the whole loop is wrapped as
+    well as each send inside it.
+    """
+    try:
+        recipients = (
+            db.query(AdminUser)
+            .filter(
+                AdminUser.is_active == True,  # noqa: E712
+                AdminUser.role.in_([AdminRole.superadmin, AdminRole.admin]),
+            )
+            .all()
+        )
+        for admin in recipients:
+            if admin.phone:
+                send_blog_submitted_whatsapp(admin.phone, admin.name, author.name, blog.title)
+            if admin.email:
+                send_blog_submitted_email(admin.email, admin.name, author.name, blog.title, blog.excerpt)
+    except Exception:
+        pass
 
 
 def _comment_to_out(c: BlogComment, db: Session) -> BlogCommentOut:
@@ -58,18 +94,88 @@ def list_blogs(db: Session = Depends(get_db)):
     return out
 
 
+@router.post("", response_model=BlogListItemOut, status_code=status.HTTP_201_CREATED)
+def submit_blog(
+    payload: BlogSubmitRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A site member writes a post. It goes to the review queue, never
+    straight live — anyone with an account can call this.
+
+    author_name is taken from the account rather than the request: a
+    byline the submitter could type would be a byline they could put
+    someone else's name on.
+    """
+    blog = Blog(
+        title=payload.title.strip(),
+        excerpt=payload.excerpt.strip(),
+        body=payload.body,
+        author_name=current_user.name or "theomy member",
+        is_published=False,
+        status="pending",
+        submitted_by_user_id=current_user.id,
+    )
+    db.add(blog)
+    db.commit()
+    db.refresh(blog)
+
+    # After the commit, deliberately. The post is saved and the author
+    # will see it in their list whatever happens to the messages.
+    notify_admins_of_submission(blog, current_user, db)
+
+    likes_count, comment_count = _counts(blog.id, db)
+    return BlogListItemOut(
+        id=blog.id, title=blog.title, excerpt=blog.excerpt, author_name=blog.author_name,
+        published_at=blog.published_at, cover_image_url=blog.cover_image_url,
+        is_published=blog.is_published, likes_count=likes_count, comment_count=comment_count,
+        status=blog.status, review_note=blog.review_note, submitted_by_name=current_user.name,
+    )
+
+
+@router.get("/mine", response_model=list[BlogListItemOut])
+def list_my_blogs(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """This person's own submissions, in every state.
+
+    Declared BEFORE /{blog_id} on purpose: FastAPI matches in order, so
+    the other way round "mine" would be read as a post id and 404.
+    """
+    rows = (
+        db.query(Blog)
+        .filter(Blog.submitted_by_user_id == current_user.id)
+        .order_by(Blog.published_at.desc())
+        .all()
+    )
+    out = []
+    for b in rows:
+        likes_count, comment_count = _counts(b.id, db)
+        out.append(BlogListItemOut(
+            id=b.id, title=b.title, excerpt=b.excerpt, author_name=b.author_name,
+            published_at=b.published_at, cover_image_url=b.cover_image_url,
+            is_published=b.is_published, likes_count=likes_count, comment_count=comment_count,
+            status=b.status, review_note=b.review_note, submitted_by_name=current_user.name,
+        ))
+    return out
+
+
 @router.get("/{blog_id}", response_model=BlogDetailOut)
 def get_blog(
     blog_id: str,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
-    blog = (
-        db.query(Blog)
-        .filter(Blog.id == blog_id, Blog.is_published == True)  # noqa: E712
-        .first()
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    # Unpublished is invisible — except to whoever wrote it. Someone
+    # who submitted a post needs to be able to read it back while it
+    # waits, and to see it again after a rejection in order to fix it.
+    visible = blog is not None and (
+        blog.is_published
+        or (current_user is not None and blog.submitted_by_user_id == current_user.id)
     )
-    if not blog:
+    if not visible:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
     likes_count, comment_count = _counts(blog.id, db)
     liked_by_me = False
@@ -82,6 +188,10 @@ def get_blog(
         id=blog.id, title=blog.title, excerpt=blog.excerpt, body=blog.body, author_name=blog.author_name,
         published_at=blog.published_at, cover_image_url=blog.cover_image_url, is_published=blog.is_published,
         likes_count=likes_count, liked_by_me=liked_by_me, comment_count=comment_count,
+        # Carried explicitly: the schema defaults these to "published",
+        # which would tell an author looking at their own pending post
+        # that it is already live.
+        status=blog.status, review_note=blog.review_note,
     )
 
 

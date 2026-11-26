@@ -469,8 +469,30 @@ class TaxConfig(Base):
 
 
 class Blog(Base):
-    """Blog posts — published by an admin, read by everyone.
-    is_published lets a post be prepared as a draft before going live.
+    """Blog posts. Written by an admin, or submitted by a site member
+    and published only once an admin approves it.
+
+    is_published stays the single answer to "does the public see this?".
+    Every existing query filters on it and none of them had to change:
+    `status` sits alongside and says WHY, which is what the author and
+    the review queue need.
+
+        status      is_published
+        pending     False         waiting for an admin
+        published   True          live
+        rejected    False         turned down, review_note says why
+
+    A draft an admin prepares without publishing is still just
+    is_published=False with the default status — it never entered the
+    submission flow, so it is nobody's pending item.
+
+    Needs, on the live database:
+      ALTER TABLE blogs ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'published';
+      ALTER TABLE blogs ADD COLUMN submitted_by_user_id UUID NULL REFERENCES users(id);
+      ALTER TABLE blogs ADD COLUMN review_note TEXT NULL;
+      ALTER TABLE blogs ADD COLUMN reviewed_at TIMESTAMPTZ NULL;
+    create_all() adds missing TABLES but never missing COLUMNS, so these
+    four are hand-run — same as admin_users.linked_user_id below.
     """
     __tablename__ = "blogs"
 
@@ -485,6 +507,18 @@ class Blog(Base):
     published_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    # "published" is the default so that every post written before this
+    # existed — all of them admin-written and already live — reads as
+    # published rather than appearing in the review queue on day one.
+    status = Column(String(20), nullable=False, default="published")
+    # Who submitted it. NULL means an admin wrote it in the panel, which
+    # is also how the notifier knows there is nobody to write back to.
+    submitted_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    # Why it was rejected, in the admin's own words — sent to the author
+    # and kept, so "why was mine turned down?" has an answer on file.
+    review_note = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class BlogComment(Base):
@@ -1407,6 +1441,12 @@ class AdminUser(Base):
     # page). Needs: ALTER TABLE admin_users ADD COLUMN linked_user_id UUID
     # NULL REFERENCES users(id);
     linked_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    # WhatsApp number for the alerts this account should receive — right
+    # now, that a member has submitted a blog post for review. Optional:
+    # an admin without one still gets the email, which is the channel
+    # that always works. Set in Admin Accounts by a superadmin.
+    # Needs: ALTER TABLE admin_users ADD COLUMN phone VARCHAR(20) NULL;
+    phone = Column(String(20), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
-import { MessageCircle, Plus, HandCoins, Users } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { MessageCircle, HandCoins, Users } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { fetchBlogs } from "../api";
+import SearchBox from "../shared/SearchBox";
 import { useApp } from "../context/AppContext";
 import PageHero from "../shared/PageHero";
 
@@ -30,8 +31,31 @@ export default function CommunityPage({ onNavigate }) {
   useEffect(() => {
     fetchBlogs().then(setBlogPosts).catch(() => setBlogPosts([]));
   }, []);
-  const previewPosts = blogPosts.slice(0, 3);
-  const previewRooms = rooms.slice(0, 3);
+
+  // A search box per column. Each narrows only its own list, and the
+  // same box appears again at the top of the full-list page that
+  // column's "View all" opens — see shared/SearchBox.jsx.
+  const [blogQuery, setBlogQuery] = useState("");
+  const [roomQuery, setRoomQuery] = useState("");
+
+  // Searching the summary and the author as well as the title, because
+  // "that piece by Sujoy" is how people actually look for a post.
+  const matches = (fields, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return fields.some((f) => (f || "").toLowerCase().includes(needle));
+  };
+  const filteredPosts = useMemo(
+    () => blogPosts.filter((p) => matches([p.title, p.excerpt, p.author_name], blogQuery)),
+    [blogPosts, blogQuery]
+  );
+  const filteredRooms = useMemo(
+    () => rooms.filter((r) => matches([r.title, r.createdBy], roomQuery)),
+    [rooms, roomQuery]
+  );
+
+  const previewPosts = filteredPosts.slice(0, 3);
+  const previewRooms = filteredRooms.slice(0, 3);
 
   const formatDate = (iso) =>
     new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -52,7 +76,6 @@ export default function CommunityPage({ onNavigate }) {
   const handleReadMore = requireSubscription((postId) => onNavigate?.("blogDetail", { postId }));
   const handleViewAllRooms = requireSubscription(() => onNavigate?.("communityRooms"));
   const handleJoinRoom = requireSubscription((roomId) => onNavigate?.("communityRoom", { roomId }));
-  const handleCreateRoom = requireSubscription(() => onNavigate?.("communityRooms"));
   const handleDonate = requireSubscription(() => onNavigate?.("donation"));
 
   return (
@@ -74,7 +97,18 @@ export default function CommunityPage({ onNavigate }) {
                 View all →
               </button>
             </div>
+            <SearchBox
+              value={blogQuery}
+              onChange={setBlogQuery}
+              placeholder="Search posts"
+              className="mb-4"
+            />
             <div className="flex flex-col gap-4">
+              {previewPosts.length === 0 && (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  {blogQuery.trim() ? "No post matches that." : "No posts yet."}
+                </p>
+              )}
               {previewPosts.map((post) => (
                 <article
                   key={post.id}
@@ -112,7 +146,18 @@ export default function CommunityPage({ onNavigate }) {
               Join a room to post and reply.
             </p>
 
+            <SearchBox
+              value={roomQuery}
+              onChange={setRoomQuery}
+              placeholder="Search rooms"
+              className="mb-4"
+            />
             <div className="flex flex-col gap-3">
+              {previewRooms.length === 0 && (
+                <p className="text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
+                  {roomQuery.trim() ? "No room matches that." : "No rooms yet."}
+                </p>
+              )}
               {previewRooms.map((room) => (
                 <div
                   key={room.id}
@@ -139,16 +184,12 @@ export default function CommunityPage({ onNavigate }) {
                 </div>
               ))}
 
-              {/* Create Room card */}
-              <button
-                type="button"
-                onClick={handleCreateRoom}
-                className="flex items-center justify-center gap-2 rounded-2xl p-4 transition-colors hover:bg-white/5"
-                style={{ border: `1.5px dashed rgba(212,175,55,0.4)` }}
-              >
-                <Plus className="h-4 w-4" style={{ color: COLORS.gold }} />
-                <p className="text-sm font-semibold" style={{ color: COLORS.gold }}>Create Room</p>
-              </button>
+              {/* Create Room is deliberately absent from the public site
+                  (client's call, Nov 2026) — rooms are opened by the
+                  admin panel for now, so members join rather than start
+                  them. Removed rather than disabled: a dashed card that
+                  does nothing reads as broken, not as unavailable. The
+                  same card is gone from the View all page. */}
             </div>
           </div>
         </div>
