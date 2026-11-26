@@ -306,6 +306,42 @@ export function fetchMyBlogs() {
   return request("/blogs/mine", { auth: true });
 }
 
+// Revising a post that hasn't gone live. Editing a REJECTED one puts
+// it back in the queue and re-alerts the admins; editing a pending one
+// doesn't, since it is already on their list. The server decides that,
+// not this call.
+export function updateMyBlog(id, { title, excerpt, body }) {
+  return request(`/blogs/${id}`, { method: "PUT", auth: true, body: { title, excerpt, body } });
+}
+
+// The author's own cover picture, for a post not yet published.
+// Built by hand like uploadProfilePhoto above and for the same reason:
+// request() always sets Content-Type: application/json, and a
+// multipart body needs the browser to set its own with the boundary.
+export async function uploadMyBlogCover(id, file) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/blogs/${id}/cover`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const message =
+      typeof data.detail === "string"
+        ? data.detail
+        : "Couldn't upload that image. Please try again.";
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 export function toggleBlogLike(id) {
   return request(`/blogs/${id}/like`, { method: "POST", auth: true });
 }

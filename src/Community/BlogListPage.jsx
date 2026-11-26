@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Heart, MessageCircle, PenLine } from "lucide-react";
+import { ArrowLeft, Heart, MessageCircle, Pencil, PenLine } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR } from "../theme";
 import { fetchBlogs, fetchMyBlogs } from "../api";
 import { useApp } from "../context/AppContext";
@@ -21,7 +21,9 @@ export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
   const [mine, setMine] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [writing, setWriting] = useState(false);
+  // null = closed, "new" = writing a fresh post, a post object = editing
+  // that draft. One piece of state, because the two can't both be open.
+  const [editorFor, setEditorFor] = useState(null);
 
   const loadMine = () => {
     if (!isLoggedIn) {
@@ -57,7 +59,7 @@ export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
       requestLogin();
       return;
     }
-    setWriting(true);
+    setEditorFor("new");
   };
 
   // Searching the summary and the author as well as the title, because
@@ -156,6 +158,19 @@ export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
                           <b>What needs changing:</b> {post.review_note}
                         </p>
                       )}
+                      {/* Editable right up until an editor publishes it.
+                          On a rejected post this is the whole point of
+                          the reason above — saving sends it back for
+                          review. */}
+                      <button
+                        type="button"
+                        onClick={() => setEditorFor(post)}
+                        className="mt-3 flex items-center gap-1.5 text-sm font-medium hover:opacity-80"
+                        style={{ color: COLORS.gold }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        {post.status === "rejected" ? "Edit and resubmit" : "Edit post"}
+                      </button>
                     </div>
                   );
                 })}
@@ -202,11 +217,16 @@ export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
         )}
       </main>
 
-      {writing && (
+      {editorFor && (
         <CreateBlogModal
-          onClose={() => setWriting(false)}
-          // Refresh "Your posts" so the new submission is there the
-          // moment the dialog closes, rather than after a reload.
+          // Remounted per draft: the modal reads its initial fields from
+          // this prop, so a key change is what resets them when the
+          // person closes one draft and opens another.
+          key={editorFor === "new" ? "new" : editorFor.id}
+          post={editorFor === "new" ? null : editorFor}
+          onClose={() => setEditorFor(null)}
+          // Refresh "Your posts" so the change is there the moment the
+          // dialog closes, rather than after a reload.
           onSubmitted={loadMine}
         />
       )}

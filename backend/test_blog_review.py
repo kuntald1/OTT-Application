@@ -340,3 +340,145 @@ def test_the_admin_listing_shows_the_queue_with_its_state(world):
     assert rows[0]["status"] == "pending"
     # Who wrote it, so the reviewer isn't deciding on an anonymous post.
     assert rows[0]["submitted_by_name"] == "Kuntal Das"
+
+
+# ------------------------------------------- revising before approval
+
+def test_the_author_can_edit_their_own_pending_post(world):
+    post_id = _submit(world)
+
+    res = world.client.put(
+        f"/api/blogs/{post_id}",
+        json={"title": "Behind the Curtain, revised", "excerpt": "Tighter.", "body": "Better."},
+        headers=world.h(world.author),
+    )
+    assert res.status_code == 200
+    assert res.json()["title"] == "Behind the Curtain, revised"
+    assert res.json()["status"] == "pending"
+
+
+def test_editing_a_pending_post_does_not_re_alert_the_admins(world):
+    post_id = _submit(world)
+    world.sent.admin_mail.clear()
+    world.sent.admin_wa.clear()
+
+    world.client.put(f"/api/blogs/{post_id}", json=POST, headers=world.h(world.author))
+
+    # It is already on the queue. A message per save would teach the
+    # admins to ignore the alerts that matter.
+    assert world.sent.admin_mail == []
+    assert world.sent.admin_wa == []
+
+
+def test_editing_a_rejected_post_resubmits_it_and_tells_the_admins(world):
+    post_id = _submit(world)
+    world.client.post(f"/api/admin/blogs/{post_id}/reject", json={"reason": "Needs sources"})
+    world.sent.admin_mail.clear()
+
+    res = world.client.put(
+        f"/api/blogs/{post_id}",
+        json={**POST, "body": "Now with sources."},
+        headers=world.h(world.author),
+    )
+
+    # Back in the queue, and the old reason is gone — it described the
+    # old draft, and showing "fix X" on a draft where X is fixed is worse
+    # than showing nothing.
+    assert res.json()["status"] == "pending"
+    assert res.json()["review_note"] is None
+    # Nobody would know to look at it again otherwise.
+    assert len(world.sent.admin_mail) == 2
+
+
+def test_a_published_post_can_no_longer_be_edited_by_its_author(world):
+    post_id = _submit(world)
+    world.client.post(f"/api/admin/blogs/{post_id}/approve")
+
+    res = world.client.put(f"/api/blogs/{post_id}", json=POST, headers=world.h(world.author))
+
+    # This is the line that matters: editing after approval would put
+    # unreviewed words on the public site under an editor's approval.
+    assert res.status_code == 403
+
+
+def test_nobody_else_can_edit_your_draft(world):
+    post_id = _submit(world)
+    other = world.mk_user("Someone Else", "other@example.com")
+
+    res = world.client.put(f"/api/blogs/{post_id}", json=POST, headers=world.h(other))
+
+    # 404, not 403 — whether a draft exists is not a stranger's business.
+    assert res.status_code == 404
+    assert world.client.put(f"/api/blogs/{post_id}", json=POST).status_code in (401, 403)
+
+
+def test_a_cover_image_is_stored_and_attached(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(blogs, "COVER_UPLOAD_DIR", tmp_path / "blog_covers")
+    post_id = _submit(world)
+
+    res = world.client.post(
+        f"/api/blogs/{post_id}/cover",
+        files={"file": ("set.png", b"fake-png-bytes", "image/png")},
+        headers=world.h(world.author),
+    )
+    assert res.status_code == 200
+    assert res.json()["cover_image_url"].startswith("/api/uploads/blog_covers/")
+    assert len(list((tmp_path / "blog_covers").iterdir())) == 1
+
+
+def test_the_stored_name_comes_from_the_content_type_not_the_filename(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(blogs, "COVER_UPLOAD_DIR", tmp_path / "blog_covers")
+    post_id = _submit(world)
+
+    world.client.post(
+        f"/api/blogs/{post_id}/cover",
+        files={"file": ("shell.php", b"fake-png-bytes", "image/png")},
+        headers=world.h(world.author),
+    )
+
+    # The filename is attacker-chosen. A stored ".php" under a served
+    # directory is how an image upload becomes something worse.
+    stored = list((tmp_path / "blog_covers").iterdir())[0].name
+    assert stored.endswith(".png")
+    assert "php" not in stored
+
+
+def test_a_non_image_cover_is_refused(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(blogs, "COVER_UPLOAD_DIR", tmp_path / "blog_covers")
+    post_id = _submit(world)
+
+    res = world.client.post(
+        f"/api/blogs/{post_id}/cover",
+        files={"file": ("notes.pdf", b"%PDF-1.4", "application/pdf")},
+        headers=world.h(world.author),
+    )
+    assert res.status_code == 400
+    assert not (tmp_path / "blog_covers").exists()
+
+
+def test_an_oversized_cover_is_refused_without_being_half_written(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(blogs, "COVER_UPLOAD_DIR", tmp_path / "blog_covers")
+    monkeypatch.setattr(blogs, "MAX_IMAGE_BYTES", 10)
+    post_id = _submit(world)
+
+    res = world.client.post(
+        f"/api/blogs/{post_id}/cover",
+        files={"file": ("big.jpg", b"x" * 500, "image/jpeg")},
+        headers=world.h(world.author),
+    )
+    assert res.status_code == 400
+    # Checked before anything was opened for writing.
+    assert not (tmp_path / "blog_covers").exists()
+
+
+def test_a_cover_cannot_be_changed_once_published(world, tmp_path, monkeypatch):
+    monkeypatch.setattr(blogs, "COVER_UPLOAD_DIR", tmp_path / "blog_covers")
+    post_id = _submit(world)
+    world.client.post(f"/api/admin/blogs/{post_id}/approve")
+
+    res = world.client.post(
+        f"/api/blogs/{post_id}/cover",
+        files={"file": ("set.png", b"fake", "image/png")},
+        headers=world.h(world.author),
+    )
+    assert res.status_code == 403

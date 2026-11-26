@@ -1,6 +1,9 @@
+import os
+import uuid as uuid_module
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -14,6 +17,39 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/blogs", tags=["blogs"])
+
+# Same folder, limits and served path as the admin uploader in
+# admin_blogs.py — a cover is a cover whoever sent it, and two
+# directories would mean two things to back up and two to serve.
+COVER_UPLOAD_DIR = Path("uploads/blog_covers")
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+# Extension is taken from the VALIDATED content type, not from the
+# uploaded filename. The filename is attacker-chosen, and a stored
+# ".php" or ".html" under a served directory is how an image upload
+# becomes something worse. Admins are trusted and their uploader keeps
+# the original extension; a public endpoint should not.
+IMAGE_EXT_BY_TYPE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
+
+def _editable_or_403(blog: Blog, current_user: User) -> None:
+    """A post can be changed by the person who submitted it, and only
+    while it is not live.
+
+    Published is the line. Letting an author rewrite a post after
+    approval would put unreviewed words on the public site under an
+    editor's approval, which is the one thing the whole queue exists
+    to prevent. Pending and rejected are both open: rejected
+    especially, since the reason given is an instruction to go and fix
+    something.
+    """
+    if blog.submitted_by_user_id != current_user.id:
+        # 404, not 403: whether a post exists is not a stranger's business.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    if blog.status == "published":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This post is already published. Ask the theomy editors to change it.",
+        )
 
 
 def notify_admins_of_submission(blog: Blog, author: User, db: Session) -> None:
@@ -159,6 +195,98 @@ def list_my_blogs(
             status=b.status, review_note=b.review_note, submitted_by_name=current_user.name,
         ))
     return out
+
+
+@router.put("/{blog_id}", response_model=BlogListItemOut)
+def update_my_blog(
+    blog_id: str,
+    payload: BlogSubmitRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The author revising their own post before it goes live.
+
+    A REJECTED post edited here goes back into the queue and the admins
+    are told again — that is a resubmission, and nobody would know to
+    look at it otherwise. A PENDING one stays where it is in the queue
+    and sends nothing: it is already on the list, and a message per
+    save would train the admins to ignore the alerts.
+    """
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    _editable_or_403(blog, current_user)
+
+    was_rejected = blog.status == "rejected"
+    blog.title = payload.title.strip()
+    blog.excerpt = payload.excerpt.strip()
+    blog.body = payload.body
+    if was_rejected:
+        blog.status = "pending"
+        # The old reason described the old draft; leaving it would show
+        # the author "not published: fix X" on a draft where X is fixed.
+        blog.review_note = None
+        blog.reviewed_at = None
+    db.commit()
+    db.refresh(blog)
+
+    if was_rejected:
+        notify_admins_of_submission(blog, current_user, db)
+
+    likes_count, comment_count = _counts(blog.id, db)
+    return BlogListItemOut(
+        id=blog.id, title=blog.title, excerpt=blog.excerpt, author_name=blog.author_name,
+        published_at=blog.published_at, cover_image_url=blog.cover_image_url,
+        is_published=blog.is_published, likes_count=likes_count, comment_count=comment_count,
+        status=blog.status, review_note=blog.review_note, submitted_by_name=current_user.name,
+    )
+
+
+@router.post("/{blog_id}/cover", response_model=BlogListItemOut)
+async def upload_my_blog_cover(
+    blog_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The author's own cover picture for a post not yet published.
+
+    Read, checked, then written — never streamed straight to disk, so
+    an oversized file is refused rather than half-saved.
+    """
+    blog = db.query(Blog).filter(Blog.id == blog_id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    _editable_or_403(blog, current_user)
+
+    ext = IMAGE_EXT_BY_TYPE.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG, PNG, or WEBP images are allowed.",
+        )
+    contents = await file.read()
+    if len(contents) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be smaller than 5MB.")
+    if not contents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That file is empty.")
+
+    COVER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{uuid_module.uuid4()}{ext}"
+    with open(COVER_UPLOAD_DIR / stored_name, "wb") as out:
+        out.write(contents)
+
+    blog.cover_image_url = f"/api/uploads/blog_covers/{stored_name}"
+    db.commit()
+    db.refresh(blog)
+
+    likes_count, comment_count = _counts(blog.id, db)
+    return BlogListItemOut(
+        id=blog.id, title=blog.title, excerpt=blog.excerpt, author_name=blog.author_name,
+        published_at=blog.published_at, cover_image_url=blog.cover_image_url,
+        is_published=blog.is_published, likes_count=likes_count, comment_count=comment_count,
+        status=blog.status, review_note=blog.review_note, submitted_by_name=current_user.name,
+    )
 
 
 @router.get("/{blog_id}", response_model=BlogDetailOut)
