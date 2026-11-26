@@ -2289,3 +2289,11 @@ class AdminPartnerOut(BaseModel):
     email: EmailStr
     joined: datetime
     category: str  # "registered" | "active" | "inactive" | "deactivated"
+
+
+class BrandingOut(BaseModel):
+    """The site's own marks. logo_url is None when no logo has been
+    uploaded, which every client treats as "use the built-in mark"."""
+    logo_url: Optional[str] = None
+
+    model_config = {"from_attributes": True}

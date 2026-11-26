@@ -1405,3 +1405,11 @@ export async function uploadMyStudioCoverImage(file) {
 export function fetchStudioCoverImage(userId) {
   return request(`/organiser-profile/${userId}/cover`);
 }
+
+// The site's own marks — currently just the header logo. Public and
+// unauthenticated, because the header is drawn on every page before
+// anyone logs in. Never 404s: no logo set returns { logo_url: null },
+// which the header reads as "use the built-in mark".
+export function fetchBranding() {
+  return request("/branding");
+}

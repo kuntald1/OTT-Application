@@ -1232,6 +1232,33 @@ class RewardConfig(Base):
     )
 
 
+class BrandingConfig(Base):
+    """Single-row master table for the site's own marks — currently the
+    logo in the header. Edited from Admin > Branding.
+
+    A new TABLE rather than a column on an existing config row, for the
+    reason this codebase always takes that route: create_all() makes a
+    missing table by itself on startup, while a missing COLUMN needs a
+    hand-run ALTER TABLE against the live database.
+
+    logo_url NULL or empty means the built-in mark, and that is the
+    fallback at every layer — the API returns null, the header renders
+    the original icon, and an uploaded file that later goes missing
+    shows the icon again rather than a broken image. The site must look
+    right on a database that has never been touched by this feature,
+    because that is exactly what it looks like the moment it deploys.
+    """
+    __tablename__ = "branding_config"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    logo_url = Column(String(500), nullable=True)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class AgeRestrictionConfig(Base):
     """Single-row master table deciding which age ratings an under-18
     profile may NOT watch. Edited from Admin > Age Restriction; read by

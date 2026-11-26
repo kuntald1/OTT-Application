@@ -15,7 +15,7 @@ const STATUS_BADGE = {
   rejected: { label: "Not published", color: "#f87171", bg: "rgba(248,113,113,0.14)" },
 };
 
-export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
+export default function BlogListPage({ onBack, onOpenPost, onNavigate, startWriting = false }) {
   const { isLoggedIn, isSubscribed, requestLogin } = useApp();
   const [posts, setPosts] = useState([]);
   const [mine, setMine] = useState([]);
@@ -23,7 +23,9 @@ export default function BlogListPage({ onBack, onOpenPost, onNavigate }) {
   const [query, setQuery] = useState("");
   // null = closed, "new" = writing a fresh post, a post object = editing
   // that draft. One piece of state, because the two can't both be open.
-  const [editorFor, setEditorFor] = useState(null);
+  // Starts open when the Community page's Create Blog sent them here,
+  // so arriving doesn't mean hunting for the button again.
+  const [editorFor, setEditorFor] = useState(startWriting ? "new" : null);
 
   const loadMine = () => {
     if (!isLoggedIn) {

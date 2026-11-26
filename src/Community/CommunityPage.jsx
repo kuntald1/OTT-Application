@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MessageCircle, HandCoins, Users } from "lucide-react";
+import { MessageCircle, HandCoins, Users, PenLine } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_CLEARANCE_CLASS } from "../theme";
 import { fetchBlogs } from "../api";
 import SearchBox from "../shared/SearchBox";
@@ -73,6 +73,18 @@ export default function CommunityPage({ onNavigate }) {
   };
 
   const handleViewAllBlog = requireSubscription(() => onNavigate?.("blogList"));
+  // Writing needs an account but NOT a subscription — a reader who
+  // wants to contribute shouldn't have to buy a plan to be allowed to,
+  // which is why this isn't wrapped in requireSubscription like the
+  // reading actions around it. The editor itself lives on the Blog
+  // page, so this opens that and lets them write there.
+  const handleWriteBlog = () => {
+    if (!isLoggedIn) {
+      requestLogin();
+      return;
+    }
+    onNavigate?.("blogList", { startWriting: true });
+  };
   const handleReadMore = requireSubscription((postId) => onNavigate?.("blogDetail", { postId }));
   const handleViewAllRooms = requireSubscription(() => onNavigate?.("communityRooms"));
   const handleJoinRoom = requireSubscription((roomId) => onNavigate?.("communityRoom", { roomId }));
@@ -128,6 +140,21 @@ export default function CommunityPage({ onNavigate }) {
                   </button>
                 </article>
               ))}
+
+              {/* Under the posts, not above them: this column is for
+                  reading, and the invitation to write belongs after
+                  you've seen what the blog is. The Blog page behind
+                  "View all" has the same button at the top, where
+                  someone who went looking for it will be. */}
+              <button
+                type="button"
+                onClick={handleWriteBlog}
+                className="flex items-center justify-center gap-2 rounded-2xl p-4 transition-colors hover:bg-white/5"
+                style={{ border: "1.5px dashed rgba(212,175,55,0.4)" }}
+              >
+                <PenLine className="h-4 w-4" style={{ color: COLORS.gold }} />
+                <p className="text-sm font-semibold" style={{ color: COLORS.gold }}>Create Blog</p>
+              </button>
             </div>
           </div>
 

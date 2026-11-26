@@ -307,7 +307,15 @@ export default function App() {
         ) : route.view === 'manageProfile' ? (
           <ManageProfilePage onBack={goBack} />
         ) : route.view === 'blogList' ? (
-          <BlogListPage onBack={goBack} onNavigate={navigate} onOpenPost={(postId) => navigate('blogDetail', { postId })} />
+          <BlogListPage
+            onBack={goBack}
+            onNavigate={navigate}
+            // Set when the Community page's "Create Blog" sent them
+            // here: the editor opens straight away rather than making
+            // them find the button again on arrival.
+            startWriting={route.params.startWriting}
+            onOpenPost={(postId) => navigate('blogDetail', { postId })}
+          />
         ) : route.view === 'blogDetail' ? (
           <BlogDetailPage postId={route.params.postId} onBack={goBack} />
         ) : route.view === 'communityRooms' ? (

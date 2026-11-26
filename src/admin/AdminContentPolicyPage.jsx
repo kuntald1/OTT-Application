@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { FileText, Plus, X, Pencil } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { FileText, Plus, X, Pencil, ImagePlus } from "lucide-react";
 import {
   fetchAdminSitePages, updateAdminSitePage,
   fetchAdminFaqs, createAdminFaq, updateAdminFaq, deleteAdminFaq,
+  fetchAdminBranding, uploadAdminLogo, resetAdminLogo,
 } from "./adminApi";
+
+const LOGO_TYPES = "image/png,image/jpeg,image/webp,image/svg+xml";
+const MAX_LOGO_MB = 2;
 
 const COLORS = { panel: "#150307", cream: "#f5ebdd", gold: "#D4AF37" };
 
@@ -131,6 +135,59 @@ export default function AdminContentPolicyPage() {
     }
   };
 
+  // --- The site logo -------------------------------------------------
+  // Lives on this page rather than behind a new admin menu item: it is
+  // site content like everything else here, and a new menu key would
+  // need adding to the role-permission tables before anyone could see
+  // it. One less thing to configure before it works.
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState("");
+  const logoInputRef = useRef(null);
+
+  useEffect(() => {
+    fetchAdminBranding()
+      .then((b) => setLogoUrl(b?.logo_url || null))
+      .catch(() => setLogoUrl(null));
+  }, []);
+
+  const handlePickLogo = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // so picking the same file twice still fires
+    if (!file) return;
+    if (!LOGO_TYPES.split(",").includes(file.type)) {
+      setLogoError("Logo must be a PNG, JPEG, WEBP or SVG image.");
+      return;
+    }
+    if (file.size > MAX_LOGO_MB * 1024 * 1024) {
+      setLogoError(`Logo must be smaller than ${MAX_LOGO_MB}MB.`);
+      return;
+    }
+    setLogoBusy(true);
+    setLogoError("");
+    try {
+      const updated = await uploadAdminLogo(file);
+      setLogoUrl(updated?.logo_url || null);
+    } catch (err) {
+      setLogoError(err.message || "Couldn't upload that logo.");
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
+  const handleResetLogo = async () => {
+    setLogoBusy(true);
+    setLogoError("");
+    try {
+      await resetAdminLogo();
+      setLogoUrl(null);
+    } catch (err) {
+      setLogoError(err.message || "Couldn't reset the logo.");
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold" style={{ color: COLORS.cream }}>
@@ -139,6 +196,76 @@ export default function AdminContentPolicyPage() {
       <p className="mb-6 text-sm" style={{ color: "rgba(245,235,221,0.5)" }}>
         About Us, Contact Us, FAQs, and the applicable policies (Privacy, Terms, Cookies) — all shown in the site footer.
       </p>
+
+      {/* Site logo — above the tabs, because it is one setting rather
+          than one of several pages, and burying it inside a tab would
+          make it findable only by accident. */}
+      <div
+        className="mb-8 rounded-2xl p-5"
+        style={{ background: COLORS.panel, border: "1px solid rgba(212,175,55,0.2)" }}
+      >
+        <h2 className="mb-1 text-base font-semibold" style={{ color: COLORS.cream }}>Site logo</h2>
+        <p className="mb-4 text-xs" style={{ color: "rgba(245,235,221,0.5)" }}>
+          The mark beside THEOMY in the website header. Changing it takes effect the next time a
+          page is loaded. The app header is the THEOMY wordmark on its own, so it has no mark to
+          replace.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-5">
+          <div
+            className="flex h-16 w-32 items-center justify-center rounded-lg p-2"
+            style={{ background: "rgba(0,0,0,0.35)", border: "1px solid rgba(245,235,221,0.1)" }}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="Current logo" className="max-h-full max-w-full object-contain" />
+            ) : (
+              <span className="text-[11px]" style={{ color: "rgba(245,235,221,0.35)" }}>
+                Built-in mark
+              </span>
+            )}
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={logoBusy}
+                onClick={() => logoInputRef.current?.click()}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ border: `1px solid ${COLORS.gold}`, color: COLORS.gold }}
+              >
+                <ImagePlus className="h-4 w-4" />
+                {logoBusy ? "Working…" : logoUrl ? "Change logo" : "Upload logo"}
+              </button>
+              {logoUrl && (
+                <button
+                  type="button"
+                  disabled={logoBusy}
+                  onClick={handleResetLogo}
+                  className="text-sm font-medium hover:opacity-80 disabled:opacity-50"
+                  style={{ color: "rgba(245,235,221,0.55)" }}
+                >
+                  Use the built-in mark
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-[11px]" style={{ color: "rgba(245,235,221,0.35)" }}>
+              PNG, JPEG, WEBP or SVG · up to {MAX_LOGO_MB}MB · a wide, transparent image works best
+            </p>
+            {logoError && (
+              <p className="mt-2 text-xs font-medium" style={{ color: "#f87171" }}>{logoError}</p>
+            )}
+          </div>
+
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept={LOGO_TYPES}
+            onChange={handlePickLogo}
+            className="hidden"
+          />
+        </div>
+      </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
         {PAGE_SLUGS.map((p) => (

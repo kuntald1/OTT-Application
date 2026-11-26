@@ -1440,3 +1440,37 @@ export async function uploadAdminStudioCoverImage(userId, file) {
 export function fetchAdminStudioCoverImage(userId) {
   return request(`/organiser-profile/${userId}/cover`, { auth: true });
 }
+
+// --- Branding: the mark in the site header -------------------------
+export function fetchAdminBranding() {
+  return request("/admin/branding", { auth: true });
+}
+
+// Built by hand rather than through request(), which always sets
+// Content-Type: application/json — a multipart body needs the browser
+// to set its own with the boundary.
+export async function uploadAdminLogo(file) {
+  const token = getAdminToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/branding/logo`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      typeof data.detail === "string" ? data.detail : "Couldn't upload that logo. Please try again."
+    );
+  }
+  return data;
+}
+
+// Back to the built-in mark. Clears the pointer; the uploaded file is
+// left on disk, so undoing a change isn't what deletes it.
+export function resetAdminLogo() {
+  return request("/admin/branding/logo", { method: "DELETE", auth: true });
+}

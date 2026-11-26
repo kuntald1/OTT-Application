@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Menu, X, Search, ChevronDown } from "lucide-react";
 import { COLORS, CTA_GRADIENT, CTA_TEXT_COLOR, NAV_GRADIENT } from "../theme";
 import { useApp } from "../context/AppContext";
-import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp, sendRegistrationEmailOtp, fetchMyOrganiserRequestStatus } from "../api";
+import { redirectToGoogleLogin, redirectToFacebookLogin, requestPasswordReset, fetchMenus, sendOtp, sendRegistrationEmailOtp, fetchMyOrganiserRequestStatus, fetchBranding } from "../api";
 import { COUNTRIES } from "../shared/countries";
 import CityDropdown from "../shared/CityDropdown";
 import {
@@ -51,6 +51,10 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
   const [menuItems, setMenuItems] = useState([]);
+  // The logo set in Admin > Site Content. null = the built-in mark,
+  // which is also what a failed request leaves behind — the header must
+  // draw on the first paint whether or not this ever answers.
+  const [logoUrl, setLogoUrl] = useState(null);
 
   const {
     isLoggedIn, isSubscribed, profile, showLoginModal,
@@ -78,6 +82,14 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
     fetchMenus()
       .then(setMenuItems)
       .catch(() => setMenuItems([])); // nav just shows nothing extra if this fails
+  }, []);
+
+  // Same shape, same reason: once on mount, and a failure leaves the
+  // built-in mark rather than an empty space in the header.
+  useEffect(() => {
+    fetchBranding()
+      .then((b) => setLogoUrl(b?.logo_url || null))
+      .catch(() => setLogoUrl(null));
   }, []);
 
   const topMenus = [...menuItems]
@@ -128,9 +140,22 @@ export default function TopNav({ query, onQueryChange, onNavigate, activeView, c
           borderBottom: `1px solid rgba(212,175,55,0.18)`,
         }}
       >
-        {/* Logo */}
+        {/* Logo — the uploaded one when Admin > Site Content has set
+            it, the built-in mark otherwise. The fallback also covers an
+            uploaded file that has gone missing (onError below), because
+            a broken image in the header is worse than the original
+            icon. Sized by height so any aspect ratio fits the bar. */}
         <div className="flex flex-shrink-0 items-center gap-2" style={{ color: COLORS.cream }}>
-          <MovixMark className="h-6 w-6" style={{ fill: COLORS.gold }} />
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="theomy"
+              className="h-7 w-auto max-w-[140px] object-contain sm:h-8"
+              onError={() => setLogoUrl(null)}
+            />
+          ) : (
+            <MovixMark className="h-6 w-6" style={{ fill: COLORS.gold }} />
+          )}
           <span className="text-lg font-semibold tracking-wide">THEOMY</span>
         </div>
 
